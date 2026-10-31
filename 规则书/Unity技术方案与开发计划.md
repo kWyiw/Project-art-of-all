@@ -58,7 +58,7 @@
 | 传输 | Tugboat（UDP）/ 后期可换 Steamworks Datagram | 4 人小包，UDP 足够 |
 | 序列化 | **MemoryPack**（源生成、快、无 GC） | 备选 MessagePack-CSharp、protobuf-net。战斗事件流每秒几十条，MemoryPack 的零分配很重要 |
 | 确定随机 | **PCG32 / XorShift128+**（自实现，~40 行） | 不用 `UnityEngine.Random`，不用 `System.Random`（跨运行时版本不保证） |
-| 数学 | **整型 + Q16.16 定点**（仅在必须小数时） | 骰子、金币、CD 全是整数，能不用定点就不用 |
+| 数学 | **整型 + Q16.16 定点**（仅在必须小数时） | 骰子、碎片、CD 全是整数，能不用定点就不用 |
 | 数据配置 | ScriptableObject（内容） + CSV/GoogleSheet 导出（数值） | 数值走表，策划能改；内容走 SO，程序能改 |
 | 存档 | 客户端：JSON/PlayerPrefs；对局：服务端快照 | 对局存档 = 内核状态快照，见 §8 |
 | 资源 | Addressables | 地图、角色、卡面按需加载 |
@@ -138,7 +138,7 @@ public abstract record GameEvent { public int Tick; public int Seq; }
 
 public sealed record DiceRolled(int PlayerId, int Value, int Tick) : GameEvent;
 public sealed record PlayerMoved(int PlayerId, int FromNode, int ToNode, int StepIndex) : GameEvent;
-public sealed record CardBought(int PlayerId, int CardUid, int GoldCost) : GameEvent;
+public sealed record CardBought(int PlayerId, int CardUid, int ShardCost) : GameEvent;
 public sealed record CombatStarted(int AttackerId, int DefenderId) : GameEvent;
 public sealed record CardCast(int PlayerId, int SlotIndex, int CardUid) : GameEvent;
 public sealed record DamageDealt(int TargetId, int Amount, int ShieldAbsorbed) : GameEvent;
@@ -205,9 +205,9 @@ public sealed class PlayerState
     public int Id;                 // 0..3
     public string Name;
     public int Level;              // 1..6（战斗内生命上限由 Level 查表得到）
-    public int Gold;
+    public int Shard;
     public int WinCount;           // 胜场数（升级另一条轨道）
-    public UpgradePath Path;       // Gold 或 WinCount
+    public UpgradePath Path;       // Shard 或 WinCount
     public int CurrentNode;
     public int HomeNode;
 
@@ -292,14 +292,14 @@ public sealed class CardInstance
 ```csharp
 // 原子效果（枚举 + 参数），ScriptableObject 里拖拽组合
 public enum EffectOp {
-    DealDamage, GainShield, ApplyPoison, ApplyBurn, Heal, GainGold,
-    GainDiceModifier, RepeatNext, TeleportToHome, PlaceTrap, StealGold, DrawTempCard
+    DealDamage, GainShield, ApplyPoison, ApplyBurn, Heal, GainShard,
+    GainDiceModifier, RepeatNext, TeleportToHome, PlaceTrap, StealShard, DrawTempCard
 }
 
 public sealed class EffectData
 {
     public EffectOp Op;
-    public DiceExpr Amount;     // 1D6+2 / 固定值 / 对手金币的20%
+    public DiceExpr Amount;     // 1D6+2 / 固定值 / 对手碎片的 20%
     public EffectTarget Target; // Self / Enemy / AdjacentCard
     public int Chance;          // 0..100 整数百分比
 }
@@ -309,7 +309,7 @@ public sealed class EffectData
 // 防御   : 1c, CD180, [GainShield 1D6]                    Target=Self
 // 剧毒   : 2c, CD180, [ApplyPoison 1D4]                   Target=Enemy
 // 好运   : 1c, CD0,   [GainDiceModifier +2]               Target=AdjacentRight(AttackOnly)
-// 草场   : 2c, CD0,   [GainGold 1]  触发时机=OnActionEnd  Scope=Passive, 背包也生效
+// 草场   : 2c, CD0,   [GainShard 1]  触发时机=OnActionEnd  Scope=Passive, 背包也生效
 // 车票   : 1c, CD0,   [TeleportToHome] 触发时机=OnSell     Scope=Sell
 // 敲诈   : 1c, CD0,   [PlaceTrap gold=5] 触发时机=OnSell   Scope=Sell
 ```
@@ -334,7 +334,7 @@ OnLevelUp / OnPvpWin / OnPvpLose / OnTrapTriggered
 
 ```
 Idle
- └→ TurnStart          （全局金币计时判定：全体发钱）
+ └→ TurnStart          （全局发碎片：每 3 轮全员 +5，见 `大富翁层规则书.md` §2.6）
      └→ FreeAction     （自由操作：买卡/卖卡/调布局）   ← 有回合计时 90s，超时自动跳过
          └→ Rolling    （掷骰，RNG 从 (seed, turn, playerId) 派生）
              └→ Moving ←────────────────────┐
@@ -449,7 +449,7 @@ public sealed class CombatSim
 | 层 | 做法 | 投入 | 效果 |
 |---|---|---|---|
 | L1 规则驱动（MVP 必做） | 固定策略：有钱就买、血少就卖、看到比自己弱的人就打 | 3 天 | 能陪玩，但蠢 |
-| L2 效用评估 | 对每个可选动作算分：`Δ(血量预计) + Δ(金币) + Δ(升级距离)`，用 `CombatSim.Clone()` 做 20 次未来战斗采样 | 1.5 周 | 明显的"感觉在思考" |
+| L2 效用评估 | 对每个可选动作算分：`Δ(血量预计) + Δ(碎片) + Δ(升级距离)`，用 `CombatSim.Clone()` 做 20 次未来战斗采样 | 1.5 周 | 明显的"感觉在思考" |
 | L3 难度分档 | 用 L2 的评分加噪声/限制信息量造出"简单/普通/困难" | 3 天 | 新手体验 |
 
 **实现要点**：
@@ -485,7 +485,7 @@ public sealed class CombatSim
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ [P1 头像 等级 金币 升级方式]              [P4 头像 ...]      │  ← 四角玩家信息（独立 Canvas，不随地图缩放）
+│ [P1 头像 等级 碎片 升级方式]              [P4 头像 ...]      │  ← 四角玩家信息（独立 Canvas，不随地图缩放）
 │                                                              │
 │                    ┌────────────────────────┐                │
 │                    │                        │                │
@@ -524,7 +524,7 @@ DiceBazaar/
 │  │  │  ├─ Board/                # MapGraph, MovementSolver
 │  │  │  ├─ Cards/                # CardDefinition, EffectResolver, AuraCalculator
 │  │  │  ├─ Combat/               # CombatSim, CombatState, StatusEffects
-│  │  │  ├─ Economy/              # GoldLedger, ShopService
+│  │  │  ├─ Economy/              # ShardLedger, ShopService
 │  │  │  ├─ Progression/          # LevelTable, UpgradeService
 │  │  │  ├─ Match/                # MatchController (状态机), TurnLog
 │  │  │  ├─ Rng/                  # Pcg32, DiceExpr
@@ -575,8 +575,8 @@ DiceBazaar/
 - **验收**：两个 AI 卡组对战 10 万局，平均时长 12～20s，胜负比 45%～55%（说明数值没有一边倒）；同一 seed 两次跑出的事件流字节级一致。
 
 ### M3 · 经济 + 升级 + 胜负闭环（4 周）："能赢能输"
-- 商店、金币、全局发钱、PVP 抢掠、双轨升级、6 级胜利判定。
-- **验收**：一整局 4 AI 对战能跑到有胜者，输出统计报表（平均局时长、金币曲线、升级路径胜率）。
+- 商店、碎片经济、全局发碎片、PVP 抢夺、双轨升级、6 级胜利判定。
+- **验收**：一整局 4 AI 对战能跑到有胜者，输出统计报表（平均局时长、碎片曲线、升级路径胜率）。
 
 ### M4 · 表现层与 UI（6 周）："像个游戏了"
 - AnimationQueue + 全部 GameEvent 的表现映射。
@@ -590,7 +590,7 @@ DiceBazaar/
 - L1 → L2 效用 AI、四种人格权重、难度分档、思考延迟（0.8~1.5s 表现延迟，但决策 300ms 内）。
 - **信息集断言**：AI 只能读公共状态 + 自己的卡槽（`R-CPU-002`），要有单测证明它看不到对手背包。
 - BalanceSim 出第一份平衡报告，按报告调数值（这 4 周里至少 1 周纯调数值）。
-- **验收**：3 个 CPU 在同一局里表现出可区分的行为差异；AI 普通难度对新手胜率 ~50%，困难 ~75%；500 局全部自然结束、中位圈数 6~8。**此时可以开始做 Demo 给朋友玩。**
+- **验收**：3 个 CPU 在同一局里表现出可区分的行为差异；AI 普通难度对新手胜率 ~50%，困难 ~75%；500 局全部自然结束、中位圈数 8~10。**此时可以开始做 Demo 给朋友玩。**
 
 ### M6 · 联机（6 周）："能一起玩了"
 - FishNet 接入、主机权威、房间、Steam Lobby、重连、超时托管、异常用例 30 条。
@@ -628,7 +628,7 @@ DiceBazaar/
 | 3 | 卡牌数量上不去（每张卡改代码） | 高 | 高 | 组成式效果系统 + 卡牌编辑器窗口（M2 就必须做） |
 | 4 | 数值失衡（某条升级路线/某张卡无敌） | 高 | 高 | BalanceSim 十万局离线跑 + 战斗贡献统计 |
 | 5 | 联机异常路径没覆盖，玩家卡死 | 中 | 高 | 30 条异常用例清单 + 全员超时兜底 + AI 托管 |
-| 6 | 单局太长（回合数过多导致疲） | 中 | 中 | 全局金币计时 + 强制 6 级结束 + 可配"短局"模式；用 BalanceSim 盯平均局时长 |
+| 6 | 单局太长（回合数过多导致疲） | 中 | 中 | 全局发碎片 + 强制 6 级结束 + 可配"短局"模式；用 BalanceSim 盯平均局时长 |
 | 7 | 大富翁"运气感"压过"构筑感" | 中 | 中 | 让卡牌能改骰子（+1 步/重掷/转向）、让玩家有"选择方向"的权力；这既是玩法也是卖点 |
 | 8 | Scope 膨胀（先做联机再做内容） | 高 | 中 | 锁定"单机 40 张卡 + 2 地图"为 EA 内容底线，联机在 M6 前不碰 |
 | 9 | 美术成本超支 | 中 | 中 | 卡面用"图标 + 程序化边框"而不是全手绘插画；地图用 Tile 模块化 |
@@ -682,7 +682,9 @@ DiceBazaar/
 
 ---
 
-## 附录 A：卡牌数据表模板（CSV，策划可直接填）
+## 附录 A：卡牌数据表模板（CSV）
+
+> 下面几行只演示**字段怎么填**，不是真实卡表。真实 32 张的数值以 `战斗与卡牌系统规格书.md` §9 与 `卡牌构筑规则书.md` 第 11 章为准。
 
 | id | name_zh | cost | cd_sec | category | scope | trigger | op1 | amount1 | target1 | op2 | amount2 | sell_price | text_zh |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -690,9 +692,9 @@ DiceBazaar/
 | defend | 防御 | 1 | 3 | Skill | BattleSlot | OnCast | GainShield | 1D6 | Self | | | 2 | 获得 1D6 护盾 |
 | poison | 剧毒 | 2 | 3 | Skill | BattleSlot | OnCast | ApplyPoison | 1D4 | Enemy | | | 4 | 造成 1D4 中毒 |
 | luck | 好运 | 1 | 0 | Ability | BattleSlot | Passive | GainDiceModifier | 2 | AdjacentRightAtk | | | 3 | 右侧相邻攻击牌 +2 |
-| pasture | 草场 | 2 | 0 | Finance | Passive | OnActionEnd | GainGold | 1 | Self | | | 5 | 每次行动后 +1 金币 |
+| pasture | 草场 | 1 | 0 | Finance | Passive | OnActionEnd | GainShard | 1 | Self | | | 5 | 每次行动后 +1 碎片 |
 | ticket | 车票 | 1 | 0 | Consumable | Sell | OnSell | TeleportToHome | 0 | Self | | | 1 | 出售时立即回 home |
-| extort | 敲诈 | 1 | 0 | Trap | Sell | OnSell | PlaceTrap | 5 | SelfTile | | | 1 | 留下陷阱，他人踩到付 5 金 |
+| extort | 敲诈 | 1 | 0 | Trap | Sell | OnSell | PlaceTrap | 5 | SelfTile | | | 1 | 留下陷阱，他人踩到付 5 碎片 |
 
 ## 附录 B：核心测试清单（M2 结束前必须有）
 
@@ -709,5 +711,5 @@ DiceBazaar/
 | 移动边界 | 图上前进 200 步永不 null/越界 |
 | 存档往返 | Save → Load → 状态哈希一致 |
 | 断线重连 | 任意时刻快照恢复后 20 步内与主机哈希一致 |
-| 升级 | 金币/胜场双轨都能升到 6 级并触发胜利 |
+| 升级 | 碎片/胜场双轨都能升到 6 级并触发胜利 |
 | 血量作用域 | `PlayerState` 里不存在 HP 字段；战斗结束返回的结果对象里也不含护盾 |
