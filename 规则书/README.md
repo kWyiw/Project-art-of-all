@@ -21,10 +21,25 @@
 | `卡牌设计稿\卡牌示例.txt` | 卡牌记法说明，不是数值源 |
 | `README.md`（工程根） | 最初的设计说明，同上，作历史参考 |
 | `Docs\策划案写作教练.md` | 与本项目规则无关的写作方法论笔记 |
+| `Assets\Game\Core\` | 纯 C# 棋盘、卡牌、战斗与对局内核 |
+| `Assets\Scripts\`、`Assets\Scenes\` | Unity 表现层、HUD 与可运行场景 |
+| `Tests\Game.Core.Checks\` | 无头核心回归检查与整局自动跑测 |
+| `Tools\BalanceSim\` | 数值模拟工具 |
+| `ProjectSettings\`、`Packages\` | Unity 2022.3 工程配置 |
 
-**当前不存在任何 Unity 工程文件与 C# 代码**（没有 `Assets/`、没有 `.sln`）。M0 之前没有任何可运行内容。
+**Unity 工程已建立**：使用 Unity `2022.3.62f2`。核心代码既可由 Unity 编译，也可通过
+`Game.Core.csproj` 在命令行独立构建。当前已包含可运行的棋盘场景、移动与岔路交互、
+卡组 HUD、玩家应战界面和核心自动化检查。
 
-新会话第一件事：读 §6「下一步」，从第 1 项 `Game.Core.csproj` 开始。遇到规则疑问查 §2 的权威顺序；**不要重新设计规则**，规则已经定稿到可编码。
+新会话第一件事：先运行下面的核心检查，再读 §6「下一步」。遇到规则疑问查 §2 的
+权威顺序；**不要重新设计规则**，规则已经定稿到可编码。
+
+```powershell
+dotnet run --project Tests/Game.Core.Checks/Game.Core.Checks.csproj
+```
+
+Unity 编辑器首次打开工程后会生成 `Library/`、`.sln` 与 Unity 专用 `.csproj`；
+这些本机生成物已在 `.gitignore` 中排除，不应提交。
 
 ## 1. 文档地图
 
