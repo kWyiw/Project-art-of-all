@@ -1,0 +1,43 @@
+# Unity generated data
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]in/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+
+# Unity / IDE generated project files
+.vs/
+.idea/
+.vscode/
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Keep hand-authored .NET projects used by CI and balance tools.
+!Game.Core.csproj
+!Tests/Game.Core.Checks/Game.Core.Checks.csproj
+!Tools/BalanceSim/BalanceSim.csproj
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Build / test output
+TestResults/
+CodeCoverage/
+*.trx
+*.coverage
+*.coveragexml
