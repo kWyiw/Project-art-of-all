@@ -492,8 +492,9 @@ namespace ProjectArtOfAll.Board
                     " · Lv.",
                     defenderPlayer.Level.ToString());
 
+            bool attackerIsHuman = IsHumanSeat(attacker);
             bool done = false;
-            hud.PlayCombat(combat, leftTitle, rightTitle, () => done = true);
+            hud.PlayCombat(combat, leftTitle, rightTitle, attackerIsHuman, () => done = true);
             while (!done)
             {
                 yield return null;

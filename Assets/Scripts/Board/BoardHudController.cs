@@ -344,6 +344,7 @@ namespace ProjectArtOfAll.Board
             CombatResolvedEvent combat,
             string leftTitle,
             string rightTitle,
+            bool leftIsHuman,
             System.Action onComplete)
         {
             if (combat == null)
@@ -359,7 +360,7 @@ namespace ProjectArtOfAll.Board
                     BoardHudOverlayFactory.CreateFont());
             }
 
-            combatPlayback.Play(combat, leftTitle, rightTitle, onComplete);
+            combatPlayback.Play(combat, leftTitle, rightTitle, leftIsHuman, onComplete);
         }
 
         public void ShowCombatResult(string title, string subtitle, string body)
