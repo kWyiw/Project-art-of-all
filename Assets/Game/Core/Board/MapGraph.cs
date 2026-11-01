@@ -85,11 +85,55 @@ namespace ProjectArtOfAll.Core.Board
                 return node.OutEdges;
             }
 
+            // R-MAP-002：到达岔路后只能「直行」或「逆时针拐弯」。
+            // 网格 y 轴向下（row 越大越靠下），把 (dr, dc) 逆时针转 90° 就是 (-dc, dr)。
+            if (TryDirection(previousNodeId, nodeId, out int dr, out int dc))
+            {
+                List<int> choices = new List<int>(node.OutEdges.Count);
+                foreach (int next in node.OutEdges)
+                {
+                    if (!TryDirection(nodeId, next, out int ndr, out int ndc))
+                    {
+                        continue;
+                    }
+
+                    bool straight = ndr == dr && ndc == dc;
+                    bool counterClockwise = ndr == -dc && ndc == dr;
+                    if (straight || counterClockwise)
+                    {
+                        choices.Add(next);
+                    }
+                }
+
+                if (choices.Count > 0)
+                {
+                    return choices.AsReadOnly();
+                }
+            }
+
+            // 没有网格坐标（测试里的合成图）或在该格没有任何合规方向时，
+            // 退回「除了来路都能走」。
             List<int> legal = node.OutEdges
                 .Where(edge => edge != previousNodeId)
                 .ToList();
 
             return legal.Count == 0 ? node.OutEdges : legal.AsReadOnly();
+        }
+
+        private bool TryDirection(int fromNodeId, int toNodeId, out int row, out int column)
+        {
+            MapNode from = GetNode(fromNodeId);
+            MapNode to = GetNode(toNodeId);
+            row = 0;
+            column = 0;
+            if (!from.HasGridPosition || !to.HasGridPosition)
+            {
+                return false;
+            }
+
+            row = to.GridRow - from.GridRow;
+            column = to.GridColumn - from.GridColumn;
+            return row != 0 || column != 0;
         }
 
         public int StepsBetween(int startNodeId, int targetNodeId)

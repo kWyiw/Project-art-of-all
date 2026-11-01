@@ -36,6 +36,7 @@ namespace ProjectArtOfAll.Board
                         view.TileType == TileType.Home
                             ? view.OwnerPlayerId
                             : -1,
+                        new MapCell(view.Row, view.Column),
                         outgoing.ToArray()));
 
                 if (view.TileType == TileType.Warp)
@@ -83,6 +84,11 @@ namespace ProjectArtOfAll.Board
             {
                 int row = source.Row + offset.x;
                 int column = source.Column + offset.y;
+                if (row < 0 || row >= GridSize || column < 0 || column >= GridSize)
+                {
+                    continue;
+                }
+
                 int id = NodeId(row, column);
                 if (!byId.TryGetValue(id, out BoardTileView target))
                 {

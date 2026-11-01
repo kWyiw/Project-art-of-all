@@ -792,17 +792,35 @@ namespace ProjectArtOfAll.Core.Checks
                 "The scene map needs three-way junctions for the fork UI, found "
                     + junctions.ToString() + ".");
 
-            // 从任一侧进入三岔口，除"原路返回"外至少还有两条可走（直行 / 拐弯）。
-            MapNode firstJunction = graph.Nodes.First(node => node.OutEdges.Count >= 3);
-            foreach (int entry in firstJunction.OutEdges)
+            // R-MAP-002：进入岔路后只能「直行」或「逆时针拐弯」，原路折返与顺时针都不允许。
+            foreach (MapNode junction in graph.Nodes.Where(node => node.OutEdges.Count >= 3))
             {
-                IReadOnlyList<int> legal = graph.LegalNextNodes(firstJunction.Id, entry);
-                Assert(
-                    legal.Count >= 2,
-                    "A junction must offer at least two ways forward besides the way back.");
-                Assert(
-                    legal.All(edge => edge != entry),
-                    "Walking straight back the way you came is not a legal choice.");
+                foreach (int entry in junction.OutEdges)
+                {
+                    MapNode from = graph.GetNode(entry);
+                    int dr = junction.GridRow - from.GridRow;
+                    int dc = junction.GridColumn - from.GridColumn;
+                    IReadOnlyList<int> legal = graph.LegalNextNodes(junction.Id, entry);
+
+                    Assert(
+                        legal.Count >= 1,
+                        "A junction must always leave at least one legal way forward.");
+                    Assert(
+                        legal.All(edge => edge != entry),
+                        "Walking straight back the way you came is not a legal choice.");
+
+                    foreach (int next in legal)
+                    {
+                        MapNode target = graph.GetNode(next);
+                        int ndr = target.GridRow - junction.GridRow;
+                        int ndc = target.GridColumn - junction.GridColumn;
+                        bool straight = ndr == dr && ndc == dc;
+                        bool counterClockwise = ndr == -dc && ndc == dr;
+                        Assert(
+                            straight || counterClockwise,
+                            "Only going straight or turning counter-clockwise is legal at a junction.");
+                    }
+                }
             }
 
 
@@ -953,6 +971,11 @@ namespace ProjectArtOfAll.Core.Checks
                 {
                     int row = cell.Row + rowOffsets[index];
                     int column = cell.Column + columnOffsets[index];
+                    if (row < 0 || row >= gridSize || column < 0 || column >= gridSize)
+                    {
+                        continue;
+                    }
+
                     if (!byId.TryGetValue(row * gridSize + column, out SceneCell neighbour))
                     {
                         continue;
@@ -963,7 +986,13 @@ namespace ProjectArtOfAll.Core.Checks
 
                 outgoing.Sort();
                 int owner = cell.TileType == TileType.Home ? cell.OwnerPlayerId : -1;
-                nodes.Add(new MapNode(id, cell.TileType, owner, outgoing.ToArray()));
+                nodes.Add(
+                    new MapNode(
+                        id,
+                        cell.TileType,
+                        owner,
+                        new MapCell(cell.Row, cell.Column),
+                        outgoing.ToArray()));
                 if (cell.TileType == TileType.Warp)
                 {
                     warpIds.Add(id);
