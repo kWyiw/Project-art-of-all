@@ -694,6 +694,7 @@ namespace ProjectArtOfAll.Board
             {
                 hud.SetMatchStatus(
                     $"对局结束  ·  玩家 {match.State.WinnerPlayerId + 1} 获胜");
+                hud.PumpEvents(match);
                 return;
             }
 
@@ -715,6 +716,7 @@ namespace ProjectArtOfAll.Board
             hud.ShowCards(player);
             hud.SetAssemblyLevel(player.Level);
             hud.RefreshPlayerPanels(match.State);
+            hud.PumpEvents(match);
         }
 
         private int ResolveEntryPlayerId()

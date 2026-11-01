@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using ProjectArtOfAll.Core.Cards;
+using ProjectArtOfAll.Core.Events;
 
 namespace ProjectArtOfAll.Board
 {
@@ -74,6 +75,8 @@ namespace ProjectArtOfAll.Board
         private PlayerCornerPanels cornerPanels;
         private OpponentDossierView dossier;
         private PauseOverlayView pauseOverlay;
+        private BoardEventFeed eventFeed;
+        private int eventCursor = -1;
 
         private void Awake()
         {
@@ -807,6 +810,11 @@ namespace ProjectArtOfAll.Board
                 dossier = OpponentDossierView.Create((RectTransform)transform, font, HideDossier);
             }
 
+            if (eventFeed == null)
+            {
+                eventFeed = BoardEventFeed.Create((RectTransform)transform, font);
+            }
+
             if (pauseOverlay == null)
             {
                 pauseOverlay = PauseOverlayView.Create(
@@ -852,6 +860,39 @@ namespace ProjectArtOfAll.Board
 
             pauseOverlay.transform.SetAsLastSibling();
             pauseOverlay.Show();
+        }
+
+        /// <summary>
+        /// 把内核新产生的事件逐条翻译成播报。第一次调用只记游标不回溯历史，
+        /// 之后每次把游标之后的 GameEvent 全部入队（由 BoardEventFeed 串行播放）。
+        /// </summary>
+        public void PumpEvents(MatchController match)
+        {
+            if (match == null || eventFeed == null)
+            {
+                return;
+            }
+
+            System.Collections.Generic.IReadOnlyList<GameEvent> history = match.Events.History;
+            if (eventCursor < 0 || eventCursor > history.Count)
+            {
+                eventCursor = history.Count;
+                return;
+            }
+
+            for (int i = eventCursor; i < history.Count; i++)
+            {
+                GameEvent gameEvent = history[i];
+                string text = BoardEventText.Describe(gameEvent, match);
+                if (text == null)
+                {
+                    continue;
+                }
+
+                eventFeed.Enqueue(text, BoardEventFeed.ColorOf(gameEvent));
+            }
+
+            eventCursor = history.Count;
         }
 
         /// <summary>四角玩家栏：显示所有座位的等级、碎片、胜场与占用。</summary>
