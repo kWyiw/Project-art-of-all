@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProjectArtOfAll.Core.Cards;
 using ProjectArtOfAll.Core.Events;
 using ProjectArtOfAll.Core.Rng;
 
@@ -17,11 +18,15 @@ namespace ProjectArtOfAll.Core.Combat
         public const int HardDrawTick = 3600;
         public const int TimeoutIntervalTicks = 6;
 
+        /// <summary>被动之间可以互相触发，超过这个深度就丢弃后续触发，防止反馈环。</summary>
+        private const int MaxPassiveDepth = 8;
+
         private readonly CombatantRuntime left;
         private readonly CombatantRuntime right;
         private readonly GameEventBus eventBus = new GameEventBus();
         private readonly AuraResolver auraResolver = new AuraResolver();
         private readonly EffectResolver effectResolver;
+        private int passiveDepth;
 
         public CombatSimulation(BattleSnapshot snapshot, ulong seed)
         {
@@ -36,6 +41,9 @@ namespace ProjectArtOfAll.Core.Combat
             effectResolver = new EffectResolver(auraResolver);
 
             eventBus.Publish(0L, new CombatStartedEvent(seed));
+
+            TriggerPassives(left, null, PassiveTrigger.BattleStart, CardTag.None);
+            TriggerPassives(right, null, PassiveTrigger.BattleStart, CardTag.None);
         }
 
         public int Tick { get; private set; }
@@ -123,6 +131,21 @@ namespace ProjectArtOfAll.Core.Combat
                     ignoresShield));
         }
 
+        internal void GainShield(
+            CombatantRuntime owner,
+            CombatantRuntime target,
+            int amount)
+        {
+            int granted = Math.Max(0, amount) + Math.Max(0, owner.ShieldBonus);
+            if (granted <= 0)
+            {
+                return;
+            }
+
+            target.Shield += granted;
+            Publish(new ShieldGainedEvent(target.PlayerId, granted));
+        }
+
         internal void ApplyHealing(CombatantRuntime target, int amount)
         {
             int before = target.Health;
@@ -141,6 +164,93 @@ namespace ProjectArtOfAll.Core.Combat
             eventBus.Publish(Tick, gameEvent);
         }
 
+        internal void TriggerPassives(
+            CombatantRuntime owner,
+            CombatCardRuntime sourceCard,
+            PassiveTrigger trigger,
+            CardTag castTag)
+        {
+            if (passiveDepth >= MaxPassiveDepth)
+            {
+                return;
+            }
+
+            passiveDepth++;
+            try
+            {
+                foreach (CombatCardRuntime card in owner.ActiveCards())
+                {
+                    foreach (PassiveDefinition passive in card.Definition.Passives)
+                    {
+                        if (passive.Trigger != trigger)
+                        {
+                            continue;
+                        }
+
+                        if (passive.CastTag != CardTag.None &&
+                            (castTag & passive.CastTag) == 0)
+                        {
+                            continue;
+                        }
+
+                        if (passive.RequiresAdjacentSource &&
+                            (sourceCard == null || !IsAdjacent(owner, card, sourceCard)))
+                        {
+                            continue;
+                        }
+
+                        effectResolver.Resolve(
+                            this,
+                            owner,
+                            enemyOf(owner),
+                            card,
+                            passive.Effect,
+                            fromPassive: true);
+                    }
+                }
+            }
+            finally
+            {
+                passiveDepth--;
+            }
+        }
+
+        private CombatantRuntime enemyOf(CombatantRuntime owner)
+        {
+            return ReferenceEquals(owner, left) ? right : left;
+        }
+
+        private static bool IsAdjacent(
+            CombatantRuntime owner,
+            CombatCardRuntime anchor,
+            CombatCardRuntime other)
+        {
+            if (ReferenceEquals(anchor, other))
+            {
+                return false;
+            }
+
+            IReadOnlyList<CombatCardRuntime> active = owner.ActiveCards();
+            int anchorIndex = -1;
+            int otherIndex = -1;
+            for (int index = 0; index < active.Count; index++)
+            {
+                if (ReferenceEquals(active[index], anchor))
+                {
+                    anchorIndex = index;
+                }
+
+                if (ReferenceEquals(active[index], other))
+                {
+                    otherIndex = index;
+                }
+            }
+
+            return anchorIndex >= 0 &&
+                   otherIndex >= 0 &&
+                   Math.Abs(anchorIndex - otherIndex) == 1;
+        }
+
         private void ResolveReadyCards(
             CombatantRuntime source,
             CombatantRuntime enemy)
@@ -150,9 +260,7 @@ namespace ProjectArtOfAll.Core.Combat
                          .OrderBy(card => card.SlotIndex)
                          .ToArray())
             {
-                if (!card.Cooldown.IsReady ||
-                    card.Definition.CooldownTicks <= 0 ||
-                    card.Definition.ActiveEffects.Count == 0)
+                if (!card.Cooldown.IsReady || !card.Definition.IsActive)
                 {
                     continue;
                 }
@@ -169,7 +277,11 @@ namespace ProjectArtOfAll.Core.Combat
                             source.PlayerId,
                             card.SlotIndex,
                             card.Instance.Uid));
-                    effectResolver.Resolve(this, source, enemy, card);
+                    effectResolver.ResolveActive(this, source, enemy, card);
+
+                    CardTag castTag = card.Definition.Tags;
+                    TriggerPassives(source, card, PassiveTrigger.OwnCardCast, castTag);
+                    TriggerPassives(source, card, PassiveTrigger.AnyCardCast, castTag);
                 }
             }
         }

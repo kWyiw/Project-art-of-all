@@ -4,20 +4,31 @@ using ProjectArtOfAll.Core.Cards;
 
 namespace ProjectArtOfAll.Core.Combat
 {
+    /// <summary>
+    /// Recomputes auras on every query (R-AURA-002) so reordering the battle bar instantly
+    /// changes every number. Auras never chain: each one only reads the current card list.
+    /// </summary>
     internal sealed class AuraResolver
     {
-        public int GetDiceModifier(
-            CombatantRuntime side,
-            CombatCardRuntime target)
+        public int GetDiceModifier(CombatantRuntime side, CombatCardRuntime target)
         {
             return GetAuraValue(side, target, AuraStat.DiceFlatModifier);
         }
 
-        public int GetBonusMultiCast(
-            CombatantRuntime side,
-            CombatCardRuntime target)
+        public int GetBonusMultiCast(CombatantRuntime side, CombatCardRuntime target)
         {
             return GetAuraValue(side, target, AuraStat.MultiCast);
+        }
+
+        public int GetBonusDiceCount(CombatantRuntime side, CombatCardRuntime target)
+        {
+            return GetAuraValue(side, target, AuraStat.DiceCount);
+        }
+
+        /// <summary>自噬之蛇: the target card's dice always roll their maximum face.</summary>
+        public bool HasMaxRoll(CombatantRuntime side, CombatCardRuntime target)
+        {
+            return GetAuraValue(side, target, AuraStat.MaxRoll) > 0;
         }
 
         private static int GetAuraValue(
@@ -46,18 +57,19 @@ namespace ProjectArtOfAll.Core.Combat
             {
                 foreach (AuraDefinition aura in source.Definition.Auras)
                 {
-                    if (aura.Stat != stat || !Targets(aura, source, target, targetIndex, activeCards))
+                    if (aura.Stat != stat ||
+                        !Targets(aura, source, target, targetIndex, activeCards))
                     {
                         continue;
                     }
 
                     if (aura.Scaling == AuraScaling.PerAdjacentMatchingTag)
                     {
-                        int matchingNeighbors = CountAdjacentMatching(
+                        int matchingNeighbours = CountAdjacentMatching(
                             source,
                             aura.RequiredTag,
                             activeCards);
-                        total += aura.Amount * matchingNeighbors;
+                        total += aura.Amount * matchingNeighbours;
                     }
                     else
                     {
@@ -82,15 +94,23 @@ namespace ProjectArtOfAll.Core.Combat
                 return false;
             }
 
+            if (aura.MinimumSlotSize > 0 &&
+                target.Definition.SlotSize < aura.MinimumSlotSize)
+            {
+                return false;
+            }
+
             switch (aura.Target)
             {
                 case AuraTarget.Self:
                     return source == target;
                 case AuraTarget.AdjacentLeft:
-                    return targetIndex > 0 && activeCards[targetIndex - 1] == source;
-                case AuraTarget.AdjacentRight:
+                    // 目标是源卡的左邻：源卡恰好在 target 的右边一格。
                     return targetIndex + 1 < activeCards.Count &&
                            activeCards[targetIndex + 1] == source;
+                case AuraTarget.AdjacentRight:
+                    // 目标是源卡的右邻：源卡恰好在 target 的左边一格。
+                    return targetIndex > 0 && activeCards[targetIndex - 1] == source;
                 case AuraTarget.AllAdjacent:
                     return (targetIndex > 0 && activeCards[targetIndex - 1] == source) ||
                            (targetIndex + 1 < activeCards.Count &&

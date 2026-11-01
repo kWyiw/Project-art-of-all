@@ -24,8 +24,9 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckSlotRules();
                 CheckCombatClocks();
                 CheckEventBus();
-                CheckSampleCardCatalog();
+                CheckCardDatabase();
                 CheckCombatSimulation();
+                CheckCardMechanics();
                 CheckM1MatchDurability();
                 CheckHomeProgression();
                 CheckM3FullMatch();
@@ -244,15 +245,25 @@ namespace ProjectArtOfAll.Core.Checks
             Assert(canceled.IsReady, "Haste plus slow must return to 1x speed.");
         }
 
-        private static void CheckSampleCardCatalog()
+        private static void CheckCardDatabase()
         {
-            SampleCardCatalog catalog = SampleCardCatalog.Instance;
-            Assert(catalog.All.Count == 6,
-                "M2 must load the six approved sample cards.");
+            CardDatabase catalog = CardDatabase.Instance;
+            Assert(catalog.All.Count == 30,
+                "The catalog must contain all thirty cards of the first set.");
             Assert(catalog.Get("crowbar").CooldownTicks == 180,
                 "Crowbar must use a 180-tick cooldown.");
+            Assert(catalog.Get("crowbar").SlotSize == 1,
+                "Crowbar occupies one bag slot.");
             Assert(catalog.Get("whetstone").Auras.Count == 1,
                 "Whetstone must publish its adjacent Weapon aura.");
+            Assert(catalog.Get("plastic_shed").Passives.Count == 1,
+                "Plastic shed must slow on cast and shield when a slow lands.");
+            Assert(!catalog.Get("whetstone").IsActive,
+                "A pure aura card must never cast on its own.");
+            Assert(catalog.Get("crowbar").IsActive,
+                "A card with a cooldown and effects must cast on its own.");
+            Assert(catalog.All.Select(card => card.Id).Distinct().Count() == 30,
+                "Card ids must be unique.");
         }
 
         private static void CheckEventBus()
@@ -296,7 +307,7 @@ namespace ProjectArtOfAll.Core.Checks
 
         private static void CheckCombatSimulation()
         {
-            SampleCardCatalog catalog = SampleCardCatalog.Instance;
+            CardDatabase catalog = CardDatabase.Instance;
             BattleSnapshot snapshot = new BattleSnapshot(
                 new CombatantSnapshot(
                     playerId: 0,
@@ -334,8 +345,8 @@ namespace ProjectArtOfAll.Core.Checks
                     gameEvent.SourcePlayerId == 0 &&
                     gameEvent.TargetPlayerId == 1 &&
                     !gameEvent.IgnoresShield);
-            Assert(firstCrowbarHit.Amount >= 3 && firstCrowbarHit.Amount <= 6,
-                "Whetstone must add +2 per die after the base roll and clamp.");
+            Assert(firstCrowbarHit.Amount >= 3 && firstCrowbarHit.Amount <= 8,
+                "Whetstone must add +2 per die after the base die is clamped.");
 
             CombatSimulation second = new CombatSimulation(snapshot, 987654UL);
             CombatResult firstResult = first.RunToCompletion();
@@ -447,6 +458,135 @@ namespace ProjectArtOfAll.Core.Checks
                 $"[M3] winner={report.WinnerPlayerId + 1} " +
                 $"turns={report.CompletedTurns} " +
                 $"hash={report.StateHash:X16}");
+        }
+
+        private static BattleSnapshot CombatOf(
+            IEnumerable<string> leftCards,
+            IEnumerable<string> rightCards)
+        {
+            CardDatabase catalog = CardDatabase.Instance;
+            int uid = 1;
+            List<CardInstance> left = new List<CardInstance>();
+            foreach (string id in leftCards)
+            {
+                left.Add(new CardInstance(uid++, catalog.Get(id)));
+            }
+
+            List<CardInstance> right = new List<CardInstance>();
+            foreach (string id in rightCards)
+            {
+                right.Add(new CardInstance(uid++, catalog.Get(id)));
+            }
+
+            return new BattleSnapshot(
+                new CombatantSnapshot(0, 1, left),
+                new CombatantSnapshot(1, 1, right));
+        }
+
+        private static void CheckCardMechanics()
+        {
+            CooldownTimer timer = new CooldownTimer(180);
+            timer.ApplyCharge(60);
+            Assert(timer.RemainingTicks == 120,
+                "Charge must advance the remaining cooldown directly.");
+            timer.ApplyCharge(200);
+            Assert(timer.RemainingTicks == 0 && timer.ChargeCarryTicks == 80,
+                "Charge beyond the remaining cooldown must be stored as carry.");
+            timer.SetRemainingTicks(180);
+            Assert(timer.RemainingTicks == 100 && timer.ChargeCarryTicks == 0,
+                "The stored carry must be spent on the next cooldown and then cleared.");
+
+            CombatSimulation maxRoll = new CombatSimulation(
+                CombatOf(new[] { "ouroboros", "crowbar" }, new[] { "car_door" }),
+                11UL);
+            for (int tick = 0; tick < 240 && !maxRoll.IsFinished; tick++)
+            {
+                maxRoll.TickOnce();
+            }
+
+            List<DamageDealtEvent> forced =
+                maxRoll.Events.History
+                    .OfType<DamageDealtEvent>()
+                    .Where(gameEvent =>
+                        gameEvent.SourcePlayerId == 0 &&
+                        gameEvent.TargetPlayerId == 1 &&
+                        !gameEvent.IgnoresShield)
+                    .ToList();
+            Assert(forced.Count > 0 && forced.All(hit => hit.Amount == 6),
+                "Ouroboros must force the right neighbour to roll the maximum value.");
+
+            CombatSimulation taped = new CombatSimulation(
+                CombatOf(new[] { "duct_tape", "crowbar" }, new[] { "car_door" }),
+                12UL);
+            taped.TickOnce();
+            Assert(
+                taped.Events.History.OfType<ShieldGainedEvent>()
+                    .Any(gameEvent => gameEvent.PlayerId == 0),
+                "Duct tape must shield its owner when an adjacent card casts.");
+
+            CombatSimulation recycled = new CombatSimulation(
+                CombatOf(new[] { "recycler", "concrete_block" }, new[] { "car_door" }),
+                13UL);
+            recycled.TickOnce();
+            Assert(
+                recycled.Events.History.OfType<CardCastEvent>()
+                    .Count(gameEvent =>
+                        gameEvent.PlayerId == 0 && gameEvent.CardUid == 2) == 2,
+                "Recycler must grant one extra cast to every waste card.");
+
+            CombatSimulation molotov = new CombatSimulation(
+                CombatOf(new[] { "molotov" }, new[] { "car_door" }),
+                14UL);
+            for (int tick = 0; tick < 600 && !molotov.IsFinished; tick++)
+            {
+                molotov.TickOnce();
+            }
+
+            Assert(
+                molotov.Events.History.OfType<CardDestroyedEvent>()
+                    .Any(gameEvent => gameEvent.PlayerId == 0),
+                "Molotov must destroy itself after its only cast.");
+            Assert(
+                molotov.Events.History.OfType<CardCastEvent>()
+                    .Count(gameEvent => gameEvent.PlayerId == 0) == 1,
+                "A destroyed card must not cast again.");
+
+            CombatSimulation slowedEnemy = new CombatSimulation(
+                CombatOf(new[] { "concrete_block" }, new[] { "crowbar" }),
+                16UL);
+            slowedEnemy.TickOnce();
+            Assert(
+                slowedEnemy.Events.History.OfType<SlowAppliedEvent>()
+                    .Any(gameEvent => gameEvent.PlayerId == 1),
+                "Concrete block must slow a random enemy card.");
+
+            CombatSimulation shredder = new CombatSimulation(
+                CombatOf(new[] { "shredder" }, new[] { "car_door" }),
+                17UL);
+            shredder.TickOnce();
+            DamageDealtEvent shedHit =
+                shredder.Events.History
+                    .OfType<DamageDealtEvent>()
+                    .First(gameEvent =>
+                        gameEvent.SourcePlayerId == 0 &&
+                        gameEvent.TargetPlayerId == 1 &&
+                        !gameEvent.IgnoresShield);
+            Assert(shedHit.Amount >= 2 && shedHit.Amount <= 16,
+                "Shredder must gain a permanent extra die at battle start.");
+
+            CombatSimulation chariot = new CombatSimulation(
+                CombatOf(new[] { "golden_chariot" }, new[] { "car_door" }),
+                18UL);
+            chariot.TickOnce();
+            DamageDealtEvent chariotHit =
+                chariot.Events.History
+                    .OfType<DamageDealtEvent>()
+                    .First(gameEvent =>
+                        gameEvent.SourcePlayerId == 0 &&
+                        gameEvent.TargetPlayerId == 1 &&
+                        !gameEvent.IgnoresShield);
+            Assert(chariotHit.Amount >= 4 && chariotHit.Amount <= 24,
+                "Golden chariot must roll one die per point of value (4d6).");
         }
 
         private static MapGraph CreateTestGraph()

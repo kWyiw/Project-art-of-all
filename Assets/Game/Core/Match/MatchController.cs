@@ -24,7 +24,7 @@ namespace ProjectArtOfAll.Core.Match
         private readonly MapGraph graph;
         private readonly Pcg32 random;
         private readonly GameEventBus eventBus = new GameEventBus();
-        private readonly SampleCardCatalog cardCatalog = SampleCardCatalog.Instance;
+        private readonly ICardCatalog cardCatalog = CardDatabase.Instance;
         private readonly List<MovementCandidate> currentCandidates =
             new List<MovementCandidate>();
         private readonly List<CardDefinition> currentRewardChoices =

@@ -26,22 +26,6 @@ namespace ProjectArtOfAll.Core.Cards
         BagOnly = 2
     }
 
-    public enum EffectTarget
-    {
-        Enemy = 0,
-        Self = 1
-    }
-
-    public enum EffectOp
-    {
-        DealDamage = 0,
-        GainShield = 1,
-        ApplyPoison = 2,
-        ApplyBurn = 3,
-        ApplyRegeneration = 4,
-        Heal = 5
-    }
-
     public enum AuraTarget
     {
         Self = 0,
@@ -54,69 +38,19 @@ namespace ProjectArtOfAll.Core.Cards
     public enum AuraStat
     {
         DiceFlatModifier = 0,
-        MultiCast = 1
+        MultiCast = 1,
+
+        /// <summary>自噬之蛇: every die always rolls its maximum (BT-7.7).</summary>
+        MaxRoll = 2,
+
+        /// <summary>Adds whole dice to the roll (data-driven cards such as 粉碎机).</summary>
+        DiceCount = 3
     }
 
     public enum AuraScaling
     {
         Flat = 0,
         PerAdjacentMatchingTag = 1
-    }
-
-    public readonly struct DiceExpression
-    {
-        public DiceExpression(int count, int faces)
-        {
-            if (count < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(count));
-            }
-
-            if (faces < 2)
-            {
-                throw new ArgumentOutOfRangeException(nameof(faces));
-            }
-
-            Count = count;
-            Faces = faces;
-        }
-
-        public int Count { get; }
-        public int Faces { get; }
-
-        public int Roll(Rng.Pcg32 rng, int perDieModifier = 0)
-        {
-            if (rng == null)
-            {
-                throw new ArgumentNullException(nameof(rng));
-            }
-
-            int total = 0;
-            for (int die = 0; die < Count; die++)
-            {
-                int value = rng.NextInt(1, Faces + 1) + perDieModifier;
-                total += Math.Max(1, Math.Min(Faces, value));
-            }
-
-            return total;
-        }
-    }
-
-    public sealed class EffectDefinition
-    {
-        public EffectDefinition(
-            EffectOp operation,
-            DiceExpression amount,
-            EffectTarget target)
-        {
-            Operation = operation;
-            Amount = amount;
-            Target = target;
-        }
-
-        public EffectOp Operation { get; }
-        public DiceExpression Amount { get; }
-        public EffectTarget Target { get; }
     }
 
     public sealed class AuraDefinition
@@ -126,13 +60,25 @@ namespace ProjectArtOfAll.Core.Cards
             AuraStat stat,
             int amount,
             CardTag requiredTag = CardTag.None,
-            AuraScaling scaling = AuraScaling.Flat)
+            AuraScaling scaling = AuraScaling.Flat,
+            int minimumSlotSize = 0)
         {
+            if (amount < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(amount));
+            }
+
+            if (minimumSlotSize < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(minimumSlotSize));
+            }
+
             Target = target;
             Stat = stat;
             Amount = amount;
             RequiredTag = requiredTag;
             Scaling = scaling;
+            MinimumSlotSize = minimumSlotSize;
         }
 
         public AuraTarget Target { get; }
@@ -140,6 +86,9 @@ namespace ProjectArtOfAll.Core.Cards
         public int Amount { get; }
         public CardTag RequiredTag { get; }
         public AuraScaling Scaling { get; }
+
+        /// <summary>0 = any size. 双持 only buffs 1c weapons.</summary>
+        public int MinimumSlotSize { get; }
     }
 
     public sealed class CardDefinition
@@ -152,8 +101,9 @@ namespace ProjectArtOfAll.Core.Cards
             CardTag tags,
             int value,
             CardScope scope,
-            IEnumerable<EffectDefinition> activeEffects,
-            IEnumerable<AuraDefinition> auras = null)
+            IEnumerable<CardEffect> activeEffects,
+            IEnumerable<AuraDefinition> auras = null,
+            IEnumerable<PassiveDefinition> passives = null)
         {
             if (string.IsNullOrWhiteSpace(id))
             {
@@ -177,16 +127,28 @@ namespace ProjectArtOfAll.Core.Cards
                 throw new ArgumentOutOfRangeException(nameof(cooldownTicks));
             }
 
-            if (tags == CardTag.None)
-            {
-                throw new ArgumentException(
-                    "Every card requires at least one tag.",
-                    nameof(tags));
-            }
-
             if (value < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(value));
+            }
+
+            CardEffect[] effects = ToArray(activeEffects ?? Array.Empty<CardEffect>());
+            AuraDefinition[] auraArray = ToArray(auras ?? Array.Empty<AuraDefinition>());
+            PassiveDefinition[] passiveArray =
+                ToArray(passives ?? Array.Empty<PassiveDefinition>());
+
+            if (effects.Length == 0 && passiveArray.Length == 0 && auraArray.Length == 0)
+            {
+                throw new ArgumentException(
+                    $"Card '{id}' has no effect, aura or passive and can never do anything.",
+                    nameof(activeEffects));
+            }
+
+            if (effects.Length > 0 && cooldownTicks <= 0)
+            {
+                throw new ArgumentException(
+                    $"Card '{id}' has active effects and therefore needs a cooldown.",
+                    nameof(cooldownTicks));
             }
 
             Id = id;
@@ -196,12 +158,9 @@ namespace ProjectArtOfAll.Core.Cards
             Tags = tags;
             Value = value;
             Scope = scope;
-            ActiveEffects = new ReadOnlyCollection<EffectDefinition>(
-                new List<EffectDefinition>(
-                    activeEffects ?? Array.Empty<EffectDefinition>()).ToArray());
-            Auras = new ReadOnlyCollection<AuraDefinition>(
-                new List<AuraDefinition>(
-                    auras ?? Array.Empty<AuraDefinition>()).ToArray());
+            ActiveEffects = new ReadOnlyCollection<CardEffect>(effects);
+            Auras = new ReadOnlyCollection<AuraDefinition>(auraArray);
+            Passives = new ReadOnlyCollection<PassiveDefinition>(passiveArray);
         }
 
         public string Id { get; }
@@ -211,12 +170,25 @@ namespace ProjectArtOfAll.Core.Cards
         public CardTag Tags { get; }
         public int Value { get; }
         public CardScope Scope { get; }
-        public IReadOnlyList<EffectDefinition> ActiveEffects { get; }
+        public IReadOnlyList<CardEffect> ActiveEffects { get; }
         public IReadOnlyList<AuraDefinition> Auras { get; }
+        public IReadOnlyList<PassiveDefinition> Passives { get; }
 
         public bool HasTag(CardTag tag)
         {
             return (Tags & tag) == tag;
+        }
+
+        public bool IsActive => CooldownTicks > 0 && ActiveEffects.Count > 0;
+
+        private static T[] ToArray<T>(IEnumerable<T> source)
+        {
+            if (source is T[] array)
+            {
+                return (T[])array.Clone();
+            }
+
+            return new List<T>(source).ToArray();
         }
     }
 }

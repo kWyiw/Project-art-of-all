@@ -25,9 +25,21 @@ namespace ProjectArtOfAll.Core.Combat
         public int Poison { get; set; }
         public int Burn { get; set; }
         public int Regeneration { get; set; }
+
+        /// <summary>特种橡胶: every shield this side gains is +N.</summary>
+        public int ShieldBonus { get; set; }
+
         public List<CombatCardRuntime> Cards { get; }
 
         public bool IsKnockedOut => Health <= 0;
+
+        public IReadOnlyList<CombatCardRuntime> ActiveCards()
+        {
+            return Cards
+                .Where(card => !card.IsDestroyed)
+                .OrderBy(card => card.SlotIndex)
+                .ToList();
+        }
     }
 
     internal sealed class CombatCardRuntime
@@ -42,8 +54,16 @@ namespace ProjectArtOfAll.Core.Combat
         public CardInstance Instance { get; }
         public CardDefinition Definition => Instance.Definition;
         public int SlotIndex { get; }
+
+        /// <summary>Position inside the battle bar; the bar keeps its slots when a card dies.</summary>
         public CooldownTimer Cooldown { get; }
         public bool IsDestroyed { get; private set; }
+
+        /// <summary>热熔切割器: dice gained inside this battle.</summary>
+        public int BattleDiceBonus { get; set; }
+
+        public int TotalDiceCountBonus =>
+            BattleDiceBonus + Instance.PermanentDiceCountBonus;
 
         public void Destroy()
         {

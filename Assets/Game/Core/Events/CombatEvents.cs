@@ -88,6 +88,69 @@ namespace ProjectArtOfAll.Core.Events
         public int Layers { get; }
     }
 
+    /// <summary>充能：一张牌被瞬间推进了 <see cref="Ticks"/> 的读秒。</summary>
+    public sealed class ChargeAppliedEvent : GameEvent
+    {
+        public ChargeAppliedEvent(int playerId, int cardUid, int ticks, int sourceCardUid)
+        {
+            PlayerId = playerId;
+            CardUid = cardUid;
+            Ticks = ticks;
+            SourceCardUid = sourceCardUid;
+        }
+
+        public int PlayerId { get; }
+        public int CardUid { get; }
+        public int Ticks { get; }
+
+        /// <summary>-1 when the charge came from a passive instead of a cast card.</summary>
+        public int SourceCardUid { get; }
+    }
+
+    public sealed class HasteAppliedEvent : GameEvent
+    {
+        public HasteAppliedEvent(int playerId, int cardUid, int durationTicks)
+        {
+            PlayerId = playerId;
+            CardUid = cardUid;
+            DurationTicks = durationTicks;
+        }
+
+        public int PlayerId { get; }
+        public int CardUid { get; }
+        public int DurationTicks { get; }
+    }
+
+    public sealed class SlowAppliedEvent : GameEvent
+    {
+        public SlowAppliedEvent(int playerId, int cardUid, int durationTicks, int sourceCardUid)
+        {
+            PlayerId = playerId;
+            CardUid = cardUid;
+            DurationTicks = durationTicks;
+            SourceCardUid = sourceCardUid;
+        }
+
+        public int PlayerId { get; }
+        public int CardUid { get; }
+        public int DurationTicks { get; }
+
+        /// <summary>-1 when the slow came from a passive instead of a cast card.</summary>
+        public int SourceCardUid { get; }
+    }
+
+    public sealed class CardDestroyedEvent : GameEvent
+    {
+        public CardDestroyedEvent(int playerId, int cardUid)
+        {
+            PlayerId = playerId;
+            CardUid = cardUid;
+        }
+
+        public int PlayerId { get; }
+        public int CardUid { get; }
+    }
+
     public sealed class CombatEndedEvent : GameEvent
     {
         public CombatEndedEvent(int winnerPlayerId, CombatEndReason reason)
