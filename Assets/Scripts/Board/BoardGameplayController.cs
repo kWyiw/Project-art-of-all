@@ -73,10 +73,15 @@ namespace ProjectArtOfAll.Board
             BuildSceneLookup();
             graph = UnityMapGraphFactory.Build(tilesByNode.Values);
             pathLines = BoardPathLines.Build(transform, graph, tilesByNode);
+            // 正常模式让真人先手（从主页面进来的第一回合就能操作）；
+            // 无CPU测试模式没有固定真人，沿用准备室选的门。
+            int startingPlayer = GameSession.HumanSeat >= 0
+                ? GameSession.HumanSeat
+                : ResolveEntryPlayerId();
             match = new MatchController(
                 graph,
                 matchSeed,
-                startingPlayerId: ResolveEntryPlayerId());
+                startingPlayerId: startingPlayer);
 
             cameraController = Camera.main != null
                 ? Camera.main.GetComponent<BoardCameraController>()
