@@ -11,7 +11,7 @@ namespace ProjectArtOfAll.Board
     public static class BoardPathLines
     {
         private const float LineLift = 0.055f;
-        private const float LineWidth = 0.09f;
+        private const float LineWidth = 0.075f;
         private static readonly Color LineColor = new Color(0.98f, 0.80f, 0.42f, 0.55f);
 
         public static GameObject Build(
@@ -69,6 +69,11 @@ namespace ProjectArtOfAll.Board
         {
             GameObject lineObject = new GameObject($"Path {from.Row:D2}{from.Column:D2}-{to.Row:D2}{to.Column:D2}");
             lineObject.transform.SetParent(parent, false);
+
+            // 线是贴在地上的"扁带"，所以要把四边形摆到水平面里：
+            // TransformZ 对齐时四边形位于物体的局部 XY 平面，绕 X 轴 -90° 后法线朝上（世界 +Y）。
+            // 之前没有这一步，线是竖着的，从上往下看只剩一像素的斜边——屏幕上的"多余横线"就是它。
+            lineObject.transform.rotation = Quaternion.Euler(-90f, 0f, 0f);
 
             LineRenderer line = lineObject.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
