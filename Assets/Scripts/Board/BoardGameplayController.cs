@@ -48,6 +48,7 @@ namespace ProjectArtOfAll.Board
         private BoardPlayerToken activeToken;
         private MapGraph graph;
         private MatchController match;
+        private GameObject pathLines;
         private int pendingForkSelection = -1;
         private bool isMoving;
         private bool awaitingFork;
@@ -58,6 +59,7 @@ namespace ProjectArtOfAll.Board
         {
             BuildSceneLookup();
             graph = UnityMapGraphFactory.Build(tilesByNode.Values);
+            pathLines = BoardPathLines.Build(transform, graph, tilesByNode);
             match = new MatchController(
                 graph,
                 matchSeed,
@@ -71,6 +73,15 @@ namespace ProjectArtOfAll.Board
             SynchronizeTokensFromCore();
             ActivateCurrentPlayer();
             UpdateHudStatus();
+        }
+
+        /// <summary>M4 设置项：地图路径线显隐。</summary>
+        public void SetPathLinesVisible(bool visible)
+        {
+            if (pathLines != null)
+            {
+                pathLines.SetActive(visible);
+            }
         }
 
         /// <summary>人类席位；卡槽带始终显示这一位玩家的牌。</summary>

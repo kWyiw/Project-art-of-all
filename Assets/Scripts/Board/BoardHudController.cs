@@ -809,8 +809,31 @@ namespace ProjectArtOfAll.Board
 
             if (pauseOverlay == null)
             {
-                pauseOverlay = PauseOverlayView.Create((RectTransform)transform, font, TogglePause);
+                pauseOverlay = PauseOverlayView.Create(
+                    (RectTransform)transform,
+                    font,
+                    TogglePause,
+                    ApplyCardScaleSetting,
+                    ApplyPathLinesSetting);
             }
+        }
+
+        /// <summary>设置：卡槽大小（乘在自动缩放上，0.75~1.25）。</summary>
+        public void ApplyCardScaleSetting(float scale)
+        {
+            if (cardBand == null)
+            {
+                return;
+            }
+
+            cardBand.UserScale = scale;
+            cardBand.ApplyScreenLayout();
+        }
+
+        /// <summary>设置：地图路径线显隐（纯表现，不影响规则）。</summary>
+        public void ApplyPathLinesSetting(bool visible)
+        {
+            boardGameplay?.SetPathLinesVisible(visible);
         }
 
         /// <summary>Esc 暂停（只遮输入；内核没有暂停态，重开走重载场景）。</summary>

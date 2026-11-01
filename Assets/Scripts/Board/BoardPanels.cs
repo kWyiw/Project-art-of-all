@@ -473,10 +473,19 @@ namespace ProjectArtOfAll.Board
 
         private Font font;
         private Button resumeButton;
+        private Text cardScaleValue;
+        private Button pathToggleButton;
+        private Text pathToggleLabel;
+        private bool pathsVisible = true;
 
         public bool IsOpen => gameObject.activeSelf;
 
-        public static PauseOverlayView Create(RectTransform parent, Font font, System.Action onResume)
+        public static PauseOverlayView Create(
+            RectTransform parent,
+            Font font,
+            System.Action onResume,
+            System.Action<float> onCardScale,
+            System.Action<bool> onPathsVisible)
         {
             GameObject rootObject = new GameObject(
                 "PauseOverlay",
@@ -495,39 +504,80 @@ namespace ProjectArtOfAll.Board
 
             PauseOverlayView view = rootObject.AddComponent<PauseOverlayView>();
             view.font = font;
-            view.Build(onResume);
+            view.Build(onResume, onCardScale, onPathsVisible);
             rootObject.SetActive(false);
             return view;
         }
 
-        private void Build(System.Action onResume)
+        private void Build(
+            System.Action onResume,
+            System.Action<float> onCardScale,
+            System.Action<bool> onPathsVisible)
         {
             GameObject panelObject = BoardHudOverlayFactory.CreateBar(
                 transform, "Panel",
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(-220f, -150f), new Vector2(220f, 150f),
+                new Vector2(-250f, -230f), new Vector2(250f, 230f),
                 PanelColor);
 
             Text title = BoardHudOverlayFactory.CreateText(
                 panelObject.transform, "Title", "已暂停", font, 28, FontStyle.Bold,
-                new Vector2(0f, -30f), new Vector2(440f, 36f), TextAnchor.MiddleCenter);
+                new Vector2(0f, -36f), new Vector2(460f, 36f), TextAnchor.MiddleCenter);
             title.color = Brass;
 
             Text hint = BoardHudOverlayFactory.CreateText(
-                panelObject.transform, "Hint", "Esc 继续", font, 14, FontStyle.Normal,
-                new Vector2(0f, -72f), new Vector2(440f, 22f), TextAnchor.MiddleCenter);
+                panelObject.transform, "Hint", "Esc 继续 / 关闭菜单", font, 13, FontStyle.Normal,
+                new Vector2(0f, -72f), new Vector2(460f, 22f), TextAnchor.MiddleCenter);
             hint.color = new Color(0.66f, 0.68f, 0.66f, 1f);
 
-            resumeButton = MakeButton(panelObject.transform, "继续", 0f, onResume);
-            MakeButton(panelObject.transform, "重开本局", -120f, RestartScene);
+            resumeButton = MakeButton(panelObject.transform, "继续游戏", -110f, onResume);
+            MakeButton(panelObject.transform, "重开本局", -170f, RestartScene);
+            MakeButton(panelObject.transform, "退出游戏", -230f, QuitGame);
+
+            BoardHudOverlayFactory.CreateText(
+                panelObject.transform, "SettingsTitle", "设置", font, 16, FontStyle.Bold,
+                new Vector2(-200f, -296f), new Vector2(120f, 24f), TextAnchor.MiddleLeft)
+                .color = new Color(0.72f, 0.68f, 0.52f, 1f);
+
+            BoardHudOverlayFactory.CreateText(
+                panelObject.transform, "CardScaleLabel", "卡槽大小", font, 14, FontStyle.Normal,
+                new Vector2(-200f, -338f), new Vector2(96f, 24f), TextAnchor.MiddleLeft)
+                .color = TextColor;
+
+            Slider scaleSlider = MakeSlider(
+                panelObject.transform, new Vector2(92f, -338f), new Vector2(210f, 26f),
+                0.75f, 1.25f, 1f);
+            cardScaleValue = BoardHudOverlayFactory.CreateText(
+                panelObject.transform, "CardScaleValue", "100%", font, 14, FontStyle.Normal,
+                new Vector2(196f, -338f), new Vector2(64f, 24f), TextAnchor.MiddleRight);
+            cardScaleValue.color = Brass;
+            scaleSlider.onValueChanged.AddListener(value =>
+            {
+                cardScaleValue.text = Mathf.RoundToInt(value * 100f) + "%";
+                onCardScale?.Invoke(value);
+            });
+
+            BoardHudOverlayFactory.CreateText(
+                panelObject.transform, "PathsLabel", "地图路径线", font, 14, FontStyle.Normal,
+                new Vector2(-200f, -384f), new Vector2(110f, 24f), TextAnchor.MiddleLeft)
+                .color = TextColor;
+
+            pathToggleButton = MakeSmallButton(
+                panelObject.transform, "显示", new Vector2(120f, -384f), new Vector2(120f, 30f), () =>
+                {
+                    pathsVisible = !pathsVisible;
+                    pathToggleLabel.text = pathsVisible ? "显示" : "隐藏";
+                    onPathsVisible?.Invoke(pathsVisible);
+                });
+            pathToggleLabel = pathToggleButton.GetComponentInChildren<Text>();
         }
 
-        private Button MakeButton(Transform parent, string label, float offsetX, System.Action onClick)
+        private Button MakeButton(Transform parent, string label, float offsetY, System.Action onClick)
         {
             GameObject buttonObject = BoardHudOverlayFactory.CreateBar(
                 parent, "Button_" + label,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(offsetX - 92f, -110f), new Vector2(offsetX + 92f, -66f),
+                new Vector2(-92f, offsetY - 22f), new Vector2(92f, offsetY + 22f),
                 new Color(0.89f, 0.64f, 0.20f, 1f));
             Button button = buttonObject.AddComponent<Button>();
             button.transition = Selectable.Transition.None;
@@ -544,10 +594,114 @@ namespace ProjectArtOfAll.Board
             return button;
         }
 
+        private Button MakeSmallButton(
+            Transform parent,
+            string label,
+            Vector2 anchoredPosition,
+            Vector2 size,
+            System.Action onClick)
+        {
+            GameObject buttonObject = BoardHudOverlayFactory.CreateBar(
+                parent, "Button_" + label,
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                anchoredPosition - size * 0.5f, anchoredPosition + size * 0.5f,
+                new Color(0.89f, 0.64f, 0.20f, 0.92f));
+            Button button = buttonObject.AddComponent<Button>();
+            button.transition = Selectable.Transition.None;
+            button.onClick.AddListener(() => onClick?.Invoke());
+            Text text = BoardHudOverlayFactory.CreateText(
+                buttonObject.transform, "Label", label, font, 14, FontStyle.Bold,
+                Vector2.zero, size, TextAnchor.MiddleCenter);
+            text.rectTransform.anchorMin = Vector2.zero;
+            text.rectTransform.anchorMax = Vector2.one;
+            text.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            text.rectTransform.offsetMin = Vector2.zero;
+            text.rectTransform.offsetMax = Vector2.zero;
+            text.color = new Color(0.09f, 0.08f, 0.05f, 1f);
+            return button;
+        }
+
+        private Slider MakeSlider(
+            Transform parent,
+            Vector2 anchoredPosition,
+            Vector2 size,
+            float minimum,
+            float maximum,
+            float value)
+        {
+            GameObject sliderObject = new GameObject(
+                "Slider",
+                typeof(RectTransform),
+                typeof(Slider));
+            RectTransform rect = sliderObject.GetComponent<RectTransform>();
+            rect.SetParent(parent, false);
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = size;
+            rect.anchoredPosition = anchoredPosition;
+
+            GameObject background = BoardHudOverlayFactory.CreateBar(
+                sliderObject.transform, "Background",
+                new Vector2(0f, 0.5f), new Vector2(1f, 0.5f),
+                new Vector2(0f, -5f), new Vector2(0f, 5f),
+                new Color(0.16f, 0.20f, 0.22f, 1f));
+            background.GetComponent<Image>().raycastTarget = false;
+
+            GameObject fillArea = new GameObject("Fill Area", typeof(RectTransform));
+            RectTransform fillAreaRect = fillArea.GetComponent<RectTransform>();
+            fillAreaRect.SetParent(sliderObject.transform, false);
+            fillAreaRect.anchorMin = new Vector2(0f, 0.5f);
+            fillAreaRect.anchorMax = new Vector2(1f, 0.5f);
+            fillAreaRect.offsetMin = new Vector2(0f, -5f);
+            fillAreaRect.offsetMax = new Vector2(0f, 5f);
+
+            GameObject fill = BoardHudOverlayFactory.CreateBar(
+                fillArea.transform, "Fill",
+                new Vector2(0f, 0f), new Vector2(1f, 1f),
+                Vector2.zero, Vector2.zero,
+                new Color(0.89f, 0.64f, 0.20f, 0.95f));
+            fill.GetComponent<Image>().raycastTarget = false;
+
+            GameObject handleArea = new GameObject("Handle Slide Area", typeof(RectTransform));
+            RectTransform handleAreaRect = handleArea.GetComponent<RectTransform>();
+            handleAreaRect.SetParent(sliderObject.transform, false);
+            handleAreaRect.anchorMin = new Vector2(0f, 0f);
+            handleAreaRect.anchorMax = new Vector2(1f, 1f);
+            handleAreaRect.offsetMin = Vector2.zero;
+            handleAreaRect.offsetMax = Vector2.zero;
+
+            GameObject handle = BoardHudOverlayFactory.CreateBar(
+                handleArea.transform, "Handle",
+                new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
+                new Vector2(-8f, -11f), new Vector2(8f, 11f),
+                new Color(0.98f, 0.86f, 0.52f, 1f));
+
+            Slider slider = sliderObject.GetComponent<Slider>();
+            slider.transition = Selectable.Transition.None;
+            slider.fillRect = fill.GetComponent<RectTransform>();
+            slider.handleRect = handle.GetComponent<RectTransform>();
+            slider.targetGraphic = handle.GetComponent<Image>();
+            slider.direction = Slider.Direction.LeftToRight;
+            slider.minValue = minimum;
+            slider.maxValue = maximum;
+            slider.value = value;
+            return slider;
+        }
+
         private static void RestartScene()
         {
             UnityEngine.SceneManagement.SceneManager.LoadScene(
                 UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex);
+        }
+
+        private static void QuitGame()
+        {
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            Application.Quit();
+#endif
         }
 
         public void Show()

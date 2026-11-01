@@ -177,6 +177,9 @@ namespace ProjectArtOfAll.Board
         /// <summary>带子当前高度。</summary>
         public float CurrentBandHeight => root.rect.height;
 
+        /// <summary>设置面板里的「卡槽大小」，乘在自动算出的缩放上。</summary>
+        public float UserScale { get; set; } = 1f;
+
         /// <summary>「展开卡组」按钮：由 HUD 注进来，挂到带子左侧外沿。</summary>
         public RectTransform HandleButtonTarget { get; set; }
 
@@ -193,7 +196,8 @@ namespace ProjectArtOfAll.Board
 
             float width = Mathf.Clamp(canvasWidth * 0.78f, 720f, 1560f);
             float height = Mathf.Clamp(canvasHeight * 0.42f, BaseBandHeight, 560f);
-            scale = Mathf.Clamp((height - HandleHeight - 38f) * 0.5f / BaseCardHeight, 1f, MaxScale);
+            scale = Mathf.Clamp(UserScale, 0.75f, 1.25f)
+                * Mathf.Clamp((height - HandleHeight - 38f) * 0.5f / BaseCardHeight, 1f, MaxScale);
 
             Vector2 size = root.sizeDelta;
             size.x = width;
