@@ -438,8 +438,9 @@ namespace ProjectArtOfAll.Core.Checks
                 .Count(gameEvent =>
                     gameEvent.PlayerId == 0 &&
                     gameEvent.CardUid == 2);
-            Assert(crowbarCasts == 7,
-                "A 3s card must cast exactly seven times in the first 20 seconds.");
+            // 冷却从满值开始：第一次施放在 3s，之后每 3s 一次，头 20 秒一共 6 次（3/6/9/12/15/18s）。
+            Assert(crowbarCasts == 6,
+                "A 3s card must cast exactly six times in the first 20 seconds.");
 
             DamageDealtEvent firstCrowbarHit = first.Events.History
                 .OfType<DamageDealtEvent>()
@@ -1063,7 +1064,12 @@ namespace ProjectArtOfAll.Core.Checks
             CombatSimulation taped = new CombatSimulation(
                 CombatOf(new[] { "duct_tape", "crowbar" }, new[] { "car_door" }),
                 12UL);
-            taped.TickOnce();
+            // 冷却从满值开始，撬棍 3s 后才会施放第一次（BT-2.5 ③）。
+            for (int tick = 0; tick < 240 && !taped.IsFinished; tick++)
+            {
+                taped.TickOnce();
+            }
+
             Assert(
                 taped.Events.History.OfType<ShieldGainedEvent>()
                     .Any(gameEvent => gameEvent.PlayerId == 0),
@@ -1072,7 +1078,11 @@ namespace ProjectArtOfAll.Core.Checks
             CombatSimulation recycled = new CombatSimulation(
                 CombatOf(new[] { "recycler", "concrete_block" }, new[] { "car_door" }),
                 13UL);
-            recycled.TickOnce();
+            for (int tick = 0; tick < 240 && !recycled.IsFinished; tick++)
+            {
+                recycled.TickOnce();
+            }
+
             Assert(
                 recycled.Events.History.OfType<CardCastEvent>()
                     .Count(gameEvent =>
@@ -1099,7 +1109,11 @@ namespace ProjectArtOfAll.Core.Checks
             CombatSimulation slowedEnemy = new CombatSimulation(
                 CombatOf(new[] { "concrete_block" }, new[] { "crowbar" }),
                 16UL);
-            slowedEnemy.TickOnce();
+            for (int tick = 0; tick < 240 && !slowedEnemy.IsFinished; tick++)
+            {
+                slowedEnemy.TickOnce();
+            }
+
             Assert(
                 slowedEnemy.Events.History.OfType<SlowAppliedEvent>()
                     .Any(gameEvent => gameEvent.PlayerId == 1),
@@ -1108,7 +1122,11 @@ namespace ProjectArtOfAll.Core.Checks
             CombatSimulation shredder = new CombatSimulation(
                 CombatOf(new[] { "shredder" }, new[] { "car_door" }),
                 17UL);
-            shredder.TickOnce();
+            for (int tick = 0; tick < 600 && !shredder.IsFinished; tick++)
+            {
+                shredder.TickOnce();
+            }
+
             DamageDealtEvent shedHit =
                 shredder.Events.History
                     .OfType<DamageDealtEvent>()
@@ -1122,7 +1140,11 @@ namespace ProjectArtOfAll.Core.Checks
             CombatSimulation chariot = new CombatSimulation(
                 CombatOf(new[] { "golden_chariot" }, new[] { "car_door" }),
                 18UL);
-            chariot.TickOnce();
+            for (int tick = 0; tick < 800 && !chariot.IsFinished; tick++)
+            {
+                chariot.TickOnce();
+            }
+
             DamageDealtEvent chariotHit =
                 chariot.Events.History
                     .OfType<DamageDealtEvent>()

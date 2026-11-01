@@ -48,7 +48,9 @@ namespace ProjectArtOfAll.Core.Combat
         {
             Instance = instance;
             SlotIndex = slotIndex;
-            Cooldown = new CooldownTimer(0);
+            // 战斗开始时冷却从零开始走（BT-2.5 ③）：主动牌要等满一整条冷却才会施放第一次。
+            Cooldown = new CooldownTimer(
+                instance.Definition.IsActive ? instance.Definition.CooldownTicks : 0);
         }
 
         public CardInstance Instance { get; }
