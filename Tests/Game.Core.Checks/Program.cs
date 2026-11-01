@@ -32,6 +32,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckHomeProgression();
                 CheckRewardChoice();
                 CheckWarpTeleport();
+                CheckSceneMapTeleport();
                 CheckM3FullMatch();
                 CheckM3MatchReport();
                 Console.WriteLine("Game.Core checks passed.");
@@ -757,6 +758,223 @@ namespace ProjectArtOfAll.Core.Checks
                         !gameEvent.IgnoresShield);
             Assert(chariotHit.Amount >= 4 && chariotHit.Amount <= 24,
                 "Golden chariot must roll one die per point of value (4d6).");
+        }
+
+        private readonly struct SceneCell
+        {
+            public SceneCell(int row, int column, TileType tileType, int ownerPlayerId)
+            {
+                Row = row;
+                Column = column;
+                TileType = tileType;
+                OwnerPlayerId = ownerPlayerId;
+            }
+
+            public int Row { get; }
+            public int Column { get; }
+            public TileType TileType { get; }
+            public int OwnerPlayerId { get; }
+        }
+
+        private static void CheckSceneMapTeleport()
+        {
+            MapGraph graph = CreateSceneMapGraph();
+            int warps = graph.Nodes.Count(node => node.TileType == TileType.Warp);
+            Assert(warps >= 2, "The scene map must contain at least two Warp tiles.");
+
+            Dictionary<int, TileType> types = graph.Nodes
+                .ToDictionary(node => node.Id, node => node.TileType);
+            int teleports = 0;
+
+            for (ulong seed = 1; seed <= 40; seed++)
+            {
+                MatchController controller = new MatchController(graph, seed);
+                int start = controller.Events.History.Count;
+                SimpleMatchAutoplayer.Run(controller, maximumTurns: 400);
+
+                Dictionary<int, int> lastCell = new Dictionary<int, int>();
+                foreach (GameEvent gameEvent in controller.Events.History.Skip(start))
+                {
+                    if (gameEvent is PlayerMovedEvent moved)
+                    {
+                        lastCell[moved.PlayerId] = moved.ToNodeId;
+                        continue;
+                    }
+
+                    if (gameEvent is TurnStartedEvent started)
+                    {
+                        lastCell.Remove(started.PlayerId);
+                        continue;
+                    }
+
+                    if (!(gameEvent is PlayerTeleportedEvent teleport))
+                    {
+                        continue;
+                    }
+
+                    Assert(
+                        lastCell.TryGetValue(teleport.PlayerId, out int landed) &&
+                            landed == teleport.FromNodeId,
+                        "A teleport must fire from the tile the move just landed on.");
+                    teleports++;
+
+                    Assert(
+                        types[teleport.FromNodeId] == TileType.Warp,
+                        "A teleport may only start on a Warp tile, was on "
+                            + types[teleport.FromNodeId].ToString() + ".");
+                    Assert(
+                        types[teleport.ToNodeId] == TileType.Warp,
+                        "A teleport target must be a Warp tile.");
+                    Assert(
+                        teleport.FromNodeId != teleport.ToNodeId,
+                        "A teleport must move to another Warp tile.");
+                }
+            }
+
+            Assert(teleports > 0, "Expected the scene map run to produce teleports.");
+            Console.WriteLine("[scene] teleports=" + teleports.ToString());
+        }
+
+        private static MapGraph CreateSceneMapGraph()
+        {
+            SceneCell[] cells =
+            {
+            new SceneCell(0, 0, TileType.Home, 0),
+            new SceneCell(0, 1, TileType.Reward, 0),
+            new SceneCell(0, 2, TileType.Monster, 0),
+            new SceneCell(0, 3, TileType.Reward, 0),
+            new SceneCell(0, 4, TileType.Monster, 0),
+            new SceneCell(0, 5, TileType.Event, 0),
+            new SceneCell(0, 6, TileType.Reward, 0),
+            new SceneCell(0, 7, TileType.Monster, 0),
+            new SceneCell(0, 8, TileType.Event, 0),
+            new SceneCell(0, 9, TileType.Warp, 0),
+            new SceneCell(0, 10, TileType.Event, 0),
+            new SceneCell(0, 11, TileType.Home, 1),
+            new SceneCell(1, 0, TileType.Monster, 0),
+            new SceneCell(1, 4, TileType.Neutral, 0),
+            new SceneCell(1, 11, TileType.Reward, 0),
+            new SceneCell(2, 0, TileType.Warp, 0),
+            new SceneCell(2, 4, TileType.Neutral, 0),
+            new SceneCell(2, 11, TileType.Event, 0),
+            new SceneCell(3, 0, TileType.Event, 0),
+            new SceneCell(3, 4, TileType.Neutral, 0),
+            new SceneCell(3, 11, TileType.Reward, 0),
+            new SceneCell(4, 0, TileType.Reward, 0),
+            new SceneCell(4, 4, TileType.Shop, 0),
+            new SceneCell(4, 5, TileType.Neutral, 0),
+            new SceneCell(4, 6, TileType.Neutral, 0),
+            new SceneCell(4, 7, TileType.Shop, 0),
+            new SceneCell(4, 8, TileType.Neutral, 0),
+            new SceneCell(4, 9, TileType.Neutral, 0),
+            new SceneCell(4, 10, TileType.Neutral, 0),
+            new SceneCell(4, 11, TileType.Monster, 0),
+            new SceneCell(5, 0, TileType.Event, 0),
+            new SceneCell(5, 4, TileType.Neutral, 0),
+            new SceneCell(5, 7, TileType.Neutral, 0),
+            new SceneCell(5, 11, TileType.Monster, 0),
+            new SceneCell(6, 0, TileType.Warp, 0),
+            new SceneCell(6, 4, TileType.Neutral, 0),
+            new SceneCell(6, 7, TileType.Neutral, 0),
+            new SceneCell(6, 11, TileType.Reward, 0),
+            new SceneCell(7, 0, TileType.Event, 0),
+            new SceneCell(7, 1, TileType.Neutral, 0),
+            new SceneCell(7, 2, TileType.Neutral, 0),
+            new SceneCell(7, 3, TileType.Neutral, 0),
+            new SceneCell(7, 4, TileType.Shop, 0),
+            new SceneCell(7, 5, TileType.Neutral, 0),
+            new SceneCell(7, 6, TileType.Neutral, 0),
+            new SceneCell(7, 7, TileType.Shop, 0),
+            new SceneCell(7, 11, TileType.Event, 0),
+            new SceneCell(8, 0, TileType.Monster, 0),
+            new SceneCell(8, 7, TileType.Neutral, 0),
+            new SceneCell(8, 11, TileType.Monster, 0),
+            new SceneCell(9, 0, TileType.Monster, 0),
+            new SceneCell(9, 7, TileType.Neutral, 0),
+            new SceneCell(9, 11, TileType.Event, 0),
+            new SceneCell(10, 0, TileType.Event, 0),
+            new SceneCell(10, 7, TileType.Neutral, 0),
+            new SceneCell(10, 11, TileType.Event, 0),
+            new SceneCell(11, 0, TileType.Home, 3),
+            new SceneCell(11, 1, TileType.Warp, 0),
+            new SceneCell(11, 2, TileType.Reward, 0),
+            new SceneCell(11, 3, TileType.Monster, 0),
+            new SceneCell(11, 4, TileType.Event, 0),
+            new SceneCell(11, 5, TileType.Monster, 0),
+            new SceneCell(11, 6, TileType.Event, 0),
+            new SceneCell(11, 7, TileType.Reward, 0),
+            new SceneCell(11, 8, TileType.Reward, 0),
+            new SceneCell(11, 9, TileType.Monster, 0),
+            new SceneCell(11, 10, TileType.Event, 0),
+            new SceneCell(11, 11, TileType.Home, 2),
+            };
+
+            const int gridSize = 12;
+            Dictionary<int, SceneCell> byId = new Dictionary<int, SceneCell>();
+            foreach (SceneCell cell in cells)
+            {
+                byId[cell.Row * gridSize + cell.Column] = cell;
+            }
+
+            int[] rowOffsets = { -1, 0, 1, 0 };
+            int[] columnOffsets = { 0, 1, 0, -1 };
+            List<MapNode> nodes = new List<MapNode>();
+            List<int> warpIds = new List<int>();
+
+            foreach (SceneCell cell in cells)
+            {
+                int id = cell.Row * gridSize + cell.Column;
+                float sourceAngle = PolarAngle(cell.Row, cell.Column);
+                List<int> outgoing = new List<int>();
+                for (int index = 0; index < 4; index++)
+                {
+                    int row = cell.Row + rowOffsets[index];
+                    int column = cell.Column + columnOffsets[index];
+                    if (!byId.TryGetValue(row * gridSize + column, out SceneCell neighbour))
+                    {
+                        continue;
+                    }
+
+                    if (DeltaAngle(sourceAngle, PolarAngle(neighbour.Row, neighbour.Column)) > 0.001f)
+                    {
+                        outgoing.Add(neighbour.Row * gridSize + neighbour.Column);
+                    }
+                }
+
+                outgoing.Sort();
+                int owner = cell.TileType == TileType.Home ? cell.OwnerPlayerId : -1;
+                nodes.Add(new MapNode(id, cell.TileType, owner, outgoing.ToArray()));
+                if (cell.TileType == TileType.Warp)
+                {
+                    warpIds.Add(id);
+                }
+            }
+
+            return MapGraph.Create(
+                nodes,
+                playerCount: 4,
+                teleportGroups: new[] { warpIds.ToArray() });
+        }
+
+        private static float PolarAngle(int row, int column)
+        {
+            return (float)(Math.Atan2(5.5 - row, column - 5.5) * (180.0 / Math.PI));
+        }
+
+        private static float DeltaAngle(float from, float to)
+        {
+            float delta = (to - from) % 360f;
+            if (delta > 180f)
+            {
+                delta -= 360f;
+            }
+
+            if (delta < -180f)
+            {
+                delta += 360f;
+            }
+
+            return delta;
         }
 
         private static void CheckM3MatchReport()

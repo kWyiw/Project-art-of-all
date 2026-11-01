@@ -256,6 +256,7 @@ namespace ProjectArtOfAll.Board
             }
 
             SynchronizeTokensFromCore();
+            LogPlayerCells("移动结束");
             ResolveDeferredCorePhase();
             isMoving = false;
             hud?.SetDiceInteractable(
@@ -550,6 +551,36 @@ namespace ProjectArtOfAll.Board
             }
 
             token.transform.position = end;
+        }
+
+        private void LogPlayerCells(string tag)
+        {
+            if (match == null)
+            {
+                return;
+            }
+
+            System.Text.StringBuilder builder = new System.Text.StringBuilder(
+                "[Board] ");
+
+            builder.Append(tag);
+
+            foreach (MatchPlayerState player in match.State.Players)
+            {
+                builder.Append("  |  p");
+                builder.Append((player.Id + 1).ToString());
+                builder.Append('@');
+                builder.Append(NodeLabel(player.CurrentNode));
+
+                if (graph != null)
+                {
+                    builder.Append('(');
+                    builder.Append(graph.GetNode(player.CurrentNode).TileType.ToString());
+                    builder.Append(')');
+                }
+            }
+
+            Debug.Log(builder.ToString());
         }
 
         private void SynchronizeTokensFromCore()
