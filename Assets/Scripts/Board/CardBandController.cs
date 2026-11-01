@@ -51,6 +51,8 @@ namespace ProjectArtOfAll.Board
 
         private readonly List<GameObject> bagWidgets = new List<GameObject>();
         private readonly List<GameObject> battleWidgets = new List<GameObject>();
+        private readonly List<GameObject> bagCells = new List<GameObject>();
+        private readonly List<GameObject> battleCells = new List<GameObject>();
 
         private CardInstance dragging;
         private CardTooltipView tooltip;
@@ -322,11 +324,17 @@ namespace ProjectArtOfAll.Board
 
             List<CardInstance> bag = player.OwnedCards.Where(card => !player.IsEquipped(card)).ToList();
             List<CardInstance> battle = player.BattleCards.ToList();
-            RenderRow(bagRow, bagWidgets, bag, false);
-            RenderRow(battleRow, battleWidgets, battle, true);
+            RenderRow(bagRow, bagCells, bagWidgets, bag, false, LoadoutRules.BagCapacity);
+            RenderRow(battleRow, battleCells, battleWidgets, battle, true, capacity);
         }
 
-        private void RenderRow(RectTransform row, List<GameObject> bucket, List<CardInstance> cards, bool inBattle)
+        private void RenderRow(
+            RectTransform row,
+            List<GameObject> cellBucket,
+            List<GameObject> bucket,
+            List<CardInstance> cards,
+            bool inBattle,
+            int cellCount)
         {
             float rowWidth = row.rect.width;
             if (rowWidth < 1f)
@@ -334,9 +342,11 @@ namespace ProjectArtOfAll.Board
                 rowWidth = root.rect.width;
             }
 
+            BuildSlotCells(row, cellBucket, rowWidth, cellCount, inBattle);
+
             List<float> widths = cards.Select(WidthOf).ToList();
             float total = widths.Sum() + Mathf.Max(0, cards.Count - 1) * SlotGap;
-            float x = Mathf.Max(16f, (rowWidth - total) * 0.5f);
+            float x = 16f;
 
             for (int index = 0; index < cards.Count; index++)
             {
@@ -345,14 +355,164 @@ namespace ProjectArtOfAll.Board
             }
         }
 
+        /// <summary>空槽位画成"格子"：暗底 + 铜线，和参考图一样能看出还能放几张。</summary>
+        private void BuildSlotCells(
+            RectTransform row,
+            List<GameObject> cellBucket,
+            float rowWidth,
+            int cellCount,
+            bool inBattle)
+        {
+            ClearWidgets(cellBucket);
+            if (cellCount <= 0)
+            {
+                return;
+            }
+
+            float cellWidth = SlotWidth;
+            float cellHeight = BaseCardHeight * scale;
+            float gap = SlotGap;
+            float total = cellCount * cellWidth + Mathf.Max(0, cellCount - 1) * gap;
+            float x = 16f;
+            float thickness = Mathf.Max(1f, 1.4f * scale);
+            Color line = inBattle
+                ? new Color(0.62f, 0.47f, 0.24f, 0.55f)
+                : new Color(0.38f, 0.47f, 0.50f, 0.45f);
+            Color plate = inBattle
+                ? new Color(0.10f, 0.07f, 0.04f, 0.55f)
+                : new Color(0.05f, 0.09f, 0.11f, 0.55f);
+
+            for (int index = 0; index < cellCount; index++)
+            {
+                GameObject cell = new GameObject(
+                    "Cell_" + index.ToString(),
+                    typeof(RectTransform),
+                    typeof(Image));
+                RectTransform rect = cell.GetComponent<RectTransform>();
+                rect.SetParent(row, false);
+                rect.anchorMin = new Vector2(0f, 1f);
+                rect.anchorMax = new Vector2(0f, 1f);
+                rect.pivot = new Vector2(0f, 1f);
+                rect.sizeDelta = new Vector2(cellWidth, cellHeight);
+                rect.anchoredPosition = new Vector2(x, 0f);
+                Image image = cell.GetComponent<Image>();
+                image.color = plate;
+                image.raycastTarget = false;
+                AddFramedBorder(cell.transform, line, thickness, 8f * scale);
+                cellBucket.Add(cell);
+                x += cellWidth + gap;
+            }
+        }
+
+        /// <summary>尺寸决定边框颜色：1c 铜、2c 青钢、3c 金。边角再加四段短刻线。</summary>
+        private static Color FrameColor(int slotSize)
+        {
+            switch (slotSize)
+            {
+                case 1:
+                    return new Color(0.72f, 0.55f, 0.30f, 1f);
+                case 2:
+                    return new Color(0.48f, 0.66f, 0.70f, 1f);
+                default:
+                    return new Color(0.93f, 0.71f, 0.28f, 1f);
+            }
+        }
+
+        private void AddFramedBorder(Transform parent, Color color, float thickness, float tick)
+        {
+            AddEdge(parent, "EdgeT", color, new Vector2(0f, 1f), new Vector2(1f, 1f),
+                new Vector2(0f, -thickness), Vector2.zero);
+            AddEdge(parent, "EdgeB", color, new Vector2(0f, 0f), new Vector2(1f, 0f),
+                Vector2.zero, new Vector2(0f, thickness));
+            AddEdge(parent, "EdgeL", color, new Vector2(0f, 0f), new Vector2(0f, 1f),
+                Vector2.zero, new Vector2(thickness, 0f));
+            AddEdge(parent, "EdgeR", color, new Vector2(1f, 0f), new Vector2(1f, 1f),
+                new Vector2(-thickness, 0f), Vector2.zero);
+
+            float leg = thickness * 1.7f;
+            AddEdge(parent, "TickTLh", color, new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(0f, -tick), new Vector2(tick, 0f));
+            AddEdge(parent, "TickTLv", color, new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(0f, -tick), new Vector2(leg, 0f));
+            AddEdge(parent, "TickTRh", color, new Vector2(1f, 1f), new Vector2(1f, 1f),
+                new Vector2(-tick, -tick), Vector2.zero);
+            AddEdge(parent, "TickTRv", color, new Vector2(1f, 1f), new Vector2(1f, 1f),
+                new Vector2(-leg, -tick), Vector2.zero);
+            AddEdge(parent, "TickBLh", color, new Vector2(0f, 0f), new Vector2(0f, 0f),
+                Vector2.zero, new Vector2(tick, tick));
+            AddEdge(parent, "TickBLv", color, new Vector2(0f, 0f), new Vector2(0f, 0f),
+                Vector2.zero, new Vector2(leg, tick));
+            AddEdge(parent, "TickBRh", color, new Vector2(1f, 0f), new Vector2(1f, 0f),
+                new Vector2(-tick, 0f), new Vector2(0f, tick));
+            AddEdge(parent, "TickBRv", color, new Vector2(1f, 0f), new Vector2(1f, 0f),
+                new Vector2(-leg, 0f), new Vector2(0f, tick));
+        }
+
+        private static void AddEdge(
+            Transform parent,
+            string name,
+            Color color,
+            Vector2 anchorMin,
+            Vector2 anchorMax,
+            Vector2 offsetMin,
+            Vector2 offsetMax)
+        {
+            GameObject edge = BoardHudOverlayFactory.CreateBar(
+                parent, name, anchorMin, anchorMax, offsetMin, offsetMax, color);
+            RectTransform rect = edge.GetComponent<RectTransform>();
+            rect.pivot = new Vector2(0.5f, 0.5f);
+        }
+
+        /// <summary>单格宽度：跟着带子放大，但保证 10 格一定塞得进画布宽度。</summary>
+        private float SlotWidth
+        {
+            get
+            {
+                float maxWidth = (Mathf.Max(320f, root.rect.width) - 48f) / 10f - BaseSlotGap * scale;
+                return Mathf.Max(48f, Mathf.Min(BaseSlotWidth * scale, maxWidth));
+            }
+        }
+
         private float WidthOf(CardInstance card)
         {
             int slots = card.Definition.SlotSize;
-            return BaseSlotWidth * scale * slots + SlotGap * scale * (slots - 1);
+            return SlotWidth * slots + SlotGap * (slots - 1);
         }
 
         private float CardHeight => BaseCardHeight * scale;
         private float SlotGap => BaseSlotGap * scale;
+
+        /// <summary>卡牌左下角的价值牌：卖出能拿到的碎片数（参考图里角上的数字）。</summary>
+        private void AddValueBadge(Transform parent, int value)
+        {
+            float height = Mathf.Max(20f, 22f * scale);
+            float width = Mathf.Max(38f, 46f * scale);
+            GameObject plate = BoardHudOverlayFactory.CreateBar(
+                parent,
+                "ValuePlate",
+                new Vector2(0f, 0f),
+                new Vector2(0f, 0f),
+                new Vector2(4f, 4f),
+                new Vector2(4f + width, 4f + height),
+                new Color(0.05f, 0.04f, 0.03f, 0.88f));
+
+            Text label = BoardHudOverlayFactory.CreateText(
+                plate.transform,
+                "Value",
+                value.ToString(),
+                font,
+                Mathf.RoundToInt(13f * Mathf.Min(scale, 1.5f)),
+                FontStyle.Bold,
+                Vector2.zero,
+                new Vector2(width, height),
+                TextAnchor.MiddleCenter);
+            label.rectTransform.anchorMin = Vector2.zero;
+            label.rectTransform.anchorMax = Vector2.one;
+            label.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            label.rectTransform.offsetMin = Vector2.zero;
+            label.rectTransform.offsetMax = Vector2.zero;
+            label.color = Brass;
+        }
 
         private void AddWidget(
             RectTransform row,
@@ -375,6 +535,10 @@ namespace ProjectArtOfAll.Board
             rect.sizeDelta = new Vector2(width, CardHeight);
             rect.anchoredPosition = new Vector2(x, 0f);
             widget.GetComponent<Image>().color = inBattle ? BattleColor : BagColor;
+
+            float thickness = Mathf.Max(2f, 2.2f * scale);
+            AddFramedBorder(widget.transform, FrameColor(card.Definition.SlotSize), thickness, 13f * scale);
+            AddValueBadge(widget.transform, card.Value);
 
             int fontSize = Mathf.RoundToInt(16f * Mathf.Min(scale, 1.6f));
             Text name = BoardHudOverlayFactory.CreateText(
