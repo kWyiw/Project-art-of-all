@@ -160,12 +160,11 @@ namespace ProjectArtOfAll.Board
             GameObject rootObject = new GameObject("CardBand", typeof(RectTransform), typeof(Image));
             RectTransform rect = rootObject.GetComponent<RectTransform>();
             rect.SetParent(parent, false);
-            rect.anchorMin = new Vector2(0f, 0f);
-            rect.anchorMax = new Vector2(1f, 0f);
+            rect.anchorMin = new Vector2(0.5f, 0f);
+            rect.anchorMax = new Vector2(0.5f, 0f);
             rect.pivot = new Vector2(0.5f, 0f);
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = new Vector2(0f, BaseBandHeight);
-            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = new Vector2(1180f, BaseBandHeight);
+            rect.anchoredPosition = new Vector2(0f, 10f);
             Image background = rootObject.GetComponent<Image>();
             background.color = new Color(0.03f, 0.05f, 0.06f, 0.94f);
             background.raycastTarget = false;
@@ -182,11 +181,20 @@ namespace ProjectArtOfAll.Board
         public void ApplyScreenLayout()
         {
             RectTransform canvasRect = root.parent as RectTransform;
+            float canvasWidth = canvasRect != null && canvasRect.rect.width > 1f
+                ? canvasRect.rect.width
+                : Screen.width;
             float canvasHeight = canvasRect != null && canvasRect.rect.height > 1f
                 ? canvasRect.rect.height
                 : Screen.height;
-            float height = Mathf.Max(BaseBandHeight, canvasHeight * 0.5f);
-            scale = Mathf.Clamp(height / BaseBandHeight, 1f, MaxScale);
+
+            float width = Mathf.Clamp(canvasWidth * 0.78f, 720f, 1560f);
+            float height = Mathf.Clamp(canvasHeight * 0.42f, BaseBandHeight, 560f);
+            scale = Mathf.Clamp((height - HandleHeight - 38f) * 0.5f / BaseCardHeight, 1f, MaxScale);
+
+            Vector2 size = root.sizeDelta;
+            size.x = width;
+            root.sizeDelta = size;
 
             if (!collapsed)
             {
@@ -211,7 +219,7 @@ namespace ProjectArtOfAll.Board
             DiceButtonTarget.anchorMin = new Vector2(1f, 0f);
             DiceButtonTarget.anchorMax = new Vector2(1f, 0f);
             DiceButtonTarget.pivot = new Vector2(1f, 0f);
-            DiceButtonTarget.anchoredPosition = new Vector2(-28f, bandHeight + 24f);
+            DiceButtonTarget.anchoredPosition = new Vector2(-24f, bandHeight + 18f);
         }
 
         private void SetBandHeight(float height)
@@ -224,21 +232,30 @@ namespace ProjectArtOfAll.Board
         private void LayoutRows(float bandHeight)
         {
             float cardHeight = BaseCardHeight * scale;
-            float top = HandleHeight + 16f;
+            float top = HandleHeight + 12f;
             float rowWidth = root.rect.width;
-            float available = bandHeight - HandleHeight - 24f;
-            float rowGap = Mathf.Max(8f, (available - cardHeight * 2f) * 0.5f);
+            float sellWidth = Mathf.Clamp(rowWidth * 0.09f, 56f, 92f);
+            float reserve = sellWidth + 14f;
+            float available = bandHeight - HandleHeight - 20f;
+            float rowGap = Mathf.Max(6f, (available - cardHeight * 2f) * 0.5f);
 
-            bagLabel.rectTransform.anchoredPosition = new Vector2(14f, -top + 4f);
-            bagRow.anchoredPosition = new Vector2(0f, -(top + 26f));
-            bagRow.sizeDelta = new Vector2(0f, cardHeight);
+            bagLabel.rectTransform.anchoredPosition = new Vector2(14f, -top + 2f);
+            bagRow.anchoredPosition = new Vector2(0f, -(top + 22f));
+            bagRow.sizeDelta = new Vector2(-reserve, cardHeight);
 
-            battleLabel.rectTransform.anchoredPosition = new Vector2(14f, -(top + cardHeight + rowGap + 26f));
-            battleRow.anchoredPosition = new Vector2(0f, -(top + cardHeight + rowGap + 52f));
-            battleRow.sizeDelta = new Vector2(0f, cardHeight);
+            battleLabel.rectTransform.anchoredPosition = new Vector2(14f, -(top + cardHeight + rowGap + 22f));
+            battleRow.anchoredPosition = new Vector2(0f, -(top + cardHeight + rowGap + 46f));
+            battleRow.sizeDelta = new Vector2(-reserve, cardHeight);
 
             battleCapacityLabel.rectTransform.anchoredPosition =
-                new Vector2(14f, -(top + cardHeight + rowGap + 26f) - 20f);
+                new Vector2(14f, -(top + cardHeight + rowGap + 22f) - 18f);
+
+            RectTransform sell = sellZone;
+            sell.anchorMin = new Vector2(1f, 0f);
+            sell.anchorMax = new Vector2(1f, 1f);
+            sell.pivot = new Vector2(1f, 0f);
+            sell.offsetMin = new Vector2(-sellWidth - 10f, 10f);
+            sell.offsetMax = new Vector2(-10f, -(HandleHeight + 10f));
         }
 
         private RectTransform CreateRow(RectTransform parent, string name)

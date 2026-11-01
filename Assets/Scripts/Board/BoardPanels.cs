@@ -15,8 +15,9 @@ namespace ProjectArtOfAll.Board
     /// </summary>
     public sealed class PlayerCornerPanels : MonoBehaviour
     {
-        private const float PanelWidth = 286f;
-        private const float PanelHeight = 96f;
+        private const float PanelWidth = 300f;
+        private const float PanelHeight = 74f;
+        private const float PanelGap = 6f;
         private const float Margin = 16f;
 
         private static readonly Color PanelColor = new Color(0.048f, 0.078f, 0.09f, 0.94f);
@@ -38,7 +39,6 @@ namespace ProjectArtOfAll.Board
             public Text Loadout;
             public Button Button;
             public int PlayerId;
-            public bool IsBottom;
         }
 
         public static PlayerCornerPanels Create(RectTransform parent, Font font, System.Action<int> onClick)
@@ -60,13 +60,11 @@ namespace ProjectArtOfAll.Board
 
         private void BuildSlots(RectTransform root)
         {
-            // 顺序：0 左上、1 右上、2 左下、3 右下，对应 4 个座位的固定位置。
+            // 四块面板竖着叠在右上角，按座位顺序自上而下：P1、P2、P3、P4。
             for (int i = 0; i < 4; i++)
             {
-                bool right = i % 2 == 1;
-                bool bottom = i >= 2;
-                PanelSlot slot = new PanelSlot { PlayerId = i, IsBottom = bottom };
-                slot.Root = CreatePanel(root, right, bottom, out slot.Background, out slot.Title,
+                PanelSlot slot = new PanelSlot { PlayerId = i };
+                slot.Root = CreatePanel(root, i, out slot.Background, out slot.Title,
                     out slot.Economy, out slot.Loadout, out slot.Button);
                 int captured = i;
                 slot.Button.onClick.AddListener(() => onClick?.Invoke(captured));
@@ -76,21 +74,21 @@ namespace ProjectArtOfAll.Board
 
         private RectTransform CreatePanel(
             RectTransform root,
-            bool right,
-            bool bottom,
+            int index,
             out Image background,
             out Text title,
             out Text economy,
             out Text loadout,
             out Button button)
         {
+            float top = Margin + index * (PanelHeight + PanelGap);
             GameObject panelObject = BoardHudOverlayFactory.CreateBar(
                 root,
                 "PlayerPanel",
-                new Vector2(right ? 1f : 0f, bottom ? 0f : 1f),
-                new Vector2(right ? 1f : 0f, bottom ? 0f : 1f),
-                new Vector2(right ? -Margin - PanelWidth : Margin, bottom ? Margin : -Margin - PanelHeight),
-                new Vector2(right ? -Margin : Margin + PanelWidth, bottom ? Margin + PanelHeight : -Margin),
+                new Vector2(1f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(-Margin - PanelWidth, -top - PanelHeight),
+                new Vector2(-Margin, -top),
                 PanelColor);
             RectTransform rect = panelObject.GetComponent<RectTransform>();
             background = panelObject.GetComponent<Image>();
@@ -98,35 +96,26 @@ namespace ProjectArtOfAll.Board
             button.transition = Selectable.Transition.None;
 
             title = BoardHudOverlayFactory.CreateText(
-                panelObject.transform, "Title", "P1", font, 17, FontStyle.Bold,
-                new Vector2(14f, -10f), new Vector2(PanelWidth - 28f, 24f), TextAnchor.UpperLeft);
+                panelObject.transform, "Title", "P1", font, 15, FontStyle.Bold,
+                new Vector2(12f, -7f), new Vector2(PanelWidth - 24f, 20f), TextAnchor.UpperLeft);
             title.color = Brass;
 
             economy = BoardHudOverlayFactory.CreateText(
-                panelObject.transform, "Economy", "碎片 0 · 胜场 0", font, 14, FontStyle.Normal,
-                new Vector2(14f, -38f), new Vector2(PanelWidth - 28f, 20f), TextAnchor.UpperLeft);
+                panelObject.transform, "Economy", "碎片 0 · 胜场 0", font, 13, FontStyle.Normal,
+                new Vector2(12f, -28f), new Vector2(PanelWidth - 24f, 18f), TextAnchor.UpperLeft);
             economy.color = TextColor;
 
             loadout = BoardHudOverlayFactory.CreateText(
-                panelObject.transform, "Loadout", "装配 0/4c · 背包 0/10c", font, 13, FontStyle.Normal,
-                new Vector2(14f, -62f), new Vector2(PanelWidth - 28f, 20f), TextAnchor.UpperLeft);
+                panelObject.transform, "Loadout", "装配 0/4c · 背包 0/10c", font, 12, FontStyle.Normal,
+                new Vector2(12f, -47f), new Vector2(PanelWidth - 24f, 18f), TextAnchor.UpperLeft);
             loadout.color = MutedColor;
             return rect;
         }
 
         /// <summary>把带子高度告诉四角栏：下方两块抬到带子上沿，不然会被卡槽盖住。</summary>
+        /// <summary>面板已经集中在右上角，不再随卡槽带高度移动（保留接口，避免调用方分叉）。</summary>
         public void ApplyBandTop(float bandTop)
         {
-            foreach (PanelSlot slot in slots)
-            {
-                if (!slot.IsBottom)
-                {
-                    continue;
-                }
-
-                slot.Root.offsetMin = new Vector2(slot.Root.offsetMin.x, bandTop + 12f);
-                slot.Root.offsetMax = new Vector2(slot.Root.offsetMax.x, bandTop + 12f + PanelHeight);
-            }
         }
 
         public void Refresh(MatchState state, int humanPlayerId)
