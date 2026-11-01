@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ProjectArtOfAll.Core.Match;
+using ProjectArtOfAll.Flow;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -77,12 +78,16 @@ namespace ProjectArtOfAll.Board
         private PauseOverlayView pauseOverlay;
         private BoardEventFeed eventFeed;
         private int eventCursor = -1;
+        private int qualityFrames;
+        private float qualityElapsed;
+        private bool autoDegraded;
 
         private void Awake()
         {
             if (Application.isPlaying)
             {
                 EnsureOverlayViews();
+                ApplyGameSettings();
             }
 
             isOpen = !Application.isPlaying && openInEditMode;
@@ -101,6 +106,7 @@ namespace ProjectArtOfAll.Board
             HideForkChoices();
             HideEncounter();
             RefreshDrawerScrim();
+            GameSettings.Changed += OnGameSettingsChanged;
             if (boardGameplay == null)
             {
                 boardGameplay = FindObjectOfType<BoardGameplayController>();
@@ -113,6 +119,8 @@ namespace ProjectArtOfAll.Board
             {
                 TogglePause();
             }
+
+            TickAutoQuality();
 
             if (drawerPanel == null)
             {
@@ -273,6 +281,7 @@ namespace ProjectArtOfAll.Board
                     }
                 }
 
+                cardBand.UserScale = Mathf.Clamp(GameSettings.CardScale, 0.75f, 1.25f);
                 cardBand.ApplyScreenLayout();
             }
 
@@ -820,28 +829,74 @@ namespace ProjectArtOfAll.Board
                 pauseOverlay = PauseOverlayView.Create(
                     (RectTransform)transform,
                     font,
-                    TogglePause,
-                    ApplyCardScaleSetting,
-                    ApplyPathLinesSetting);
+                    TogglePause);
             }
         }
 
-        /// <summary>设置：卡槽大小（乘在自动缩放上，0.75~1.25）。</summary>
-        public void ApplyCardScaleSetting(float scale)
+        /// <summary>把 <see cref="GameSettings"/> 里的表现项落到实际对象上（启动、改动、自动降档后都走这里）。</summary>
+        public void ApplyGameSettings()
         {
-            if (cardBand == null)
+            GameSettings.EnsureLoaded();
+
+            if (cardBand != null && !autoDegraded)
+            {
+                cardBand.UserScale = GameSettings.CardScale;
+                cardBand.ApplyScreenLayout();
+            }
+
+            boardGameplay?.SetPathLinesVisible(GameSettings.PathLinesVisible && !autoDegraded);
+            boardGameplay?.SetCameraFollow(GameSettings.CameraFollow);
+        }
+
+        private void OnGameSettingsChanged(string _)
+        {
+            ApplyGameSettings();
+        }
+
+        /// <summary>
+        /// S2 自动降档：连续 3 秒平均帧率低于 35 就关掉路径线并把卡槽收到 80%，
+        /// 每个进程只降一次（降了之后不再尝试恢复，避免在临界帧率上来回抖）。
+        /// </summary>
+        private void TickAutoQuality()
+        {
+            if (!Application.isPlaying || autoDegraded)
             {
                 return;
             }
 
-            cardBand.UserScale = scale;
-            cardBand.ApplyScreenLayout();
-        }
+            GameSettings.EnsureLoaded();
+            if (!GameSettings.AutoQuality)
+            {
+                qualityFrames = 0;
+                qualityElapsed = 0f;
+                return;
+            }
 
-        /// <summary>设置：地图路径线显隐（纯表现，不影响规则）。</summary>
-        public void ApplyPathLinesSetting(bool visible)
-        {
-            boardGameplay?.SetPathLinesVisible(visible);
+            qualityFrames++;
+            qualityElapsed += Time.unscaledDeltaTime;
+            if (qualityElapsed < 3f)
+            {
+                return;
+            }
+
+            float fps = qualityFrames / qualityElapsed;
+            qualityFrames = 0;
+            qualityElapsed = 0f;
+            if (fps >= 35f)
+            {
+                return;
+            }
+
+            autoDegraded = true;
+            Debug.Log("[Board] 自动降档：平均 " + Mathf.RoundToInt(fps) + " FPS → 关闭路径线、卡槽 80%。");
+
+            if (cardBand != null)
+            {
+                cardBand.UserScale = 0.8f;
+                cardBand.ApplyScreenLayout();
+            }
+
+            boardGameplay?.SetPathLinesVisible(false);
         }
 
         /// <summary>Esc 暂停（只遮输入；内核没有暂停态，重开走重载场景）。</summary>

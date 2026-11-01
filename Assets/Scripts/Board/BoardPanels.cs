@@ -474,19 +474,14 @@ namespace ProjectArtOfAll.Board
 
         private Font font;
         private Button resumeButton;
-        private Text cardScaleValue;
-        private Button pathToggleButton;
-        private Text pathToggleLabel;
-        private bool pathsVisible = true;
+        private ProjectArtOfAll.UI.GameSettingsPanel settingsPanel;
 
         public bool IsOpen => gameObject.activeSelf;
 
         public static PauseOverlayView Create(
             RectTransform parent,
             Font font,
-            System.Action onResume,
-            System.Action<float> onCardScale,
-            System.Action<bool> onPathsVisible)
+            System.Action onResume)
         {
             GameObject rootObject = new GameObject(
                 "PauseOverlay",
@@ -505,7 +500,7 @@ namespace ProjectArtOfAll.Board
 
             PauseOverlayView view = rootObject.AddComponent<PauseOverlayView>();
             view.font = font;
-            view.Build(onResume, onCardScale, onPathsVisible);
+            view.Build(onResume);
             rootObject.SetActive(false);
             return view;
         }
@@ -513,10 +508,7 @@ namespace ProjectArtOfAll.Board
         private const float PanelWidth = 520f;
         private const float PanelHeight = 450f;
 
-        private void Build(
-            System.Action onResume,
-            System.Action<float> onCardScale,
-            System.Action<bool> onPathsVisible)
+        private void Build(System.Action onResume)
         {
             GameObject panelObject = BoardHudOverlayFactory.CreateBar(
                 transform, "Panel",
@@ -539,55 +531,30 @@ namespace ProjectArtOfAll.Board
             MakeButton(panelObject.transform, "重开本局", 150f, RestartScene);
             MakeButton(panelObject.transform, "退出游戏", 204f, QuitGame);
 
+            MakeButton(panelObject.transform, "设置", 258f, OpenSettings);
+
             BoardHudOverlayFactory.CreateBar(
                 panelObject.transform, "Divider",
                 new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(24f, -257f), new Vector2(PanelWidth - 24f, -256f),
+                new Vector2(24f, -314f), new Vector2(PanelWidth - 24f, -313f),
                 new Color(0.86f, 0.62f, 0.20f, 0.55f));
 
-            Label(
-                panelObject.transform, "SettingsTitle", "设置", 24f, 266f, 120f, 24f,
-                16, FontStyle.Bold, TextAnchor.MiddleLeft)
-                .color = new Color(0.86f, 0.68f, 0.30f, 1f);
-
-            Label(
-                panelObject.transform, "CardScaleLabel", "卡槽大小", 24f, 302f, 96f, 26f,
-                14, FontStyle.Normal, TextAnchor.MiddleLeft)
-                .color = TextColor;
-
-            Slider scaleSlider = MakeSlider(
-                panelObject.transform, new Vector2(130f, -303f), new Vector2(230f, 24f),
-                0.75f, 1.25f, 1f);
-
-            cardScaleValue = Label(
-                panelObject.transform, "CardScaleValue", "100%", 366f, 302f, 70f, 26f,
-                14, FontStyle.Normal, TextAnchor.MiddleRight);
-            cardScaleValue.color = Brass;
-
-            scaleSlider.onValueChanged.AddListener(value =>
-            {
-                cardScaleValue.text = Mathf.RoundToInt(value * 100f) + "%";
-                onCardScale?.Invoke(value);
-            });
-
-            Label(
-                panelObject.transform, "PathsLabel", "地图路径线", 24f, 344f, 110f, 26f,
-                14, FontStyle.Normal, TextAnchor.MiddleLeft)
-                .color = TextColor;
-
-            pathToggleButton = MakeTopButton(
-                panelObject.transform, "显示", 300f, 342f, 120f, 30f, () =>
-                {
-                    pathsVisible = !pathsVisible;
-                    pathToggleLabel.text = pathsVisible ? "显示" : "隐藏";
-                    onPathsVisible?.Invoke(pathsVisible);
-                });
-            pathToggleLabel = pathToggleButton.GetComponentInChildren<Text>();
-
             Text footer = Label(
-                panelObject.transform, "Footer", "设置只影响表现，不改任何规则数值", 24f, 394f, 472f, 22f,
+                panelObject.transform, "Footer", "数值与规则不受设置影响", 24f, 326f, 472f, 22f,
                 12, FontStyle.Normal, TextAnchor.MiddleCenter);
             footer.color = MutedText;
+        }
+
+        /// <summary>打开共用设置面板（与主菜单里的是同一个类、同一份 GameSettings）。</summary>
+        private void OpenSettings()
+        {
+            if (settingsPanel == null)
+            {
+                settingsPanel = ProjectArtOfAll.UI.GameSettingsPanel.Create(
+                    (RectTransform)transform.parent, font);
+            }
+
+            settingsPanel.Show();
         }
 
         /// <summary>左上角锚点定位的文字（x/y 从面板左上角量起，y 向下为负）。</summary>
@@ -648,76 +615,6 @@ namespace ProjectArtOfAll.Board
             rect.offsetMax = Vector2.zero;
             text.color = new Color(0.09f, 0.08f, 0.05f, 1f);
             return button;
-        }
-
-        private static Slider MakeSlider(
-            Transform parent,
-            Vector2 anchoredPosition,
-            Vector2 size,
-            float minimum,
-            float maximum,
-            float value)
-        {
-            GameObject sliderObject = new GameObject(
-                "Slider",
-                typeof(RectTransform),
-                typeof(Slider));
-            RectTransform rect = sliderObject.GetComponent<RectTransform>();
-            rect.SetParent(parent, false);
-            rect.anchorMin = new Vector2(0f, 1f);
-            rect.anchorMax = new Vector2(0f, 1f);
-            rect.pivot = new Vector2(0f, 1f);
-            rect.sizeDelta = size;
-            rect.anchoredPosition = anchoredPosition;
-
-            GameObject background = BoardHudOverlayFactory.CreateBar(
-                sliderObject.transform, "Background",
-                new Vector2(0f, 0.5f), new Vector2(1f, 0.5f),
-                new Vector2(0f, -5f), new Vector2(0f, 5f),
-                new Color(0.16f, 0.20f, 0.22f, 1f));
-            background.GetComponent<Image>().raycastTarget = false;
-
-            GameObject fillArea = new GameObject("Fill Area", typeof(RectTransform));
-            RectTransform fillAreaRect = fillArea.GetComponent<RectTransform>();
-            fillAreaRect.SetParent(sliderObject.transform, false);
-            fillAreaRect.anchorMin = new Vector2(0f, 0.5f);
-            fillAreaRect.anchorMax = new Vector2(1f, 0.5f);
-            fillAreaRect.offsetMin = new Vector2(0f, -5f);
-            fillAreaRect.offsetMax = new Vector2(0f, 5f);
-
-            GameObject fill = BoardHudOverlayFactory.CreateBar(
-                fillArea.transform, "Fill",
-                new Vector2(0f, 0f), new Vector2(1f, 1f),
-                Vector2.zero, Vector2.zero,
-                new Color(0.89f, 0.64f, 0.20f, 0.95f));
-            fill.GetComponent<Image>().raycastTarget = false;
-
-            GameObject handleArea = new GameObject("Handle Slide Area", typeof(RectTransform));
-            RectTransform handleAreaRect = handleArea.GetComponent<RectTransform>();
-            handleAreaRect.SetParent(sliderObject.transform, false);
-            handleAreaRect.anchorMin = new Vector2(0f, 0f);
-            handleAreaRect.anchorMax = new Vector2(1f, 1f);
-            handleAreaRect.offsetMin = Vector2.zero;
-            handleAreaRect.offsetMax = Vector2.zero;
-
-            GameObject handle = BoardHudOverlayFactory.CreateBar(
-                handleArea.transform, "Handle",
-                new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
-                new Vector2(-9f, -12f), new Vector2(9f, 12f),
-                new Color(0.98f, 0.86f, 0.52f, 1f));
-            Image handleImage = handle.GetComponent<Image>();
-            handleImage.raycastTarget = true;
-
-            Slider slider = sliderObject.GetComponent<Slider>();
-            slider.transition = Selectable.Transition.None;
-            slider.fillRect = fill.GetComponent<RectTransform>();
-            slider.handleRect = handle.GetComponent<RectTransform>();
-            slider.targetGraphic = handleImage;
-            slider.direction = Slider.Direction.LeftToRight;
-            slider.minValue = minimum;
-            slider.maxValue = maximum;
-            slider.value = value;
-            return slider;
         }
 
         private static void RestartScene()

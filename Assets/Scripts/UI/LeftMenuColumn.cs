@@ -30,6 +30,7 @@ namespace ProjectArtOfAll.UI
         [SerializeField] private string[] buttonLabels = DefaultLabels;
 
         private static Font menuFont;
+        private GameSettingsPanel settingsPanel;
 
         private void Awake()
         {
@@ -196,7 +197,19 @@ namespace ProjectArtOfAll.UI
 
         public void OpenSettings()
         {
-            Debug.Log("[StartMenu] 设置暂未实现。");
+            if (settingsPanel == null)
+            {
+                Transform canvas = transform.Find("LeftMenuCanvas");
+                if (canvas == null)
+                {
+                    Debug.LogWarning("[StartMenu] 找不到菜单画布，设置面板无法创建。");
+                    return;
+                }
+
+                settingsPanel = GameSettingsPanel.Create(canvas, GetMenuFont());
+            }
+
+            settingsPanel.Show();
         }
 
         public void QuitGame()

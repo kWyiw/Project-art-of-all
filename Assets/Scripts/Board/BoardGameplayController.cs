@@ -45,6 +45,7 @@ namespace ProjectArtOfAll.Board
         private BoardHudController hud;
         private int humanPlayerId;
         private BoardCameraController cameraController;
+        private bool cameraFollowEnabled = true;
         private BoardPlayerToken activeToken;
         private MapGraph graph;
         private MatchController match;
@@ -76,6 +77,27 @@ namespace ProjectArtOfAll.Board
         }
 
         /// <summary>M4 设置项：地图路径线显隐。</summary>
+        /// <summary>设置：镜头是否跟随当前行动的棋子（GameSettings.CameraFollow）。</summary>
+        public void SetCameraFollow(bool enabled)
+        {
+            cameraFollowEnabled = enabled;
+            if (match == null || match.IsFinished)
+            {
+                return;
+            }
+
+            if (!enabled)
+            {
+                cameraController?.SetFollowTarget(null);
+                return;
+            }
+
+            if (tokensByPlayer.TryGetValue(match.State.CurrentPlayer.Id, out BoardPlayerToken token))
+            {
+                cameraController?.SetFollowTarget(token.transform);
+            }
+        }
+
         public void SetPathLinesVisible(bool visible)
         {
             if (pathLines != null)
@@ -202,6 +224,7 @@ namespace ProjectArtOfAll.Board
         {
             isMoving = true;
             hud?.SetDiceInteractable(false);
+            cameraController?.SetPlayerMoving(true);
 
             MatchPlayerState movingPlayer = match.State.CurrentPlayer;
             int current = movingPlayer.CurrentNode;
@@ -325,6 +348,8 @@ namespace ProjectArtOfAll.Board
 
             SynchronizeTokensFromCore();
             LogPlayerCells("移动结束");
+            cameraController?.SetPlayerMoving(false);
+            cameraController?.NotifyPlayerMoved();
             ResolveDeferredCorePhase();
             isMoving = false;
             hud?.SetDiceInteractable(
@@ -675,12 +700,15 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
-            if (tokensByPlayer.TryGetValue(
+            if (!tokensByPlayer.TryGetValue(
                     match.State.CurrentPlayer.Id,
                     out activeToken))
             {
-                cameraController?.SetFollowTarget(activeToken.transform);
+                return;
             }
+
+            cameraController?.SetFollowTarget(
+                cameraFollowEnabled ? activeToken.transform : null);
         }
 
         private void UpdateHudStatus(string action = null)
