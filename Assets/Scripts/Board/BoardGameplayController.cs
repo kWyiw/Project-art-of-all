@@ -464,6 +464,13 @@ namespace ProjectArtOfAll.Board
             body.AppendLine();
             body.Append(string.Concat("装配：", FormatLoadout(player)));
 
+            if (!IsHumanSeat(player))
+            {
+                // CPU 的战斗不弹结算面板：只把结果留在状态行，否则面板会一直盖住棋盘。
+                hud.HideCombatResult();
+                return;
+            }
+
             hud.ShowCombatResult(title, subtitle, body.ToString());
             hud.SetCombatResultTint(
                 result.IsDraw

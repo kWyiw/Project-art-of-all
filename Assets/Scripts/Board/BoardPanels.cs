@@ -506,7 +506,7 @@ namespace ProjectArtOfAll.Board
         }
 
         private const float PanelWidth = 520f;
-        private const float PanelHeight = 450f;
+        private const float PanelHeight = 506f;
 
         private void Build(System.Action onResume)
         {
@@ -529,18 +529,18 @@ namespace ProjectArtOfAll.Board
 
             resumeButton = MakeButton(panelObject.transform, "继续游戏", 96f, onResume);
             MakeButton(panelObject.transform, "重开本局", 150f, RestartScene);
-            MakeButton(panelObject.transform, "退出游戏", 204f, QuitGame);
-
+            MakeButton(panelObject.transform, "回主页面", 204f, ProjectArtOfAll.Flow.GameSession.BackToMenu);
             MakeButton(panelObject.transform, "设置", 258f, OpenSettings);
+            MakeButton(panelObject.transform, "退出游戏", 312f, QuitGame);
 
             BoardHudOverlayFactory.CreateBar(
                 panelObject.transform, "Divider",
                 new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(24f, -314f), new Vector2(PanelWidth - 24f, -313f),
+                new Vector2(24f, -368f), new Vector2(PanelWidth - 24f, -367f),
                 new Color(0.86f, 0.62f, 0.20f, 0.55f));
 
             Text footer = Label(
-                panelObject.transform, "Footer", "数值与规则不受设置影响", 24f, 326f, 472f, 22f,
+                panelObject.transform, "Footer", "数值与规则不受设置影响", 24f, 380f, 472f, 22f,
                 12, FontStyle.Normal, TextAnchor.MiddleCenter);
             footer.color = MutedText;
         }

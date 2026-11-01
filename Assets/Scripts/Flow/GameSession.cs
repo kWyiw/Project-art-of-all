@@ -20,6 +20,9 @@ namespace ProjectArtOfAll.Flow
     {
         public const string MatchSceneName = "MainGame";
 
+        /// <summary>主页面场景名（Build Settings 第 0 个）。</summary>
+        public const string MenuSceneName = "StartMenu";
+
         /// <summary>当前模式，默认正常模式。</summary>
         public static GameMode Mode { get; private set; } = GameMode.Normal;
 
@@ -31,6 +34,13 @@ namespace ProjectArtOfAll.Flow
         {
             Mode = mode;
             SceneManager.LoadScene(MatchSceneName);
+        }
+
+        /// <summary>局内暂停菜单的「回主页面」：清掉本局模式，回到主页面。</summary>
+        public static void BackToMenu()
+        {
+            Mode = GameMode.Normal;
+            SceneManager.LoadScene(MenuSceneName);
         }
 
         /// <summary>模式的中文名，HUD 与日志共用。</summary>
