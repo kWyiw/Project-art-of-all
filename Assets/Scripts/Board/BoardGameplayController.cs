@@ -414,6 +414,16 @@ namespace ProjectArtOfAll.Board
             LogPlayerCells("移动结束");
             cameraController?.SetPlayerMoving(false);
             cameraController?.NotifyPlayerMoved();
+
+            CombatResolvedEvent combat = match.Events.History
+                .Skip(eventStart)
+                .OfType<CombatResolvedEvent>()
+                .LastOrDefault();
+            if (combat != null)
+            {
+                yield return PlayCombat(combat, movingPlayer);
+            }
+
             ResolveDeferredCorePhase();
             isMoving = false;
             automaticTurn = false;
@@ -425,10 +435,6 @@ namespace ProjectArtOfAll.Board
                 match.State.Phase == MatchPhase.AwaitRoll);
             ActivateCurrentPlayer();
 
-            CombatResolvedEvent combat = match.Events.History
-                .Skip(eventStart)
-                .OfType<CombatResolvedEvent>()
-                .LastOrDefault();
             string action = combat == null
                 ? null
                 : combat.Result.IsDraw
@@ -449,6 +455,48 @@ namespace ProjectArtOfAll.Board
             if (combat != null)
             {
                 ReportCombat(combat, movingPlayer, shardsBefore, winsBefore);
+            }
+        }
+
+        /// <summary>
+        /// 战斗可视化：只有涉及玩家的战斗才回放（CPU 互殴只看状态行），
+        /// 播完再继续后面的地块结算与回合流转。
+        /// </summary>
+        private IEnumerator PlayCombat(
+            CombatResolvedEvent combat,
+            MatchPlayerState attacker)
+        {
+            if (hud == null || combat == null || combat.Result == null)
+            {
+                yield break;
+            }
+
+            MatchPlayerState defenderPlayer = match.State.Players
+                .FirstOrDefault(player => player.Id == combat.DefenderId);
+            bool defenderIsHuman = defenderPlayer != null && IsHumanSeat(defenderPlayer);
+            if (!IsHumanSeat(attacker) && !defenderIsHuman)
+            {
+                yield break;
+            }
+
+            string leftTitle = string.Concat(
+                "玩家 ",
+                (attacker.Id + 1).ToString(),
+                " · Lv.",
+                attacker.Level.ToString());
+            string rightTitle = defenderPlayer == null
+                ? "怪物"
+                : string.Concat(
+                    "玩家 ",
+                    (defenderPlayer.Id + 1).ToString(),
+                    " · Lv.",
+                    defenderPlayer.Level.ToString());
+
+            bool done = false;
+            hud.PlayCombat(combat, leftTitle, rightTitle, () => done = true);
+            while (!done)
+            {
+                yield return null;
             }
         }
 

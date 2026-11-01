@@ -21,6 +21,7 @@ namespace ProjectArtOfAll.Core.Combat
         /// <summary>被动之间可以互相触发，超过这个深度就丢弃后续触发，防止反馈环。</summary>
         private const int MaxPassiveDepth = 8;
 
+        private readonly BattleSnapshot battleSnapshot;
         private readonly CombatantRuntime left;
         private readonly CombatantRuntime right;
         private readonly GameEventBus eventBus = new GameEventBus();
@@ -35,6 +36,7 @@ namespace ProjectArtOfAll.Core.Combat
                 throw new ArgumentNullException(nameof(snapshot));
             }
 
+            battleSnapshot = snapshot;
             left = new CombatantRuntime(snapshot.Left);
             right = new CombatantRuntime(snapshot.Right);
             Rng = new Pcg32(seed, 0x434F4D424154UL);
@@ -370,7 +372,9 @@ namespace ProjectArtOfAll.Core.Combat
                 right.Health,
                 left.Shield,
                 right.Shield);
+            Result.Battle = battleSnapshot;
             Publish(new CombatEndedEvent(winnerPlayerId, reason));
+            Result.Timeline = eventBus.History.ToArray();
         }
     }
 }

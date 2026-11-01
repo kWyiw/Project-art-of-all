@@ -337,6 +337,31 @@ namespace ProjectArtOfAll.Board
             }
         }
 
+        private CombatPlaybackView combatPlayback;
+
+        /// <summary>PlayCombat：把这一场战斗按事件时间轴重播一遍，播完回调 onComplete。</summary>
+        public void PlayCombat(
+            CombatResolvedEvent combat,
+            string leftTitle,
+            string rightTitle,
+            System.Action onComplete)
+        {
+            if (combat == null)
+            {
+                onComplete?.Invoke();
+                return;
+            }
+
+            if (combatPlayback == null)
+            {
+                combatPlayback = CombatPlaybackView.Create(
+                    transform,
+                    BoardHudOverlayFactory.CreateFont());
+            }
+
+            combatPlayback.Play(combat, leftTitle, rightTitle, onComplete);
+        }
+
         public void ShowCombatResult(string title, string subtitle, string body)
         {
             if (combatResultView == null)

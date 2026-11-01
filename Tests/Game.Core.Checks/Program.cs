@@ -28,6 +28,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckCardText();
                 CheckLoadoutPreview();
                 CheckCombatSimulation();
+                CheckCombatTimeline();
                 CheckCardMechanics();
                 CheckM1MatchDurability();
                 CheckHomeProgression();
@@ -934,6 +935,60 @@ namespace ProjectArtOfAll.Core.Checks
             return new BattleSnapshot(
                 new CombatantSnapshot(0, 1, left),
                 new CombatantSnapshot(1, 1, right));
+        }
+
+        /// <summary>回放用的时间轴：结算结果必须把完整事件流和战前快照带出来。</summary>
+        private static void CheckCombatTimeline()
+        {
+            CardDatabase catalog = CardDatabase.Instance;
+            BattleSnapshot snapshot = new BattleSnapshot(
+                new CombatantSnapshot(
+                    playerId: 0,
+                    level: 2,
+                    battleCards: new[]
+                    {
+                        new CardInstance(1, catalog.Get("crowbar")),
+                        new CardInstance(2, catalog.Get("nuclear_water"))
+                    }),
+                new CombatantSnapshot(
+                    playerId: 1,
+                    level: 2,
+                    battleCards: new[]
+                    {
+                        new CardInstance(3, catalog.Get("car_door"))
+                    }));
+
+            CombatResult result = new CombatSimulation(snapshot, 424242UL).RunToCompletion();
+
+            Assert(result.Battle != null,
+                "A combat result must carry the battle snapshot for playback.");
+            Assert(result.Timeline.Count > 0,
+                "A combat result must carry its event timeline.");
+            Assert(result.Timeline[0] is CombatStartedEvent,
+                "The timeline must start with CombatStartedEvent.");
+            Assert(result.Timeline[result.Timeline.Count - 1] is CombatEndedEvent,
+                "The timeline must end with CombatEndedEvent.");
+            for (int index = 1; index < result.Timeline.Count; index++)
+            {
+                Assert(
+                    result.Timeline[index].Tick >= result.Timeline[index - 1].Tick,
+                    "The timeline must be ordered by tick.");
+            }
+
+            Assert(result.Timeline.Any(gameEvent => gameEvent is DamageDealtEvent),
+                "A playback timeline without damage would render nothing.");
+            foreach (CardCastEvent cast in result.Timeline.OfType<CardCastEvent>())
+            {
+                var cards = cast.PlayerId == result.Battle.Left.PlayerId
+                    ? result.Battle.Left.BattleCards
+                    : result.Battle.Right.BattleCards;
+                Assert(
+                    cards.Any(card => card.Uid == cast.CardUid),
+                    "CardCastEvent must reference a card that is in that side's loadout.");
+            }
+
+            Console.WriteLine(
+                $"[timeline] events={result.Timeline.Count} end={result.EndTick}");
         }
 
         private static void CheckCardMechanics()
