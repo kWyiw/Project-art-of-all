@@ -56,6 +56,7 @@ namespace ProjectArtOfAll.Board
 
         private CardInstance dragging;
         private CardTooltipView tooltip;
+        private List<CardInstance> battleSnapshot = new List<CardInstance>();
         private bool collapsed;
         private float scale = 1f;
         private MatchPlayerState lastPlayer;
@@ -385,9 +386,14 @@ namespace ProjectArtOfAll.Board
             float total = widths.Sum() + Mathf.Max(0, cards.Count - 1) * SlotGap;
             float x = 16f;
 
+            if (inBattle)
+            {
+                battleSnapshot = cards;
+            }
+
             for (int index = 0; index < cards.Count; index++)
             {
-                AddWidget(row, bucket, cards[index], x, widths[index], inBattle);
+                AddWidget(row, bucket, cards[index], x, widths[index], inBattle, cards, index);
                 x += widths[index] + SlotGap;
             }
         }
@@ -557,7 +563,9 @@ namespace ProjectArtOfAll.Board
             CardInstance card,
             float x,
             float width,
-            bool inBattle)
+            bool inBattle,
+            System.Collections.Generic.IReadOnlyList<CardInstance> rowCards,
+            int rowIndex)
         {
             GameObject widget = new GameObject(
                 "Card_" + card.Definition.Id,
@@ -576,6 +584,14 @@ namespace ProjectArtOfAll.Board
             float thickness = Mathf.Max(2f, 2.2f * scale);
             AddFramedBorder(widget.transform, FrameColor(card.Definition.SlotSize), thickness, 13f * scale);
             AddValueBadge(widget.transform, card.Value);
+            if (inBattle)
+            {
+                string bonus = BonusBadge(rowCards, rowIndex);
+                if (bonus != null)
+                {
+                    AddBonusBadge(widget.transform, width, bonus);
+                }
+            }
 
             int fontSize = Mathf.RoundToInt(16f * Mathf.Min(scale, 1.6f));
             Text name = BoardHudOverlayFactory.CreateText(
@@ -617,6 +633,80 @@ namespace ProjectArtOfAll.Board
             CardBandDragHandler drag = widget.AddComponent<CardBandDragHandler>();
             drag.Bind(this, card, inBattle);
             bucket.Add(widget);
+        }
+
+        /// <summary>相邻加成的角标文字：骰值 +N / 额外 N 颗骰 / MAX。</summary>
+        private static string BonusBadge(
+            System.Collections.Generic.IReadOnlyList<CardInstance> rowCards,
+            int rowIndex)
+        {
+            if (rowCards == null || rowIndex < 0 || rowIndex >= rowCards.Count)
+            {
+                return null;
+            }
+
+            int dice = LoadoutPreview.DiceModifier(rowCards, rowIndex);
+            int extra = LoadoutPreview.BonusDice(rowCards, rowIndex);
+            bool maxRoll = LoadoutPreview.HasMaxRoll(rowCards, rowIndex);
+            if (dice == 0 && extra == 0 && !maxRoll)
+            {
+                return null;
+            }
+
+            List<string> parts = new List<string>(3);
+            if (dice != 0)
+            {
+                parts.Add(dice > 0 ? "+" + dice : dice.ToString());
+            }
+
+            if (extra != 0)
+            {
+                parts.Add((extra > 0 ? "+" + extra : extra.ToString()) + "骰");
+            }
+
+            if (maxRoll)
+            {
+                parts.Add("MAX");
+            }
+
+            return string.Join(" ", parts);
+        }
+
+        private void AddBonusBadge(Transform parent, float cardWidth, string text)
+        {
+            float height = Mathf.Max(18f, 20f * scale);
+            float width = Mathf.Max(46f, Mathf.Min(cardWidth - 12f, 64f * scale));
+            GameObject plate = BoardHudOverlayFactory.CreateBar(
+                parent,
+                "BonusPlate",
+                new Vector2(1f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(-width - 4f, -height - 4f),
+                new Vector2(-4f, -4f),
+                new Color(0.22f, 0.15f, 0.03f, 0.92f));
+
+            AddFramedBorder(
+                plate.transform,
+                new Color(0.98f, 0.80f, 0.36f, 0.95f),
+                Mathf.Max(1f, 1.4f * scale),
+                5f * scale);
+
+            Text label = BoardHudOverlayFactory.CreateText(
+                plate.transform,
+                "Bonus",
+                text,
+                font,
+                Mathf.RoundToInt(12f * Mathf.Min(scale, 1.5f)),
+                FontStyle.Bold,
+                Vector2.zero,
+                new Vector2(width, height),
+                TextAnchor.MiddleCenter);
+            label.rectTransform.anchorMin = Vector2.zero;
+            label.rectTransform.anchorMax = Vector2.one;
+            label.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            label.rectTransform.offsetMin = Vector2.zero;
+            label.rectTransform.offsetMax = Vector2.zero;
+            label.color = new Color(1f, 0.90f, 0.58f, 1f);
         }
 
         private static void ClearWidgets(List<GameObject> bucket)
@@ -749,13 +839,29 @@ namespace ProjectArtOfAll.Board
                 "   ",
                 card.Definition.SlotSize.ToString(),
                 "c");
+            string bonus = DescribeBonus(card);
             detailText.text = string.Concat(
                 CardText.Meta(card.Definition),
                 "\n\n",
                 CardText.Description(card.Definition),
                 "\n\n当前价值 ",
                 card.Value.ToString(),
-                " 碎片");
+                " 碎片",
+                bonus == null ? string.Empty : "\n相邻加成 " + bonus);
+        }
+
+        /// <summary>这张牌（在战斗栏里时）当前吃到的相邻加成，没有则返回 null。</summary>
+        private string DescribeBonus(CardInstance card)
+        {
+            for (int i = 0; i < battleSnapshot.Count; i++)
+            {
+                if (battleSnapshot[i] != null && battleSnapshot[i].Uid == card.Uid)
+                {
+                    return LoadoutPreview.Describe(battleSnapshot, i);
+                }
+            }
+
+            return null;
         }
 
         private bool Contains(RectTransform rect, PointerEventData eventData)

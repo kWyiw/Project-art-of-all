@@ -26,6 +26,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckEventBus();
                 CheckCardDatabase();
                 CheckCardText();
+                CheckLoadoutPreview();
                 CheckCombatSimulation();
                 CheckCardMechanics();
                 CheckM1MatchDurability();
@@ -293,6 +294,54 @@ namespace ProjectArtOfAll.Core.Checks
                     !CardText.Description(card).Contains("Unknown"),
                     $"Card {card.Id} leaked an enum name into its text.");
             }
+        }
+
+        private static void CheckLoadoutPreview()
+        {
+            // 磨刀石：相邻武器骰值 +2（AdjacentLeft/Right 都有）。
+            CardInstance whetstone = new CardInstance(1, CardDatabase.Instance.Get("whetstone"));
+            CardInstance crowbar = new CardInstance(2, CardDatabase.Instance.Get("crowbar"));
+            CardInstance axe = new CardInstance(3, CardDatabase.Instance.Get("fireman_axe"));
+
+            CardInstance[] pair = { whetstone, crowbar };
+            Assert(LoadoutPreview.DiceModifier(pair, 1) == 2,
+                "磨刀石在左侧时，右侧撬棍必须吃到 +2 骰值。");
+            Assert(LoadoutPreview.DiceModifier(new[] { crowbar, whetstone }, 0) == 2,
+                "磨刀石在右侧时，左侧撬棍也必须吃到 +2 骰值。");
+
+            CardInstance[] apart = { whetstone, axe, crowbar };
+            Assert(LoadoutPreview.DiceModifier(apart, 2) == 0,
+                "隔着一张牌时不再是相邻，磨刀石不能生效。");
+            Assert(LoadoutPreview.DiceModifier(apart, 1) == 2,
+                "相邻的消防斧必须吃到 +2。");
+
+            // 自噬之蛇：右侧相邻牌骰值必定取最大值。
+            CardInstance snake = new CardInstance(4, CardDatabase.Instance.Get("ouroboros"));
+            CardInstance[] snakePair = { snake, crowbar };
+            Assert(LoadoutPreview.HasMaxRoll(snakePair, 1),
+                "自噬之蛇右侧的牌必须被标记为必定最大骰。");
+            Assert(!LoadoutPreview.HasMaxRoll(new[] { crowbar, snake }, 0),
+                "自噬之蛇只影响它右侧的那张牌。");
+            Assert(LoadoutPreview.Describe(snakePair, 1) != null,
+                "有加成时必须能描述出来。");
+            Assert(LoadoutPreview.Describe(new[] { crowbar, axe }, 0) == null,
+                "没有加成时描述必须为空。");
+
+            // 火堆：每与一张废料相邻 +1 多重释放（只数邻居）。
+            CardInstance fire = new CardInstance(5, CardDatabase.Instance.Get("campfire"));
+            CardInstance waste = new CardInstance(6, CardDatabase.Instance.Get("concrete_block"));
+            CardInstance waste2 = new CardInstance(7, CardDatabase.Instance.Get("nuclear_water"));
+            Assert(LoadoutPreview.BonusDice(new[] { waste, fire, waste2 }, 1) == 2,
+                "火堆左右各一张废料时，自己获得 +2 多重释放。");
+            Assert(LoadoutPreview.BonusDice(new[] { fire, waste, waste2 }, 0) == 1,
+                "火堆只有一张相邻废料时只能 +1。");
+
+            // 回收站：全场废料多重释放 +1（AllByTag，不限相邻）。
+            CardInstance recycler = new CardInstance(8, CardDatabase.Instance.Get("recycler"));
+            Assert(LoadoutPreview.BonusDice(new[] { recycler, crowbar, waste }, 2) == 1,
+                "回收站必须给场上的废料 +1 多重释放。");
+            Assert(LoadoutPreview.BonusDice(new[] { recycler, crowbar }, 1) == 0,
+                "回收站只影响废料，武器不额外获得骰数。");
         }
 
         private static void CheckCardDatabase()
