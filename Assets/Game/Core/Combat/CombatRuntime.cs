@@ -9,7 +9,7 @@ namespace ProjectArtOfAll.Core.Combat
         public CombatantRuntime(CombatantSnapshot snapshot)
         {
             Snapshot = snapshot;
-            MaximumHealth = BattleConfig.GetMaxHealth(snapshot.Level);
+            MaximumHealth = snapshot.MaxHealth;
             Health = MaximumHealth;
             Cards = snapshot.BattleCards
                 .Select((card, slotIndex) =>

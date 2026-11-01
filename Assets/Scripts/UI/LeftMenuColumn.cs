@@ -27,6 +27,7 @@ namespace ProjectArtOfAll.UI
         private RectTransform canvasRect;
         private GameSettingsPanel settingsPanel;
         private GameObject modePanel;
+        private CombatLabView combatLab;
 
         private void Awake()
         {
@@ -144,7 +145,8 @@ namespace ProjectArtOfAll.UI
         {
             CreateMenuButton("01", "开始游戏", 400f, ShowModePanel);
             CreateMenuButton("02", "设置", 492f, OpenSettings);
-            CreateMenuButton("03", "退出游戏", 584f, QuitGame);
+            CreateMenuButton("03", "战斗模拟", 584f, OpenCombatLab);
+            CreateMenuButton("04", "退出游戏", 676f, QuitGame);
         }
 
         private void CreateMenuButton(string index, string label, float top, System.Action onClick)
@@ -196,7 +198,7 @@ namespace ProjectArtOfAll.UI
         private void BuildFooter()
         {
             Text mode = CreateText(
-                canvasRect, "ModeHint", "开始游戏后可以选择正常模式或「无CPU测试模式」",
+                canvasRect, "ModeHint", "01 开始游戏（正常模式 / 无CPU测试模式）　03 战斗模拟（自己组两套卡组对打）",
                 new Vector2(144f, -948f), new Vector2(1200f, 28f),
                 16, FontStyle.Normal, TextAnchor.MiddleLeft);
             mode.color = MutedText;
@@ -377,6 +379,17 @@ namespace ProjectArtOfAll.UI
             }
 
             settingsPanel.Show();
+        }
+
+        /// <summary>自定义战斗模拟：只开战斗页面，自己组两套战斗栏对打（不碰棋盘层）。</summary>
+        public void OpenCombatLab()
+        {
+            if (combatLab == null)
+            {
+                combatLab = CombatLabView.Create(canvasRect, GetMenuFont());
+            }
+
+            combatLab.Show();
         }
 
         public void QuitGame()

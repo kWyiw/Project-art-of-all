@@ -124,7 +124,8 @@ namespace ProjectArtOfAll.Board
             string leftTitle,
             string rightTitle,
             bool leftIsHuman,
-            Action onDone)
+            Action onDone,
+            float startSpeed = 2f)
         {
             if (combat == null || combat.Result == null)
             {
@@ -135,6 +136,10 @@ namespace ProjectArtOfAll.Board
             CombatResult result = combat.Result;
             BattleSnapshot battle = result.Battle;
             onComplete = onDone;
+            if (startSpeed > 0f)
+            {
+                speed = startSpeed;
+            }
             timeline.Clear();
             if (result.Timeline != null)
             {
@@ -294,12 +299,8 @@ namespace ProjectArtOfAll.Board
             int selfId = leftIsHuman ? leftId : rightId;
             int foeId = leftIsHuman ? rightId : leftId;
 
-            int selfMaxHealth = selfSnapshot == null
-                ? 100
-                : Core.Combat.BattleConfig.GetMaxHealth(selfSnapshot.Level);
-            int foeMaxHealth = foeSnapshot == null
-                ? 100
-                : Core.Combat.BattleConfig.GetMaxHealth(foeSnapshot.Level);
+            int selfMaxHealth = selfSnapshot == null ? 100 : selfSnapshot.MaxHealth;
+            int foeMaxHealth = foeSnapshot == null ? 100 : foeSnapshot.MaxHealth;
 
             foeSide = BuildSide(
                 font,

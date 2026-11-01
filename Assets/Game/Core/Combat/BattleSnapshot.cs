@@ -11,14 +11,21 @@ namespace ProjectArtOfAll.Core.Combat
         public CombatantSnapshot(
             int playerId,
             int level,
-            IEnumerable<CardInstance> battleCards)
+            IEnumerable<CardInstance> battleCards,
+            int? maxHealth = null)
         {
             if (playerId < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(playerId));
             }
 
-            BattleConfig.GetMaxHealth(level);
+            int defaultHealth = BattleConfig.GetMaxHealth(level);
+            if (maxHealth.HasValue && maxHealth.Value <= 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(maxHealth),
+                    "Max health must be positive.");
+            }
 
             if (battleCards == null)
             {
@@ -44,11 +51,15 @@ namespace ProjectArtOfAll.Core.Combat
 
             PlayerId = playerId;
             Level = level;
+            MaxHealth = maxHealth ?? defaultHealth;
             BattleCards = Array.AsReadOnly(cards.ToArray());
         }
 
         public int PlayerId { get; }
         public int Level { get; }
+
+        /// <summary>本场最大生命值。默认按等级取（100/150/200/250/300），模拟模式可以自己填。</summary>
+        public int MaxHealth { get; }
         public IReadOnlyList<CardInstance> BattleCards { get; }
     }
 

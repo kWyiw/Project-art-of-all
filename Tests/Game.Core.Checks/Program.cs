@@ -29,6 +29,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckLoadoutPreview();
                 CheckCombatSimulation();
                 CheckCombatTimeline();
+                CheckCustomMaxHealth();
                 CheckCardMechanics();
                 CheckM1MatchDurability();
                 CheckHomeProgression();
@@ -989,6 +990,42 @@ namespace ProjectArtOfAll.Core.Checks
 
             Console.WriteLine(
                 $"[timeline] events={result.Timeline.Count} end={result.EndTick}");
+        }
+
+        /// <summary>模拟模式：双方的初始生命值由玩家自己填，内核必须照这个数开局。</summary>
+        private static void CheckCustomMaxHealth()
+        {
+            CardDatabase catalog = CardDatabase.Instance;
+            BattleSnapshot snapshot = new BattleSnapshot(
+                new CombatantSnapshot(
+                    playerId: 0,
+                    level: 5,
+                    battleCards: new[] { new CardInstance(1, catalog.Get("crowbar")) },
+                    maxHealth: 640),
+                new CombatantSnapshot(
+                    playerId: 1,
+                    level: 5,
+                    battleCards: new[] { new CardInstance(2, catalog.Get("car_door")) },
+                    maxHealth: 480));
+
+            Assert(snapshot.Left.MaxHealth == 640, "The left custom max health must be kept.");
+            Assert(snapshot.Right.MaxHealth == 480, "Each side has its own max health.");
+
+            CombatResult result = new CombatSimulation(snapshot, 7UL).RunToCompletion();
+            Assert(result.Battle.Left.MaxHealth == 640,
+                "The playback snapshot must keep the custom max health.");
+            Assert(result.Battle.Right.MaxHealth == 480,
+                "The playback snapshot must keep both custom health values.");
+            Assert(result.EndTick > 0, "A custom battle must still run to an end.");
+            Assert(result.LeftHealth <= 640 && result.RightHealth <= 480,
+                "Neither side can end above its custom max health.");
+
+            // 不带自定义生命值时仍然按等级取默认值（1 级 = 100）。
+            Assert(new CombatantSnapshot(2, 1, Array.Empty<CardInstance>()).MaxHealth == 100,
+                "Without an override the level table still decides the max health.");
+
+            Console.WriteLine(
+                "[lab] left=" + snapshot.Left.MaxHealth + " right=" + snapshot.Right.MaxHealth);
         }
 
         private static void CheckCardMechanics()
