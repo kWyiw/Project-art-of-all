@@ -50,6 +50,67 @@ namespace ProjectArtOfAll.Board
         public Text AcceptLabel { get; }
     }
 
+    public sealed class BoardHudCardDrawerView
+    {
+        public BoardHudCardDrawerView(
+            GameObject overlay,
+            RectTransform panel,
+            Text title,
+            RectTransform content,
+            ScrollRect scroll,
+            Text empty,
+            Button closeButton,
+            Text closeLabel)
+        {
+            Overlay = overlay;
+            Panel = panel;
+            Title = title;
+            Content = content;
+            Scroll = scroll;
+            Empty = empty;
+            CloseButton = closeButton;
+            CloseLabel = closeLabel;
+        }
+
+        public GameObject Overlay { get; }
+        public RectTransform Panel { get; }
+        public Text Title { get; }
+        public RectTransform Content { get; }
+        public ScrollRect Scroll { get; }
+        public Text Empty { get; }
+        public Button CloseButton { get; }
+        public Text CloseLabel { get; }
+    }
+
+    public sealed class BoardHudCombatResultView
+    {
+        public BoardHudCombatResultView(
+            GameObject overlay,
+            RectTransform panel,
+            Text title,
+            Text subtitle,
+            Text body,
+            Button closeButton,
+            Text closeLabel)
+        {
+            Overlay = overlay;
+            Panel = panel;
+            Title = title;
+            Subtitle = subtitle;
+            Body = body;
+            CloseButton = closeButton;
+            CloseLabel = closeLabel;
+        }
+
+        public GameObject Overlay { get; }
+        public RectTransform Panel { get; }
+        public Text Title { get; }
+        public Text Subtitle { get; }
+        public Text Body { get; }
+        public Button CloseButton { get; }
+        public Text CloseLabel { get; }
+    }
+
     public static class BoardHudOverlayFactory
     {
         public static GameObject CreateCardDrawerScrim(Transform parent)
@@ -280,6 +341,360 @@ namespace ProjectArtOfAll.Board
                 stakes,
                 acceptButton,
                 acceptLabel);
+        }
+
+        public static BoardHudCardDrawerView CreateCardDrawerView(
+            Transform parent,
+            Font font)
+        {
+            GameObject overlay = new GameObject(
+                "CardViewOverlay",
+                typeof(RectTransform),
+                typeof(Image));
+            overlay.transform.SetParent(parent, false);
+            Stretch(overlay.GetComponent<RectTransform>());
+
+            Image overlayImage = overlay.GetComponent<Image>();
+            overlayImage.color = new Color(0.01f, 0.018f, 0.022f, 0.88f);
+            overlayImage.raycastTarget = true;
+
+            GameObject panelObject = new GameObject(
+                "CardViewPanel",
+                typeof(RectTransform),
+                typeof(Image),
+                typeof(Outline));
+            panelObject.transform.SetParent(overlay.transform, false);
+
+            RectTransform panel = panelObject.GetComponent<RectTransform>();
+            panel.anchorMin = new Vector2(0.5f, 0.5f);
+            panel.anchorMax = new Vector2(0.5f, 0.5f);
+            panel.pivot = new Vector2(0.5f, 0.5f);
+            panel.anchoredPosition = Vector2.zero;
+            panel.sizeDelta = new Vector2(860f, 620f);
+
+            Image panelImage = panelObject.GetComponent<Image>();
+            panelImage.color = new Color(0.048f, 0.078f, 0.09f, 0.99f);
+            panelImage.raycastTarget = true;
+
+            Outline panelOutline = panelObject.GetComponent<Outline>();
+            panelOutline.effectColor = new Color(0.86f, 0.68f, 0.35f, 0.72f);
+            panelOutline.effectDistance = new Vector2(2f, -2f);
+
+            CreateBar(
+                panel,
+                "BrassRule",
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0f, 5f),
+                new Vector2(0f, 0f),
+                new Color(0.92f, 0.69f, 0.27f, 1f));
+
+            Text title = CreateText(
+                panel,
+                "Title",
+                "卡槽",
+                font,
+                28,
+                FontStyle.Bold,
+                new Vector2(34f, -24f),
+                new Vector2(480f, 40f),
+                TextAnchor.UpperLeft);
+            title.color = new Color(0.96f, 0.88f, 0.69f, 1f);
+
+            Text hint = CreateText(
+                panel,
+                "Hint",
+                "只读预览 · 再按一次「展开卡槽」关闭",
+                font,
+                16,
+                FontStyle.Normal,
+                new Vector2(540f, -34f),
+                new Vector2(280f, 24f),
+                TextAnchor.UpperRight);
+            hint.color = new Color(0.72f, 0.7f, 0.64f, 1f);
+
+            GameObject viewportObject = new GameObject(
+                "CardViewViewport",
+                typeof(RectTransform),
+                typeof(Image),
+                typeof(RectMask2D),
+                typeof(ScrollRect));
+            viewportObject.transform.SetParent(panel, false);
+            RectTransform viewport = viewportObject.GetComponent<RectTransform>();
+            viewport.anchorMin = new Vector2(0f, 1f);
+            viewport.anchorMax = new Vector2(0f, 1f);
+            viewport.pivot = new Vector2(0f, 1f);
+            viewport.anchoredPosition = new Vector2(34f, -84f);
+            viewport.sizeDelta = new Vector2(792f, 470f);
+
+            Image viewportImage = viewportObject.GetComponent<Image>();
+            viewportImage.color = new Color(0f, 0f, 0f, 0.001f);
+            viewportImage.raycastTarget = true;
+
+            GameObject contentObject = new GameObject(
+                "CardViewContent",
+                typeof(RectTransform));
+            contentObject.transform.SetParent(viewport, false);
+            RectTransform content = contentObject.GetComponent<RectTransform>();
+            content.anchorMin = new Vector2(0f, 1f);
+            content.anchorMax = new Vector2(1f, 1f);
+            content.pivot = new Vector2(0f, 1f);
+            content.anchoredPosition = Vector2.zero;
+            content.sizeDelta = new Vector2(0f, 470f);
+
+            ScrollRect scroll = viewportObject.GetComponent<ScrollRect>();
+            scroll.content = content;
+            scroll.viewport = viewport;
+            scroll.horizontal = false;
+            scroll.vertical = true;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+            scroll.scrollSensitivity = 30f;
+            scroll.inertia = true;
+            scroll.decelerationRate = 0.135f;
+
+            Text empty = CreateText(
+                content,
+                "Empty",
+                "当前玩家还没有任何卡牌。",
+                font,
+                18,
+                FontStyle.Normal,
+                new Vector2(4f, -8f),
+                new Vector2(780f, 28f),
+                TextAnchor.UpperLeft);
+            empty.color = new Color(0.72f, 0.7f, 0.64f, 1f);
+
+            Button closeButton = CreateButton(
+                panel,
+                "CloseButton",
+                "关闭",
+                font,
+                new Vector2(340f, -542f),
+                new Vector2(180f, 52f),
+                out Text closeLabel);
+
+            overlay.SetActive(false);
+            return new BoardHudCardDrawerView(
+                overlay,
+                panel,
+                title,
+                content,
+                scroll,
+                empty,
+                closeButton,
+                closeLabel);
+        }
+
+        public static BoardHudCombatResultView CreateCombatResultView(
+            Transform parent,
+            Font font)
+        {
+            GameObject overlay = new GameObject(
+                "CombatResultOverlay",
+                typeof(RectTransform),
+                typeof(Image));
+            overlay.transform.SetParent(parent, false);
+            Stretch(overlay.GetComponent<RectTransform>());
+
+            Image overlayImage = overlay.GetComponent<Image>();
+            overlayImage.color = new Color(0.01f, 0.018f, 0.022f, 0.86f);
+
+            // 结算面板不挡操作：遮罩不吃射线，玩家看完可以继续掷骰。
+            overlayImage.raycastTarget = false;
+
+            GameObject panelObject = new GameObject(
+                "CombatResultPanel",
+                typeof(RectTransform),
+                typeof(Image),
+                typeof(Outline));
+            panelObject.transform.SetParent(overlay.transform, false);
+
+            RectTransform panel = panelObject.GetComponent<RectTransform>();
+            panel.anchorMin = new Vector2(0.5f, 0.5f);
+            panel.anchorMax = new Vector2(0.5f, 0.5f);
+            panel.pivot = new Vector2(0.5f, 0.5f);
+            panel.anchoredPosition = Vector2.zero;
+            panel.sizeDelta = new Vector2(720f, 470f);
+
+            Image panelImage = panelObject.GetComponent<Image>();
+            panelImage.color = new Color(0.048f, 0.078f, 0.09f, 0.99f);
+            panelImage.raycastTarget = true;
+
+            Outline panelOutline = panelObject.GetComponent<Outline>();
+            panelOutline.effectColor = new Color(0.86f, 0.68f, 0.35f, 0.72f);
+            panelOutline.effectDistance = new Vector2(2f, -2f);
+
+            CreateBar(
+                panel,
+                "BrassRule",
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0f, 5f),
+                new Vector2(0f, 0f),
+                new Color(0.92f, 0.69f, 0.27f, 1f));
+
+            Text title = CreateText(
+                panel,
+                "Title",
+                "战斗结算",
+                font,
+                34,
+                FontStyle.Bold,
+                new Vector2(40f, -28f),
+                new Vector2(640f, 48f),
+                TextAnchor.UpperLeft);
+            title.color = new Color(0.96f, 0.88f, 0.69f, 1f);
+
+            Text subtitle = CreateText(
+                panel,
+                "Subtitle",
+                string.Empty,
+                font,
+                18,
+                FontStyle.Normal,
+                new Vector2(40f, -80f),
+                new Vector2(640f, 26f),
+                TextAnchor.UpperLeft);
+            subtitle.color = new Color(0.8f, 0.78f, 0.7f, 1f);
+
+            Text body = CreateText(
+                panel,
+                "Body",
+                string.Empty,
+                font,
+                19,
+                FontStyle.Normal,
+                new Vector2(40f, -120f),
+                new Vector2(640f, 250f),
+                TextAnchor.UpperLeft);
+            body.color = new Color(0.9f, 0.9f, 0.86f, 1f);
+            body.horizontalOverflow = HorizontalWrapMode.Wrap;
+            body.verticalOverflow = VerticalWrapMode.Truncate;
+            body.lineSpacing = 1.3f;
+
+            Button closeButton = CreateButton(
+                panel,
+                "CloseButton",
+                "继续",
+                font,
+                new Vector2(270f, -392f),
+                new Vector2(180f, 52f),
+                out Text closeLabel);
+
+            overlay.SetActive(false);
+            return new BoardHudCombatResultView(
+                overlay,
+                panel,
+                title,
+                subtitle,
+                body,
+                closeButton,
+                closeLabel);
+        }
+
+        public static GameObject CreateCardSectionHeader(
+            Transform content,
+            Font font,
+            float top,
+            float width,
+            string label)
+        {
+            GameObject header = new GameObject(
+                "CardSectionHeader",
+                typeof(RectTransform));
+            header.transform.SetParent(content, false);
+
+            RectTransform rect = header.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = new Vector2(0f, -top);
+            rect.sizeDelta = new Vector2(width, 26f);
+
+            Text text = CreateText(
+                header.transform,
+                "Label",
+                label,
+                font,
+                17,
+                FontStyle.Bold,
+                Vector2.zero,
+                new Vector2(width, 26f),
+                TextAnchor.UpperLeft);
+            text.color = new Color(0.92f, 0.69f, 0.27f, 1f);
+            return header;
+        }
+
+        public static GameObject CreateCardRow(
+            Transform content,
+            Font font,
+            float top,
+            float width,
+            float height,
+            out Text name,
+            out Text meta,
+            out Text detail)
+        {
+            GameObject row = new GameObject(
+                "CardRow",
+                typeof(RectTransform),
+                typeof(Image),
+                typeof(Outline));
+            row.transform.SetParent(content, false);
+
+            RectTransform rect = row.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = new Vector2(0f, -top);
+            rect.sizeDelta = new Vector2(width, height);
+
+            Image image = row.GetComponent<Image>();
+            image.color = new Color(0.094f, 0.133f, 0.145f, 0.96f);
+            image.raycastTarget = false;
+
+            Outline outline = row.GetComponent<Outline>();
+            outline.effectColor = new Color(0.86f, 0.68f, 0.35f, 0.3f);
+            outline.effectDistance = new Vector2(1f, -1f);
+
+            name = CreateText(
+                row.transform,
+                "Name",
+                string.Empty,
+                font,
+                21,
+                FontStyle.Bold,
+                new Vector2(14f, -6f),
+                new Vector2(310f, 26f),
+                TextAnchor.UpperLeft);
+            name.color = new Color(0.96f, 0.93f, 0.84f, 1f);
+
+            meta = CreateText(
+                row.transform,
+                "Meta",
+                string.Empty,
+                font,
+                15,
+                FontStyle.Normal,
+                new Vector2(14f, -32f),
+                new Vector2(310f, 22f),
+                TextAnchor.UpperLeft);
+            meta.color = new Color(0.77f, 0.74f, 0.66f, 1f);
+
+            detail = CreateText(
+                row.transform,
+                "Detail",
+                string.Empty,
+                font,
+                15,
+                FontStyle.Normal,
+                new Vector2(332f, -8f),
+                new Vector2(width - 348f, height - 12f),
+                TextAnchor.UpperLeft);
+            detail.color = new Color(0.86f, 0.86f, 0.8f, 1f);
+            detail.horizontalOverflow = HorizontalWrapMode.Wrap;
+            detail.verticalOverflow = VerticalWrapMode.Truncate;
+            return row;
         }
 
         public static Font CreateFont()

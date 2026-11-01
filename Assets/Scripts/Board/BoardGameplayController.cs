@@ -5,6 +5,7 @@ using System.Linq;
 using ProjectArtOfAll.Core.Board;
 using ProjectArtOfAll.Core.Cards;
 using ProjectArtOfAll.Core.Commands;
+using ProjectArtOfAll.Core.Combat;
 using ProjectArtOfAll.Core.Events;
 using ProjectArtOfAll.Core.Match;
 using ProjectArtOfAll.Flow;
@@ -212,6 +213,8 @@ namespace ProjectArtOfAll.Board
             }
 
             int eventStart = match.Events.History.Count;
+            int shardsBefore = movingPlayer.Shards;
+            int winsBefore = movingPlayer.Wins;
             match.Submit(
                 new MoveCommand(
                     playerId,
@@ -246,6 +249,111 @@ namespace ProjectArtOfAll.Board
                     ? "战斗平局"
                     : $"战斗胜者：玩家 {combat.Result.WinnerPlayerId + 1}";
             UpdateHudStatus(action);
+
+            if (combat != null)
+            {
+                ReportCombat(combat, movingPlayer, shardsBefore, winsBefore);
+            }
+        }
+
+        private void ReportCombat(
+            CombatResolvedEvent combat,
+            MatchPlayerState player,
+            int shardsBefore,
+            int winsBefore)
+        {
+            if (hud == null)
+            {
+                return;
+            }
+
+            CombatResult result = combat.Result;
+            bool opponentIsPlayer = match.State.Players
+                .Any(other => other.Id == combat.DefenderId);
+            string title = result.IsDraw
+                ? "战斗平局"
+                : result.WinnerPlayerId == player.Id
+                    ? "战斗胜利"
+                    : "战斗失败";
+            string subtitle = string.Concat(
+                "用时 ",
+                result.EndSecond.ToString(),
+                " 秒 · ",
+                ReasonLabel(result.Reason),
+                opponentIsPlayer ? " · 玩家对战" : " · 怪物战",
+                " · 防守方 ",
+                opponentIsPlayer
+                    ? string.Concat("玩家 ", (combat.DefenderId + 1).ToString())
+                    : "怪物");
+
+            int shardDelta = player.Shards - shardsBefore;
+            int winDelta = player.Wins - winsBefore;
+            System.Text.StringBuilder body = new System.Text.StringBuilder();
+            body.AppendLine(string.Concat(
+                "玩家 ",
+                (player.Id + 1).ToString(),
+                "　生命 ",
+                result.LeftHealth.ToString(),
+                "　护盾 ",
+                result.LeftShield.ToString()));
+            body.AppendLine(string.Concat(
+                "对手　　生命 ",
+                result.RightHealth.ToString(),
+                "　护盾 ",
+                result.RightShield.ToString()));
+            body.AppendLine();
+            body.AppendLine(string.Concat(
+                "碎片 ",
+                Signed(shardDelta),
+                "　　胜场 ",
+                Signed(winDelta)));
+            body.AppendLine();
+            body.Append(string.Concat("装配：", FormatLoadout(player)));
+
+            hud.ShowCombatResult(title, subtitle, body.ToString());
+            hud.SetCombatResultTint(
+                result.IsDraw
+                    ? new Color(0.86f, 0.82f, 0.66f, 1f)
+                    : result.WinnerPlayerId == player.Id
+                        ? new Color(0.62f, 0.88f, 0.58f, 1f)
+                        : new Color(0.92f, 0.52f, 0.46f, 1f));
+        }
+
+        private static string Signed(int value)
+        {
+            return value > 0 ? string.Concat("+", value.ToString()) : value.ToString();
+        }
+
+        private static string ReasonLabel(Core.Events.CombatEndReason reason)
+        {
+            switch (reason)
+            {
+                case Core.Events.CombatEndReason.Knockout:
+                    return "击倒";
+                case Core.Events.CombatEndReason.TimeoutKnockout:
+                    return "超时击倒";
+                case Core.Events.CombatEndReason.HardTimeoutDraw:
+                    return "超时平局";
+                default:
+                    return "结算";
+            }
+        }
+
+        private static string FormatLoadout(MatchPlayerState player)
+        {
+            if (player.BattleCards.Count == 0)
+            {
+                return "没有装配战斗卡牌";
+            }
+
+            return string.Join(
+                "  ·  ",
+                player.BattleCards.Select(
+                    card => string.Concat(
+                        card.Definition.DisplayName,
+                        " ",
+                        card.Definition.SlotSize.ToString(),
+                        "c")));
         }
 
         private MatchPlayerState FindPlayerAtNode(int nodeId, int movingPlayerId)
@@ -405,6 +513,8 @@ namespace ProjectArtOfAll.Board
             }
 
             hud.SetMatchStatus(status);
+            hud.ShowCards(player);
+            hud.SetAssemblyLevel(player.Level);
         }
 
         private int ResolveEntryPlayerId()

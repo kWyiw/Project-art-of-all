@@ -63,6 +63,9 @@ namespace ProjectArtOfAll.Board
         private bool encounterVisible;
         private float encounterShownAt;
         private bool encounterButtonBound;
+        private BoardHudCardDrawerView cardView;
+        private BoardHudCombatResultView combatResultView;
+        private MatchPlayerState cachedPlayer;
 
         private void Awake()
         {
@@ -142,9 +145,7 @@ namespace ProjectArtOfAll.Board
 
         public void ToggleDrawer()
         {
-            isOpen = !isOpen;
-            ApplyDrawerLabel();
-            RefreshDrawerScrim();
+            SetDrawerOpen(!isOpen);
         }
 
         public void SetDrawerOpen(bool open)
@@ -152,6 +153,17 @@ namespace ProjectArtOfAll.Board
             isOpen = open;
             ApplyDrawerLabel();
             RefreshDrawerScrim();
+
+            if (!Application.isPlaying || cardView == null)
+            {
+                return;
+            }
+
+            cardView.Overlay.SetActive(open);
+            if (open)
+            {
+                RenderCards();
+            }
         }
 
         public void RollDice()
@@ -198,6 +210,208 @@ namespace ProjectArtOfAll.Board
             {
                 matchStatus.text = status;
             }
+        }
+
+        /// <summary>卡槽预览用的当前玩家；棋盘层每次刷新状态时都会推进来。</summary>
+        public void ShowCards(MatchPlayerState player)
+        {
+            cachedPlayer = player;
+            if (cardView != null && cardView.Overlay.activeSelf)
+            {
+                RenderCards();
+            }
+        }
+
+        public void ToggleCardView()
+        {
+            if (cardView == null)
+            {
+                return;
+            }
+
+            bool open = !cardView.Overlay.activeSelf;
+            cardView.Overlay.SetActive(open);
+            if (open)
+            {
+                RenderCards();
+            }
+        }
+
+        public void ShowCombatResult(string title, string subtitle, string body)
+        {
+            if (combatResultView == null)
+            {
+                return;
+            }
+
+            combatResultView.Title.text = title;
+            combatResultView.Subtitle.text = subtitle;
+            combatResultView.Body.text = body;
+            combatResultView.Overlay.SetActive(true);
+        }
+
+        public void HideCombatResult()
+        {
+            if (combatResultView != null)
+            {
+                combatResultView.Overlay.SetActive(false);
+            }
+        }
+
+        public void SetCombatResultTint(Color color)
+        {
+            if (combatResultView != null && combatResultView.Title != null)
+            {
+                combatResultView.Title.color = color;
+            }
+        }
+
+        private void RenderCards()
+        {
+            if (cardView == null || cardView.Content == null)
+            {
+                return;
+            }
+
+            Transform content = cardView.Content;
+            for (int index = content.childCount - 1; index >= 0; index--)
+            {
+                Transform child = content.GetChild(index);
+                if (cardView.Empty != null &&
+                    child == cardView.Empty.transform)
+                {
+                    continue;
+                }
+
+                Destroy(child.gameObject);
+            }
+
+            if (cachedPlayer == null)
+            {
+                cardView.Empty.gameObject.SetActive(true);
+                cardView.Title.text = "卡槽";
+                FitCardContent(0f);
+                return;
+            }
+
+            cardView.Empty.gameObject.SetActive(false);
+
+            int battleCapacity = cachedPlayer.Level <= 5
+                ? LoadoutRules.GetBattleCapacity(cachedPlayer.Level)
+                : 10;
+            List<CardInstance> battle = cachedPlayer.BattleCards.ToList();
+            HashSet<int> equipped = new HashSet<int>(
+                battle.Select(card => card.Uid));
+            List<CardInstance> bag = cachedPlayer.OwnedCards
+                .Where(card => !equipped.Contains(card.Uid))
+                .ToList();
+
+            cardView.Title.text = string.Concat(
+                "卡槽 · 玩家 ",
+                (cachedPlayer.Id + 1).ToString(),
+                " · Lv.",
+                cachedPlayer.Level.ToString());
+
+            Font font = drawerHandleLabel != null
+                ? drawerHandleLabel.font
+                : BoardHudOverlayFactory.CreateFont();
+            const float width = 780f;
+            float top = 0f;
+
+            top = AddCardSection(
+                content,
+                font,
+                width,
+                top,
+                string.Concat(
+                    "装配（战斗栏） ",
+                    cachedPlayer.BattleCardWidth.ToString(),
+                    "/",
+                    battleCapacity.ToString(),
+                    "c"),
+                battle,
+                "装配区还是空的。");
+
+            top = AddCardSection(
+                content,
+                font,
+                width,
+                top,
+                string.Concat(
+                    "背包 ",
+                    cachedPlayer.OwnedCardWidth.ToString(),
+                    "/",
+                    LoadoutRules.BagCapacity.ToString(),
+                    "c"),
+                bag,
+                "背包是空的。");
+
+            FitCardContent(top);
+        }
+
+        private void FitCardContent(float contentHeight)
+        {
+            if (cardView == null)
+            {
+                return;
+            }
+
+            cardView.Content.sizeDelta = new Vector2(
+                0f,
+                Mathf.Max(470f, contentHeight + 8f));
+
+            if (cardView.Scroll != null)
+            {
+                cardView.Scroll.verticalNormalizedPosition = 1f;
+            }
+        }
+
+        private static float AddCardSection(
+            Transform content,
+            Font font,
+            float width,
+            float top,
+            string label,
+            IReadOnlyList<CardInstance> cards,
+            string emptyLabel)
+        {
+            BoardHudOverlayFactory.CreateCardSectionHeader(
+                content,
+                font,
+                top,
+                width,
+                label);
+            top += 32f;
+
+            if (cards.Count == 0)
+            {
+                BoardHudOverlayFactory.CreateCardSectionHeader(
+                    content,
+                    font,
+                    top,
+                    width,
+                    emptyLabel);
+                return top + 34f;
+            }
+
+            foreach (CardInstance card in cards)
+            {
+                BoardHudOverlayFactory.CreateCardRow(
+                    content,
+                    font,
+                    top,
+                    width,
+                    62f,
+                    out Text name,
+                    out Text meta,
+                    out Text detail);
+                name.text = card.Definition.DisplayName;
+                meta.text = CardText.Meta(card.Definition);
+                detail.text = CardText.Description(card.Definition);
+                top += 68f;
+            }
+
+            return top + 6f;
         }
 
         public void ShowForkChoices(
@@ -493,6 +707,25 @@ namespace ProjectArtOfAll.Board
                 encounterAcceptButton.onClick.RemoveListener(AcceptEncounter);
                 encounterAcceptButton.onClick.AddListener(AcceptEncounter);
                 encounterButtonBound = true;
+            }
+
+            if (cardView == null)
+            {
+                cardView = BoardHudOverlayFactory.CreateCardDrawerView(transform, font);
+                if (cardView.CloseButton != null)
+                {
+                    cardView.CloseButton.onClick.AddListener(ToggleCardView);
+                }
+            }
+
+            if (combatResultView == null)
+            {
+                combatResultView =
+                    BoardHudOverlayFactory.CreateCombatResultView(transform, font);
+                if (combatResultView.CloseButton != null)
+                {
+                    combatResultView.CloseButton.onClick.AddListener(HideCombatResult);
+                }
             }
         }
 

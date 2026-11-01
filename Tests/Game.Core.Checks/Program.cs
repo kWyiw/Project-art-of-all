@@ -25,6 +25,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckCombatClocks();
                 CheckEventBus();
                 CheckCardDatabase();
+                CheckCardText();
                 CheckCombatSimulation();
                 CheckCardMechanics();
                 CheckM1MatchDurability();
@@ -244,6 +245,47 @@ namespace ProjectArtOfAll.Core.Checks
             canceled.ApplySlow(400);
             canceled.AdvanceTicks(180);
             Assert(canceled.IsReady, "Haste plus slow must return to 1x speed.");
+        }
+
+        private static void CheckCardText()
+        {
+            CardDefinition crowbar = CardDatabase.Instance.Get("crowbar");
+            Assert(CardText.Cooldown(crowbar) == "3 秒",
+                "Crowbar must read as a 3-second active card.");
+            Assert(CardText.Meta(crowbar) == "1c · 3 秒 · 武器 · 工具",
+                "Crowbar meta line must carry size, cooldown and both tags.");
+            Assert(CardText.Description(crowbar).Contains("伤害"),
+                "Crowbar must describe its damage.");
+
+            CardDefinition snake = CardDatabase.Instance.Get("ouroboros");
+            Assert(CardText.Description(snake).Contains("必定取最大值"),
+                "自噬之蛇 must read as a最大骰 aura, not a flat modifier.");
+
+            CardDefinition fire = CardDatabase.Instance.Get("campfire");
+            Assert(CardText.Description(fire).Contains("光环"),
+                "Campfire must describe its aura.");
+
+            CardDefinition tape = CardDatabase.Instance.Get("duct_tape");
+            Assert(CardText.Description(tape).Contains("被动"),
+                "Duct tape must describe its passive.");
+
+            CardDefinition passiveCard = CardDatabase.Instance.Get("whetstone");
+            Assert(CardText.Cooldown(passiveCard) == "被动",
+                "A card without a cooldown must read as 被动.");
+
+            foreach (CardDefinition card in CardDatabase.Instance.All)
+            {
+                Assert(
+                    !string.IsNullOrWhiteSpace(CardText.Meta(card)),
+                    $"Card {card.Id} must have a meta line.");
+                Assert(
+                    !string.IsNullOrWhiteSpace(CardText.Description(card)),
+                    $"Card {card.Id} must have a description.");
+                Assert(
+                    !CardText.Description(card).Contains("None") &&
+                    !CardText.Description(card).Contains("Unknown"),
+                    $"Card {card.Id} leaked an enum name into its text.");
+            }
         }
 
         private static void CheckCardDatabase()
