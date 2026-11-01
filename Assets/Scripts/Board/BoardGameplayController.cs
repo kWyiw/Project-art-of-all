@@ -228,15 +228,30 @@ namespace ProjectArtOfAll.Board
                 .LastOrDefault();
             if (teleport != null)
             {
-                // R-TILE-005：停在传送格，立即随机位移到另一个传送格。
+                // R-MOVE-006：只有移动结束后停在这格才传送；目标在其余传送格里随机。
                 UpdateHudStatus(string.Concat(
                     "传送 ",
                     NodeLabel(teleport.FromNodeId),
                     " → ",
                     NodeLabel(teleport.ToNodeId)));
+                Debug.Log(string.Concat(
+                    "[Board] warp p",
+                    (movingPlayer.Id + 1).ToString(),
+                    ": ",
+                    NodeLabel(teleport.FromNodeId),
+                    " -> ",
+                    NodeLabel(teleport.ToNodeId)));
+
+                Vector3 baseScale = activeToken.transform.localScale;
+                activeToken.gameObject.SetActive(false);
+                yield return new WaitForSeconds(0.15f);
                 activeToken.transform.position = GetStandingPosition(
                     activeToken,
                     tilesByNode[teleport.ToNodeId]);
+                activeToken.gameObject.SetActive(true);
+                activeToken.transform.localScale = baseScale * 1.25f;
+                yield return new WaitForSeconds(0.18f);
+                activeToken.transform.localScale = baseScale;
                 yield return new WaitForSeconds(0.35f);
             }
 
@@ -474,7 +489,8 @@ namespace ProjectArtOfAll.Board
         private static string NodeLabel(int nodeId)
         {
             Vector2Int cell = UnityMapGraphFactory.CellFromNodeId(nodeId);
-            return "R" + (cell.x + 1).ToString("D2") + "C" + (cell.y + 1).ToString("D2");
+            return "R" + (cell.x + 1).ToString("D2") + " C" +
+                (cell.y + 1).ToString("D2");
         }
 
         private int FindFirstFittingReward(MatchPlayerState player)

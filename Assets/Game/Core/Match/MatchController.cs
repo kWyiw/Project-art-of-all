@@ -735,25 +735,22 @@ namespace ProjectArtOfAll.Core.Match
             return (high << 32) | low;
         }
 
+        /// <summary>
+        /// R-TILE-008：目标从全图其他所有传送格中随机取，排除当前格。
+        /// 只有 1 个传送格时不传送（地图校验要求至少 2 个）。
+        /// </summary>
         private int SelectWarpTarget(int sourceNodeId)
         {
-            foreach (IReadOnlyList<int> group in graph.TeleportGroups)
-            {
-                if (!group.Contains(sourceNodeId))
-                {
-                    continue;
-                }
+            int[] candidates = graph.Nodes
+                .Where(node => node.TileType == TileType.Warp)
+                .Select(node => node.Id)
+                .Where(nodeId => nodeId != sourceNodeId)
+                .OrderBy(nodeId => nodeId)
+                .ToArray();
 
-                int[] candidates = group
-                    .Where(nodeId => nodeId != sourceNodeId)
-                    .OrderBy(nodeId => nodeId)
-                    .ToArray();
-                return candidates.Length == 0
-                    ? sourceNodeId
-                    : candidates[random.NextInt(candidates.Length)];
-            }
-
-            return sourceNodeId;
+            return candidates.Length == 0
+                ? sourceNodeId
+                : candidates[random.NextInt(candidates.Length)];
         }
 
         private void TryUpgrade(MatchPlayerState player)

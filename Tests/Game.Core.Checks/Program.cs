@@ -525,6 +525,33 @@ namespace ProjectArtOfAll.Core.Checks
                 playerCount: 4,
                 teleportGroups: new[] { new[] { 3, 7 } });
 
+            // 经过传送格不传送（R-MOVE-006）：从 0 走 4 步，途经 3 号传送格。
+            bool passChecked = false;
+            for (ulong seed = 1; seed < 4000 && !passChecked; seed++)
+            {
+                MatchController passController = new MatchController(graph, seed);
+                passController.Submit(new RollCommand(0));
+                if (passController.State.LastRoll != 4)
+                {
+                    continue;
+                }
+
+                int passStart = passController.Events.History.Count;
+                passController.Submit(new MoveCommand(0));
+                Assert(
+                    !passController.Events.History
+                        .Skip(passStart)
+                        .OfType<PlayerTeleportedEvent>()
+                        .Any(),
+                    "Passing over a Warp tile must not teleport the player.");
+                Assert(
+                    passController.State.Players[0].CurrentNode == 4,
+                    "A pass over a Warp tile must leave the player on the rolled destination.");
+                passChecked = true;
+            }
+
+            Assert(passChecked, "Could not find a seed whose first roll is 4.");
+
             for (ulong seed = 1; seed < 4000; seed++)
             {
                 MatchController controller = new MatchController(graph, seed);
