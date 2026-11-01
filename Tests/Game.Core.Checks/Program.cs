@@ -30,6 +30,8 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckCardMechanics();
                 CheckM1MatchDurability();
                 CheckHomeProgression();
+                CheckRewardChoice();
+                CheckWarpTeleport();
                 CheckM3FullMatch();
                 CheckM3MatchReport();
                 Console.WriteLine("Game.Core checks passed.");
@@ -455,6 +457,104 @@ namespace ProjectArtOfAll.Core.Checks
             Assert(
                 controller.State.Players.Any(player => player.Level > 1),
                 "Reward income and Home Norma resolution must allow progression.");
+        }
+
+        private static void CheckRewardChoice()
+        {
+            MapGraph graph = MapGraph.Create(
+                new[]
+                {
+                    new MapNode(0, TileType.Home, 0, 1),
+                    new MapNode(1, TileType.Reward, -1, 2),
+                    new MapNode(2, TileType.Home, 1, 3),
+                    new MapNode(3, TileType.Reward, -1, 4),
+                    new MapNode(4, TileType.Home, 2, 5),
+                    new MapNode(5, TileType.Reward, -1, 6),
+                    new MapNode(6, TileType.Home, 3, 7),
+                    new MapNode(7, TileType.Reward, -1, 0)
+                },
+                playerCount: 4);
+
+            for (ulong seed = 1; seed < 4000; seed++)
+            {
+                MatchController controller = new MatchController(graph, seed);
+                controller.Submit(new RollCommand(0));
+                if (controller.State.LastRoll != 1)
+                {
+                    continue;
+                }
+
+                controller.Submit(new MoveCommand(0));
+                Assert(
+                    controller.State.Phase == MatchPhase.AwaitReward,
+                    "Landing on a Reward tile must hold the turn until a card is chosen.");
+                Assert(
+                    controller.CurrentRewardChoices.Count == 2,
+                    "A Reward tile must offer exactly two cards.");
+
+                CardDefinition chosen = controller.CurrentRewardChoices[0];
+                controller.Submit(new ChooseRewardCommand(0, 0));
+                Assert(
+                    controller.State.Players[0].OwnedCards.Any(
+                        card => card.Definition.Id == chosen.Id),
+                    "The chosen reward must enter the player's bag.");
+                Assert(
+                    controller.State.Phase != MatchPhase.AwaitReward,
+                    "Choosing a reward must end the Reward phase.");
+                return;
+            }
+
+            throw new InvalidOperationException(
+                "Could not find a seed whose first roll is 1.");
+        }
+
+        private static void CheckWarpTeleport()
+        {
+            MapGraph graph = MapGraph.Create(
+                new[]
+                {
+                    new MapNode(0, TileType.Home, 0, 1),
+                    new MapNode(1, TileType.Neutral, -1, 2),
+                    new MapNode(2, TileType.Home, 1, 3),
+                    new MapNode(3, TileType.Warp, -1, 4),
+                    new MapNode(4, TileType.Home, 2, 5),
+                    new MapNode(5, TileType.Neutral, -1, 6),
+                    new MapNode(6, TileType.Home, 3, 7),
+                    new MapNode(7, TileType.Warp, -1, 0)
+                },
+                playerCount: 4,
+                teleportGroups: new[] { new[] { 3, 7 } });
+
+            for (ulong seed = 1; seed < 4000; seed++)
+            {
+                MatchController controller = new MatchController(graph, seed);
+                controller.Submit(new RollCommand(0));
+                if (controller.State.LastRoll != 3)
+                {
+                    continue;
+                }
+
+                int eventStart = controller.Events.History.Count;
+                controller.Submit(new MoveCommand(0));
+
+                List<PlayerTeleportedEvent> teleports = controller.Events.History
+                    .Skip(eventStart)
+                    .OfType<PlayerTeleportedEvent>()
+                    .ToList();
+                Assert(
+                    teleports.Count == 1,
+                    "Stopping on a Warp tile must teleport exactly once.");
+                Assert(
+                    teleports[0].FromNodeId == 3 && teleports[0].ToNodeId == 7,
+                    "Warp must move the player to the other tile of the same group.");
+                Assert(
+                    controller.State.Players[0].CurrentNode == 7,
+                    "The player must end the turn on the warp destination.");
+                return;
+            }
+
+            throw new InvalidOperationException(
+                "Could not find a seed whose first roll is 3.");
         }
 
         private static void CheckM3FullMatch()

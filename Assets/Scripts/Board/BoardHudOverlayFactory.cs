@@ -82,6 +82,35 @@ namespace ProjectArtOfAll.Board
         public Text CloseLabel { get; }
     }
 
+    public sealed class BoardHudRewardChoiceView
+    {
+        public BoardHudRewardChoiceView(
+            GameObject overlay,
+            Text title,
+            Text subtitle,
+            Button[] buttons,
+            Text[] names,
+            Text[] metas,
+            Text[] details)
+        {
+            Overlay = overlay;
+            Title = title;
+            Subtitle = subtitle;
+            Buttons = buttons;
+            Names = names;
+            Metas = metas;
+            Details = details;
+        }
+
+        public GameObject Overlay { get; }
+        public Text Title { get; }
+        public Text Subtitle { get; }
+        public Button[] Buttons { get; }
+        public Text[] Names { get; }
+        public Text[] Metas { get; }
+        public Text[] Details { get; }
+    }
+
     public sealed class BoardHudCombatResultView
     {
         public BoardHudCombatResultView(
@@ -483,6 +512,186 @@ namespace ProjectArtOfAll.Board
                 empty,
                 closeButton,
                 closeLabel);
+        }
+
+        public static BoardHudRewardChoiceView CreateRewardChoiceView(
+            Transform parent,
+            Font font)
+        {
+            const int optionCount = 2;
+
+            GameObject overlay = new GameObject(
+                "RewardChoiceOverlay",
+                typeof(RectTransform),
+                typeof(Image));
+            overlay.transform.SetParent(parent, false);
+            Stretch(overlay.GetComponent<RectTransform>());
+
+            Image overlayImage = overlay.GetComponent<Image>();
+            overlayImage.color = new Color(0.01f, 0.018f, 0.022f, 0.82f);
+            overlayImage.raycastTarget = true;
+
+            GameObject panelObject = new GameObject(
+                "RewardChoicePanel",
+                typeof(RectTransform),
+                typeof(Image),
+                typeof(Outline));
+            panelObject.transform.SetParent(overlay.transform, false);
+
+            RectTransform panel = panelObject.GetComponent<RectTransform>();
+            panel.anchorMin = new Vector2(0.5f, 0.5f);
+            panel.anchorMax = new Vector2(0.5f, 0.5f);
+            panel.pivot = new Vector2(0.5f, 0.5f);
+            panel.anchoredPosition = Vector2.zero;
+            panel.sizeDelta = new Vector2(860f, 560f);
+
+            Image panelImage = panelObject.GetComponent<Image>();
+            panelImage.color = new Color(0.048f, 0.078f, 0.09f, 0.99f);
+            panelImage.raycastTarget = true;
+
+            Outline panelOutline = panelObject.GetComponent<Outline>();
+            panelOutline.effectColor = new Color(0.86f, 0.68f, 0.35f, 0.72f);
+            panelOutline.effectDistance = new Vector2(2f, -2f);
+
+            CreateBar(
+                panel,
+                "BrassRule",
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0f, 5f),
+                new Vector2(0f, 0f),
+                new Color(0.92f, 0.69f, 0.27f, 1f));
+
+            Text title = CreateText(
+                panel,
+                "Title",
+                "奖励 · 选一张",
+                font,
+                28,
+                FontStyle.Bold,
+                new Vector2(34f, -24f),
+                new Vector2(520f, 40f),
+                TextAnchor.UpperLeft);
+            title.color = new Color(0.96f, 0.88f, 0.69f, 1f);
+
+            Text subtitle = CreateText(
+                panel,
+                "Subtitle",
+                "免费获得 · 装不下的牌会置灰（R-TILE-006、R-ECO-006）",
+                font,
+                16,
+                FontStyle.Normal,
+                new Vector2(34f, -62f),
+                new Vector2(792f, 24f),
+                TextAnchor.UpperLeft);
+            subtitle.color = new Color(0.72f, 0.7f, 0.64f, 1f);
+
+            Button[] buttons = new Button[optionCount];
+            Text[] names = new Text[optionCount];
+            Text[] metas = new Text[optionCount];
+            Text[] details = new Text[optionCount];
+
+            for (int index = 0; index < optionCount; index++)
+            {
+                GameObject optionObject = new GameObject(
+                    "RewardOption" + index.ToString(),
+                    typeof(RectTransform),
+                    typeof(Image),
+                    typeof(Button),
+                    typeof(Outline));
+                optionObject.transform.SetParent(panel, false);
+
+                RectTransform option = optionObject.GetComponent<RectTransform>();
+                option.anchorMin = new Vector2(0f, 1f);
+                option.anchorMax = new Vector2(0f, 1f);
+                option.pivot = new Vector2(0f, 1f);
+                option.anchoredPosition = new Vector2(34f, -100f - (index * 210f));
+                option.sizeDelta = new Vector2(792f, 186f);
+
+                Image optionImage = optionObject.GetComponent<Image>();
+                optionImage.color = new Color(0.07f, 0.11f, 0.125f, 1f);
+
+                Outline optionOutline = optionObject.GetComponent<Outline>();
+                optionOutline.effectColor = new Color(0.86f, 0.68f, 0.35f, 0.42f);
+                optionOutline.effectDistance = new Vector2(1f, -1f);
+
+                Button button = optionObject.GetComponent<Button>();
+                ColorBlock colors = button.colors;
+                colors.normalColor = Color.white;
+                colors.highlightedColor = new Color(1.16f, 1.12f, 1.02f, 1f);
+                colors.pressedColor = new Color(0.86f, 0.8f, 0.68f, 1f);
+                colors.disabledColor = new Color(0.42f, 0.42f, 0.42f, 0.6f);
+                button.colors = colors;
+
+                CreateBar(
+                    option,
+                    "Accent",
+                    new Vector2(0f, 0f),
+                    new Vector2(0f, 1f),
+                    new Vector2(0f, 0f),
+                    new Vector2(6f, 0f),
+                    new Color(0.92f, 0.69f, 0.27f, 0.9f));
+
+                names[index] = CreateText(
+                    option,
+                    "Name",
+                    "-",
+                    font,
+                    26,
+                    FontStyle.Bold,
+                    new Vector2(26f, -16f),
+                    new Vector2(430f, 36f),
+                    TextAnchor.UpperLeft);
+                names[index].color = new Color(0.96f, 0.92f, 0.82f, 1f);
+
+                metas[index] = CreateText(
+                    option,
+                    "Meta",
+                    "-",
+                    font,
+                    16,
+                    FontStyle.Normal,
+                    new Vector2(26f, -54f),
+                    new Vector2(520f, 24f),
+                    TextAnchor.UpperLeft);
+                metas[index].color = new Color(0.72f, 0.7f, 0.64f, 1f);
+
+                details[index] = CreateText(
+                    option,
+                    "Detail",
+                    "-",
+                    font,
+                    16,
+                    FontStyle.Normal,
+                    new Vector2(26f, -82f),
+                    new Vector2(736f, 92f),
+                    TextAnchor.UpperLeft);
+                details[index].color = new Color(0.88f, 0.86f, 0.8f, 1f);
+
+                CreateText(
+                    option,
+                    "Take",
+                    "选这张",
+                    font,
+                    18,
+                    FontStyle.Bold,
+                    new Vector2(620f, -16f),
+                    new Vector2(150f, 30f),
+                    TextAnchor.UpperRight).color =
+                    new Color(0.92f, 0.69f, 0.27f, 1f);
+
+                buttons[index] = button;
+            }
+
+            overlay.SetActive(false);
+            return new BoardHudRewardChoiceView(
+                overlay,
+                title,
+                subtitle,
+                buttons,
+                names,
+                metas,
+                details);
         }
 
         public static BoardHudCombatResultView CreateCombatResultView(

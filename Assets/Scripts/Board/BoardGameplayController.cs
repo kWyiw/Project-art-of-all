@@ -50,6 +50,7 @@ namespace ProjectArtOfAll.Board
         private int pendingForkSelection = -1;
         private bool isMoving;
         private bool awaitingFork;
+        private bool awaitingRewardChoice;
         private bool awaitingEncounterAcceptance;
 
         private void Start()
@@ -227,16 +228,25 @@ namespace ProjectArtOfAll.Board
                 .LastOrDefault();
             if (teleport != null)
             {
+                // R-TILE-005：停在传送格，立即随机位移到另一个传送格。
+                UpdateHudStatus(string.Concat(
+                    "传送 ",
+                    NodeLabel(teleport.FromNodeId),
+                    " → ",
+                    NodeLabel(teleport.ToNodeId)));
                 activeToken.transform.position = GetStandingPosition(
                     activeToken,
                     tilesByNode[teleport.ToNodeId]);
-                yield return new WaitForSeconds(0.12f);
+                yield return new WaitForSeconds(0.35f);
             }
 
             SynchronizeTokensFromCore();
             ResolveDeferredCorePhase();
             isMoving = false;
-            hud?.SetDiceInteractable(!match.IsFinished);
+            hud?.SetDiceInteractable(
+                !match.IsFinished &&
+                !awaitingRewardChoice &&
+                match.State.Phase == MatchPhase.AwaitRoll);
             ActivateCurrentPlayer();
 
             CombatResolvedEvent combat = match.Events.History
@@ -248,6 +258,16 @@ namespace ProjectArtOfAll.Board
                 : combat.Result.IsDraw
                     ? "战斗平局"
                     : $"战斗胜者：玩家 {combat.Result.WinnerPlayerId + 1}";
+
+            bool rewardFailed = match.Events.History
+                .Skip(eventStart)
+                .OfType<RewardFailedEvent>()
+                .Any();
+            if (rewardFailed)
+            {
+                action = "背包已满，这次奖励没拿到（R-ECO-006）";
+            }
+
             UpdateHudStatus(action);
 
             if (combat != null)
@@ -367,6 +387,11 @@ namespace ProjectArtOfAll.Board
 
         private void ResolveDeferredCorePhase()
         {
+            if (awaitingRewardChoice)
+            {
+                return;
+            }
+
             for (int guard = 0; guard < 8; guard++)
             {
                 MatchPlayerState player = match.State.CurrentPlayer;
@@ -376,6 +401,17 @@ namespace ProjectArtOfAll.Board
                         match.Submit(new SetNormaCommand(player.Id, NormaType.Shard));
                         continue;
                     case MatchPhase.AwaitReward:
+                        if (hud != null && match.CurrentRewardChoices.Count > 0)
+                        {
+                            awaitingRewardChoice = true;
+                            hud?.SetDiceInteractable(false);
+                            hud.ShowRewardChoices(
+                                player,
+                                match.CurrentRewardChoices,
+                                OnRewardChosen);
+                            return;
+                        }
+
                         int rewardIndex = FindFirstFittingReward(player);
                         if (rewardIndex < 0)
                         {
@@ -391,6 +427,54 @@ namespace ProjectArtOfAll.Board
                         return;
                 }
             }
+        }
+
+        private void OnRewardChosen(int index)
+        {
+            if (!awaitingRewardChoice ||
+                match == null ||
+                match.State.Phase != MatchPhase.AwaitReward)
+            {
+                return;
+            }
+
+            MatchPlayerState player = match.State.CurrentPlayer;
+            if (index < 0 || index >= match.CurrentRewardChoices.Count)
+            {
+                return;
+            }
+
+            int size = match.CurrentRewardChoices[index].SlotSize;
+            if (player.OwnedCardWidth + size > LoadoutRules.BagCapacity)
+            {
+                return;
+            }
+
+            string chosenName = match.CurrentRewardChoices[index].DisplayName;
+            awaitingRewardChoice = false;
+            hud?.HideRewardChoices();
+            match.Submit(new ChooseRewardCommand(player.Id, index));
+            FinishDeferredPhase(string.Concat(
+                "玩家 ",
+                (player.Id + 1).ToString(),
+                " 获得 ",
+                chosenName));
+        }
+
+        private void FinishDeferredPhase(string message)
+        {
+            ResolveDeferredCorePhase();
+            isMoving = false;
+            hud?.SetDiceInteractable(
+                !match.IsFinished && match.State.Phase == MatchPhase.AwaitRoll);
+            ActivateCurrentPlayer();
+            UpdateHudStatus(message);
+        }
+
+        private static string NodeLabel(int nodeId)
+        {
+            Vector2Int cell = UnityMapGraphFactory.CellFromNodeId(nodeId);
+            return "R" + (cell.x + 1).ToString("D2") + "C" + (cell.y + 1).ToString("D2");
         }
 
         private int FindFirstFittingReward(MatchPlayerState player)

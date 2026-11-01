@@ -65,6 +65,8 @@ namespace ProjectArtOfAll.Board
         private bool encounterButtonBound;
         private BoardHudCardDrawerView cardView;
         private BoardHudCombatResultView combatResultView;
+        private BoardHudRewardChoiceView rewardView;
+        private Action<int> rewardChoiceHandler;
         private MatchPlayerState cachedPlayer;
 
         private void Awake()
@@ -718,6 +720,17 @@ namespace ProjectArtOfAll.Board
                 }
             }
 
+            if (rewardView == null)
+            {
+                rewardView = BoardHudOverlayFactory.CreateRewardChoiceView(transform, font);
+                for (int index = 0; index < rewardView.Buttons.Length; index++)
+                {
+                    int captured = index;
+                    rewardView.Buttons[index].onClick.AddListener(
+                        () => OnRewardChosen(captured));
+                }
+            }
+
             if (combatResultView == null)
             {
                 combatResultView =
@@ -727,6 +740,73 @@ namespace ProjectArtOfAll.Board
                     combatResultView.CloseButton.onClick.AddListener(HideCombatResult);
                 }
             }
+        }
+
+        /// <summary>奖励格二选一：装不下的选项会置灰，不可放弃（R-TILE-006）。</summary>
+        public void ShowRewardChoices(
+            MatchPlayerState player,
+            IReadOnlyList<CardDefinition> choices,
+            Action<int> onChosen)
+        {
+            if (rewardView == null || choices == null || choices.Count == 0)
+            {
+                return;
+            }
+
+            rewardChoiceHandler = onChosen;
+            rewardView.Title.text = string.Concat(
+                "奖励 · 玩家 ",
+                (player.Id + 1).ToString(),
+                " · 选一张");
+            rewardView.Subtitle.text = string.Concat(
+                "免费获得 · 背包 ",
+                player.OwnedCardWidth.ToString(),
+                "/",
+                LoadoutRules.BagCapacity.ToString(),
+                "c · 装不下的牌会置灰（R-TILE-006、R-ECO-006）");
+
+            for (int index = 0; index < rewardView.Buttons.Length; index++)
+            {
+                bool visible = index < choices.Count;
+                rewardView.Buttons[index].gameObject.SetActive(visible);
+                if (!visible)
+                {
+                    continue;
+                }
+
+                CardDefinition definition = choices[index];
+                bool fits = player.OwnedCardWidth + definition.SlotSize <=
+                    LoadoutRules.BagCapacity;
+                rewardView.Names[index].text = definition.DisplayName;
+                rewardView.Metas[index].text = fits
+                    ? CardText.Meta(definition)
+                    : string.Concat(
+                        CardText.Meta(definition),
+                        "  ·  装不下（需要 ",
+                        definition.SlotSize.ToString(),
+                        "c）");
+                rewardView.Details[index].text = CardText.Description(definition);
+                rewardView.Buttons[index].interactable = fits;
+            }
+
+            rewardView.Overlay.SetActive(true);
+        }
+
+        public void HideRewardChoices()
+        {
+            if (rewardView != null)
+            {
+                rewardView.Overlay.SetActive(false);
+            }
+
+            rewardChoiceHandler = null;
+        }
+
+        private void OnRewardChosen(int index)
+        {
+            Action<int> handler = rewardChoiceHandler;
+            rewardChoiceHandler = null;
+            handler?.Invoke(index);
         }
 
         private static string FormatStats(MatchPlayerState player)
