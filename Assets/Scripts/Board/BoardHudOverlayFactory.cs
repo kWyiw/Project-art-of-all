@@ -1001,7 +1001,7 @@ namespace ProjectArtOfAll.Board
             return button;
         }
 
-        private static Text CreateText(
+        internal static Text CreateText(
             Transform parent,
             string name,
             string content,
@@ -1038,7 +1038,7 @@ namespace ProjectArtOfAll.Board
             return text;
         }
 
-        private static GameObject CreateBar(
+        internal static GameObject CreateBar(
             Transform parent,
             string name,
             Vector2 anchorMin,

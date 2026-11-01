@@ -43,6 +43,13 @@ namespace ProjectArtOfAll.Core.Match
         public int Wins { get; internal set; }
         public NormaType Norma { get; internal set; }
         public IReadOnlyList<CardInstance> OwnedCards => cards.OwnedCards;
+
+        /// <summary>True when the card currently sits in the battle row (CJ-5).</summary>
+        public bool IsEquipped(CardInstance card)
+        {
+            return card != null && cards.IsEquipped(card.Uid);
+        }
+
         public IReadOnlyList<CardInstance> BattleCards => cards.BattleCards;
         public int OwnedCardWidth => cards.OwnedWidth;
         public int BattleCardWidth => cards.BattleWidth;
@@ -91,6 +98,13 @@ namespace ProjectArtOfAll.Core.Match
         {
             return Level <= 5 &&
                    cards.TryEquip(cardUid, LoadoutRules.GetBattleCapacity(Level));
+        }
+
+        internal bool TryMoveCard(int cardUid, bool toBattle, int index)
+        {
+            return toBattle
+                ? cards.TryMoveToBattle(cardUid, LoadoutRules.GetBattleCapacity(Level), index)
+                : cards.TryMoveToBag(cardUid, index);
         }
 
         internal bool TryUnequipCard(int cardUid)

@@ -43,6 +43,7 @@ namespace ProjectArtOfAll.Board
         private readonly List<int> pendingForkEdges = new List<int>();
 
         private BoardHudController hud;
+        private int humanPlayerId;
         private BoardCameraController cameraController;
         private BoardPlayerToken activeToken;
         private MapGraph graph;
@@ -65,10 +66,63 @@ namespace ProjectArtOfAll.Board
             cameraController = Camera.main != null
                 ? Camera.main.GetComponent<BoardCameraController>()
                 : null;
+            humanPlayerId = match.State.CurrentPlayer.Id;
             BindHud();
             SynchronizeTokensFromCore();
             ActivateCurrentPlayer();
             UpdateHudStatus();
+        }
+
+        /// <summary>人类席位；卡槽带始终显示这一位玩家的牌。</summary>
+        public MatchPlayerState HumanPlayer => match == null
+            ? null
+            : match.State.Players[humanPlayerId];
+
+        /// <summary>跨区移动 / 同排重排（R-TURN-002 免费动作）。</summary>
+        public void SubmitCardMove(int cardUid, bool toBattle, int index)
+        {
+            if (match == null || match.IsFinished)
+            {
+                return;
+            }
+
+            try
+            {
+                match.Submit(new MoveCardCommand(humanPlayerId, cardUid, toBattle, index));
+            }
+            catch (System.InvalidOperationException error)
+            {
+                hud?.SetMatchStatus(string.Concat("卡牌放不下：", error.Message));
+                return;
+            }
+
+            UpdateHudStatus();
+        }
+
+        /// <summary>拖进出售区松手 = 立即出售，无确认无撤销（UI-4.1.1）。</summary>
+        public void SubmitSellCard(int cardUid)
+        {
+            if (match == null || match.IsFinished)
+            {
+                return;
+            }
+
+            try
+            {
+                match.Submit(new SellCardCommand(humanPlayerId, cardUid));
+            }
+            catch (System.InvalidOperationException error)
+            {
+                hud?.SetMatchStatus(string.Concat("出售失败：", error.Message));
+                return;
+            }
+
+            UpdateHudStatus();
+        }
+
+        public void RefreshCardBand()
+        {
+            hud?.RefreshCardBand(HumanPlayer);
         }
 
         public void RollDice()

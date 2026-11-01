@@ -187,6 +187,25 @@ namespace ProjectArtOfAll.Core.Match
         public int Shards { get; }
     }
 
+    /// <summary>A card changed rows (or order) without changing ownership.</summary>
+    public sealed class CardMovedEvent : GameEvent
+    {
+        public CardMovedEvent(int playerId, int cardUid, string cardId, bool toBattle, int index)
+        {
+            PlayerId = playerId;
+            CardUid = cardUid;
+            CardId = cardId;
+            ToBattle = toBattle;
+            Index = index;
+        }
+
+        public int PlayerId { get; }
+        public int CardUid { get; }
+        public string CardId { get; }
+        public bool ToBattle { get; }
+        public int Index { get; }
+    }
+
     public sealed class CardEquippedEvent : GameEvent
     {
         public CardEquippedEvent(int playerId, int cardUid, bool equipped)

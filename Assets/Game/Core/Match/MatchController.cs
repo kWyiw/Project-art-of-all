@@ -93,6 +93,9 @@ namespace ProjectArtOfAll.Core.Match
                 case SellCardCommand sell:
                     HandleSell(sell);
                     break;
+                case MoveCardCommand move:
+                    HandleMoveCard(move);
+                    break;
                 case EquipCardCommand equip:
                     HandleEquip(equip);
                     break;
@@ -313,6 +316,31 @@ namespace ProjectArtOfAll.Core.Match
                     card.Uid,
                     card.Definition.Id,
                     refund));
+        }
+
+        private void HandleMoveCard(MoveCardCommand command)
+        {
+            ValidateCurrentPlayer(command.PlayerId);
+            CardInstance card = State.CurrentPlayer.FindCard(command.CardUid);
+            if (card == null)
+            {
+                throw new InvalidOperationException(
+                    $"Player {command.PlayerId} does not own card {command.CardUid}.");
+            }
+
+            if (!State.CurrentPlayer.TryMoveCard(command.CardUid, command.ToBattle, command.Index))
+            {
+                throw new InvalidOperationException(
+                    "The card does not fit there at the current battle capacity.");
+            }
+
+            Publish(
+                new CardMovedEvent(
+                    State.CurrentPlayer.Id,
+                    card.Uid,
+                    card.Definition.Id,
+                    command.ToBattle,
+                    command.Index));
         }
 
         private void HandleEquip(EquipCardCommand command)

@@ -32,6 +32,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckHomeProgression();
                 CheckRewardChoice();
                 CheckWarpTeleport();
+                CheckCardBandCommands();
                 CheckSceneMapTeleport();
                 CheckM3FullMatch();
                 CheckM3MatchReport();
@@ -461,6 +462,86 @@ namespace ProjectArtOfAll.Core.Checks
             Assert(
                 controller.State.Players.Any(player => player.Level > 1),
                 "Reward income and Home Norma resolution must allow progression.");
+        }
+
+        /// <summary>
+        /// R-TURN-002：移动/重排是免费动作，但必须按格位宽度校验战斗栏容量（CJ-5）。
+        /// </summary>
+        private static void CheckCardBandCommands()
+        {
+            MapGraph graph = MapGraph.Create(
+                new[]
+                {
+                    new MapNode(0, TileType.Home, 0, 1, 11),
+                    new MapNode(1, TileType.Neutral, -1, 2),
+                    new MapNode(2, TileType.Neutral, -1, 3),
+                    new MapNode(3, TileType.Home, 1, 4),
+                    new MapNode(4, TileType.Neutral, -1, 5),
+                    new MapNode(5, TileType.Neutral, -1, 6),
+                    new MapNode(6, TileType.Home, 2, 7),
+                    new MapNode(7, TileType.Neutral, -1, 8),
+                    new MapNode(8, TileType.Neutral, -1, 9),
+                    new MapNode(9, TileType.Home, 3, 10),
+                    new MapNode(10, TileType.Neutral, -1, 11),
+                    new MapNode(11, TileType.Neutral, -1, 0)
+                },
+                playerCount: 4);
+            MatchController controller = new MatchController(graph, 90125UL);
+            MatchPlayerState player = controller.State.CurrentPlayer;
+            Assert(player.OwnedCards.Count >= 2, "The starting loadout must contain cards.");
+
+            CardInstance battleCard = player.BattleCards[0];
+            controller.Submit(new MoveCardCommand(player.Id, battleCard.Uid, toBattle: false, index: 0));
+            Assert(!player.IsEquipped(battleCard), "Dropping a battle card on the bag must unequip it.");
+            Assert(
+                player.OwnedCards[0].Uid == battleCard.Uid,
+                "The bag row order must follow the drop index.");
+
+            controller.Submit(new MoveCardCommand(player.Id, battleCard.Uid, toBattle: true, index: 0));
+            Assert(
+                player.BattleCards[0].Uid == battleCard.Uid,
+                "Dropping a bag card at index 0 must put it first in the battle row.");
+
+            // 塞满战斗栏：首张放不下的牌必须被拒绝，且容量永不被突破。
+            int capacity = LoadoutRules.GetBattleCapacity(player.Level);
+            CardInstance overflow = null;
+            foreach (CardInstance card in player.OwnedCards.ToArray())
+            {
+                if (player.IsEquipped(card))
+                {
+                    continue;
+                }
+
+                if (player.BattleCardWidth + card.Definition.SlotSize <= capacity)
+                {
+                    controller.Submit(new MoveCardCommand(player.Id, card.Uid, true, 0));
+                    continue;
+                }
+
+                overflow = card;
+            }
+
+            bool rejected = false;
+            if (overflow != null)
+            {
+                try
+                {
+                    controller.Submit(new MoveCardCommand(player.Id, overflow.Uid, true, 0));
+                }
+                catch (InvalidOperationException)
+                {
+                    rejected = true;
+                }
+            }
+
+            if (overflow != null)
+            {
+                Assert(rejected, "A card that does not fit the battle capacity must be rejected.");
+            }
+
+            Assert(
+                player.BattleCardWidth <= capacity,
+                "The battle row must never exceed the capacity of the current level.");
         }
 
         private static void CheckRewardChoice()

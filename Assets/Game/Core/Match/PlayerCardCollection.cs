@@ -77,6 +77,48 @@ namespace ProjectArtOfAll.Core.Match
             return true;
         }
 
+        /// <summary>
+        /// Moves an owned card to <paramref name="index"/> inside the battle row,
+        /// equipping it when it was in the bag. Order is the visual order (UI 规格 §3.2).
+        /// </summary>
+        public bool TryMoveToBattle(int cardUid, int battleCapacity, int index)
+        {
+            CardInstance card = FindByUid(cardUid);
+            if (card == null)
+            {
+                return false;
+            }
+
+            int slotSize = card.Definition.SlotSize;
+            bool already = battleOrder.Contains(cardUid);
+            int widthWithout = BattleWidth - (already ? slotSize : 0);
+            if (widthWithout + slotSize > battleCapacity)
+            {
+                return false;
+            }
+
+            battleOrder.Remove(cardUid);
+            int clamped = Math.Max(0, Math.Min(index, battleOrder.Count));
+            battleOrder.Insert(clamped, cardUid);
+            return true;
+        }
+
+        /// <summary>Moves a card back to the bag row at <paramref name="index"/>.</summary>
+        public bool TryMoveToBag(int cardUid, int index)
+        {
+            CardInstance card = FindByUid(cardUid);
+            if (card == null)
+            {
+                return false;
+            }
+
+            battleOrder.Remove(cardUid);
+            ownedCards.Remove(card);
+            int clamped = Math.Max(0, Math.Min(index, ownedCards.Count));
+            ownedCards.Insert(clamped, card);
+            return true;
+        }
+
         public bool TryUnequip(int cardUid)
         {
             return battleOrder.Remove(cardUid);

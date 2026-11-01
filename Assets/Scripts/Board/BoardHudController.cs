@@ -64,6 +64,7 @@ namespace ProjectArtOfAll.Board
         private float encounterShownAt;
         private bool encounterButtonBound;
         private BoardHudCardDrawerView cardView;
+        private CardBandController cardBand;
         private BoardHudCombatResultView combatResultView;
         private BoardHudRewardChoiceView rewardView;
         private Action<int> rewardChoiceHandler;
@@ -147,6 +148,12 @@ namespace ProjectArtOfAll.Board
 
         public void ToggleDrawer()
         {
+            if (cardBand != null)
+            {
+                cardBand.ToggleCollapsed();
+                return;
+            }
+
             SetDrawerOpen(!isOpen);
         }
 
@@ -218,10 +225,30 @@ namespace ProjectArtOfAll.Board
         public void ShowCards(MatchPlayerState player)
         {
             cachedPlayer = player;
+            RefreshCardBand(player);
             if (cardView != null && cardView.Overlay.activeSelf)
             {
                 RenderCards();
             }
+        }
+
+        /// <summary>常驻卡槽带：没有就建，有就按当前玩家重画。</summary>
+        public void RefreshCardBand(MatchPlayerState player)
+        {
+            if (cardBand == null)
+            {
+                if (boardGameplay == null)
+                {
+                    return;
+                }
+
+                cardBand = CardBandController.Create(
+                    boardGameplay,
+                    (RectTransform)transform,
+                    BoardHudOverlayFactory.CreateFont());
+            }
+
+            cardBand.Refresh(player ?? boardGameplay?.HumanPlayer);
         }
 
         public void ToggleCardView()

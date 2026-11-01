@@ -72,6 +72,26 @@ namespace ProjectArtOfAll.Core.Match
         public int CardUid { get; }
     }
 
+    /// <summary>
+    /// Free card action (`大富翁层规则书.md` R-TURN-002): move a card inside a row or
+    /// across the bag / battle boundary, inserting it at <see cref="Index"/>.
+    /// </summary>
+    public sealed class MoveCardCommand : IMatchCommand
+    {
+        public MoveCardCommand(int playerId, int cardUid, bool toBattle, int index)
+        {
+            PlayerId = playerId;
+            CardUid = cardUid;
+            ToBattle = toBattle;
+            Index = index;
+        }
+
+        public int PlayerId { get; }
+        public int CardUid { get; }
+        public bool ToBattle { get; }
+        public int Index { get; }
+    }
+
     public sealed class EquipCardCommand : IMatchCommand
     {
         public EquipCardCommand(int playerId, int cardUid)
