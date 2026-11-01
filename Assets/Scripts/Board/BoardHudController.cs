@@ -259,8 +259,18 @@ namespace ProjectArtOfAll.Board
                 if (diceButton != null)
                 {
                     cardBand.DiceButtonTarget = (RectTransform)diceButton.transform;
-                    cardBand.ApplyScreenLayout();
                 }
+
+                if (drawerHandleLabel != null)
+                {
+                    RectTransform handle = drawerHandleLabel.transform.parent as RectTransform;
+                    if (handle != null && handle != (RectTransform)transform)
+                    {
+                        cardBand.HandleButtonTarget = handle;
+                    }
+                }
+
+                cardBand.ApplyScreenLayout();
             }
 
             cardBand.Refresh(player ?? boardGameplay?.HumanPlayer);

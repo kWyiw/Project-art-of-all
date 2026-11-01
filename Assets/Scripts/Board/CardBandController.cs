@@ -174,8 +174,11 @@ namespace ProjectArtOfAll.Board
         /// <summary>掷骰子按钮：由 HUD 注进来，跟着带高一起挪到带上方右侧的空地。</summary>
         public RectTransform DiceButtonTarget { get; set; }
 
-        /// <summary>带子当前高度（四角玩家栏用它把下方两块抬到带子上沿）。</summary>
+        /// <summary>带子当前高度。</summary>
         public float CurrentBandHeight => root.rect.height;
+
+        /// <summary>「展开卡组」按钮：由 HUD 注进来，挂到带子左侧外沿。</summary>
+        public RectTransform HandleButtonTarget { get; set; }
 
         /// <summary>带高 = 画布高度的一半（盖满下半屏）。</summary>
         public void ApplyScreenLayout()
@@ -220,6 +223,19 @@ namespace ProjectArtOfAll.Board
             DiceButtonTarget.anchorMax = new Vector2(1f, 0f);
             DiceButtonTarget.pivot = new Vector2(1f, 0f);
             DiceButtonTarget.anchoredPosition = new Vector2(-24f, bandHeight + 18f);
+
+            if (HandleButtonTarget == null)
+            {
+                return;
+            }
+
+            float bandWidth = root.sizeDelta.x;
+            HandleButtonTarget.anchorMin = new Vector2(0.5f, 0f);
+            HandleButtonTarget.anchorMax = new Vector2(0.5f, 0f);
+            HandleButtonTarget.pivot = new Vector2(1f, 0.5f);
+            HandleButtonTarget.sizeDelta = new Vector2(150f, 34f);
+            HandleButtonTarget.anchoredPosition =
+                new Vector2(-(bandWidth * 0.5f) - 8f, bandHeight * 0.55f);
         }
 
         private void SetBandHeight(float height)
@@ -236,19 +252,19 @@ namespace ProjectArtOfAll.Board
             float rowWidth = root.rect.width;
             float sellWidth = Mathf.Clamp(rowWidth * 0.09f, 56f, 92f);
             float reserve = sellWidth + 14f;
-            float available = bandHeight - HandleHeight - 20f;
-            float rowGap = Mathf.Max(6f, (available - cardHeight * 2f) * 0.5f);
 
-            bagLabel.rectTransform.anchoredPosition = new Vector2(14f, -top + 2f);
-            bagRow.anchoredPosition = new Vector2(0f, -(top + 22f));
-            bagRow.sizeDelta = new Vector2(-reserve, cardHeight);
+            // 两排紧挨着：行名放到左侧专用列里，不再靠"中间空一行"来放标签。
+            float labelColumn = 64f;
+            float battleTop = top + 2f + cardHeight + 6f;
 
-            battleLabel.rectTransform.anchoredPosition = new Vector2(14f, -(top + cardHeight + rowGap + 22f));
-            battleRow.anchoredPosition = new Vector2(0f, -(top + cardHeight + rowGap + 46f));
-            battleRow.sizeDelta = new Vector2(-reserve, cardHeight);
+            bagLabel.rectTransform.anchoredPosition = new Vector2(14f, -(top + 8f));
+            bagRow.anchoredPosition = new Vector2(labelColumn, -(top + 2f));
+            bagRow.sizeDelta = new Vector2(-reserve - labelColumn, cardHeight);
 
-            battleCapacityLabel.rectTransform.anchoredPosition =
-                new Vector2(14f, -(top + cardHeight + rowGap + 22f) - 18f);
+            battleLabel.rectTransform.anchoredPosition = new Vector2(14f, -battleTop - 4f);
+            battleCapacityLabel.rectTransform.anchoredPosition = new Vector2(14f, -battleTop - 22f);
+            battleRow.anchoredPosition = new Vector2(labelColumn, -battleTop);
+            battleRow.sizeDelta = new Vector2(-reserve - labelColumn, cardHeight);
 
             RectTransform sell = sellZone;
             sell.anchorMin = new Vector2(1f, 0f);
