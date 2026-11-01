@@ -160,11 +160,20 @@ namespace ProjectArtOfAll.Board
             panel.offsetMin = Vector2.zero;
             panel.offsetMax = Vector2.zero;
 
+            // 先激活再建内容：挂在失活层级下新建的 Text 不会重建字形，第二场就没字了。
+            gameObject.SetActive(true);
+            transform.SetAsLastSibling();
+
             ClearContent();
             BuildBody(result, battle, CanvasWidth(), CanvasHeight(), leftIsHuman, leftTitle, rightTitle);
 
-            gameObject.SetActive(true);
-            transform.SetAsLastSibling();
+            Debug.Log(string.Concat(
+                "[Combat] playback cards ",
+                battle != null && battle.Left != null ? battle.Left.BattleCards.Count.ToString() : "-",
+                "/",
+                battle != null && battle.Right != null ? battle.Right.BattleCards.Count.ToString() : "-",
+                " font=",
+                BoardHudOverlayFactory.CreateFont() != null ? "ok" : "null"));
             RefreshMeters();
             RefreshClock();
             ApplySpeed(speed);

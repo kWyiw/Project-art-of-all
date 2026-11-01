@@ -463,16 +463,24 @@ namespace ProjectArtOfAll.UI
             string rightLabel = "右方 · " + rightDeck.Count + " 张 · " + rightHealth + " 生命";
             SetStatus("开始战斗：左 " + leftDeck.Count + " 张 / 右 " + rightDeck.Count + " 张。");
 
-            if (playback == null)
+            if (playback != null)
             {
-                playback = CombatPlaybackView.Create(transform, font);
+                Destroy(playback.gameObject);
+                playback = null;
             }
+
+            playback = CombatPlaybackView.Create(transform, font);
 
             busy = true;
             playback.Play(resolved, leftLabel, rightLabel, true, () =>
             {
                 busy = false;
                 SetStatus("这一场打完了，可以改卡组再打一次。");
+                if (playback != null)
+                {
+                    Destroy(playback.gameObject);
+                    playback = null;
+                }
             }, preferredSpeed);
         }
 

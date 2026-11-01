@@ -1220,9 +1220,17 @@ namespace ProjectArtOfAll.Board
             return row;
         }
 
+        private static Font cachedFont;
+
+        /// <summary>整个进程共用一份动态字体：反复创建会在下一次对局里拿不到字形。</summary>
         public static Font CreateFont()
         {
-            Font font = Font.CreateDynamicFontFromOSFont(
+            if (cachedFont != null)
+            {
+                return cachedFont;
+            }
+
+            cachedFont = Font.CreateDynamicFontFromOSFont(
                 new[]
                 {
                     "Microsoft YaHei UI",
@@ -1232,9 +1240,18 @@ namespace ProjectArtOfAll.Board
                     "Arial"
                 },
                 22);
-            return font != null
-                ? font
-                : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (cachedFont == null)
+            {
+                cachedFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            }
+
+            if (cachedFont != null)
+            {
+                // 战斗回放每场都会重建文本对象，字体本身不能被回收。
+                cachedFont.hideFlags = HideFlags.DontUnloadUnusedAsset;
+            }
+
+            return cachedFont;
         }
 
         private static Text CreateLoadoutText(
