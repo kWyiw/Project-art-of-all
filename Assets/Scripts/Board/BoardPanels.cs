@@ -470,6 +470,7 @@ namespace ProjectArtOfAll.Board
         private static readonly Color PanelColor = new Color(0.048f, 0.078f, 0.09f, 0.99f);
         private static readonly Color Brass = new Color(0.92f, 0.69f, 0.27f, 1f);
         private static readonly Color TextColor = new Color(0.94f, 0.93f, 0.88f, 1f);
+        private static readonly Color MutedText = new Color(0.64f, 0.66f, 0.63f, 1f);
 
         private Font font;
         private Button resumeButton;
@@ -509,6 +510,9 @@ namespace ProjectArtOfAll.Board
             return view;
         }
 
+        private const float PanelWidth = 520f;
+        private const float PanelHeight = 450f;
+
         private void Build(
             System.Action onResume,
             System.Action<float> onCardScale,
@@ -517,111 +521,136 @@ namespace ProjectArtOfAll.Board
             GameObject panelObject = BoardHudOverlayFactory.CreateBar(
                 transform, "Panel",
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(-250f, -230f), new Vector2(250f, 230f),
+                new Vector2(-PanelWidth * 0.5f, -PanelHeight * 0.5f),
+                new Vector2(PanelWidth * 0.5f, PanelHeight * 0.5f),
                 PanelColor);
 
-            Text title = BoardHudOverlayFactory.CreateText(
-                panelObject.transform, "Title", "已暂停", font, 28, FontStyle.Bold,
-                new Vector2(0f, -36f), new Vector2(460f, 36f), TextAnchor.MiddleCenter);
+            Text title = Label(
+                panelObject.transform, "Title", "已暂停", 24f, 24f, 472f, 34f,
+                26, FontStyle.Bold, TextAnchor.MiddleCenter);
             title.color = Brass;
 
-            Text hint = BoardHudOverlayFactory.CreateText(
-                panelObject.transform, "Hint", "Esc 继续 / 关闭菜单", font, 13, FontStyle.Normal,
-                new Vector2(0f, -72f), new Vector2(460f, 22f), TextAnchor.MiddleCenter);
-            hint.color = new Color(0.66f, 0.68f, 0.66f, 1f);
+            Text hint = Label(
+                panelObject.transform, "Hint", "玩法进行中 · Esc 继续", 24f, 60f, 472f, 22f,
+                13, FontStyle.Normal, TextAnchor.MiddleCenter);
+            hint.color = MutedText;
 
-            resumeButton = MakeButton(panelObject.transform, "继续游戏", -110f, onResume);
-            MakeButton(panelObject.transform, "重开本局", -170f, RestartScene);
-            MakeButton(panelObject.transform, "退出游戏", -230f, QuitGame);
+            resumeButton = MakeButton(panelObject.transform, "继续游戏", 96f, onResume);
+            MakeButton(panelObject.transform, "重开本局", 150f, RestartScene);
+            MakeButton(panelObject.transform, "退出游戏", 204f, QuitGame);
 
-            BoardHudOverlayFactory.CreateText(
-                panelObject.transform, "SettingsTitle", "设置", font, 16, FontStyle.Bold,
-                new Vector2(-200f, -296f), new Vector2(120f, 24f), TextAnchor.MiddleLeft)
-                .color = new Color(0.72f, 0.68f, 0.52f, 1f);
+            BoardHudOverlayFactory.CreateBar(
+                panelObject.transform, "Divider",
+                new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(24f, -257f), new Vector2(PanelWidth - 24f, -256f),
+                new Color(0.86f, 0.62f, 0.20f, 0.55f));
 
-            BoardHudOverlayFactory.CreateText(
-                panelObject.transform, "CardScaleLabel", "卡槽大小", font, 14, FontStyle.Normal,
-                new Vector2(-200f, -338f), new Vector2(96f, 24f), TextAnchor.MiddleLeft)
+            Label(
+                panelObject.transform, "SettingsTitle", "设置", 24f, 266f, 120f, 24f,
+                16, FontStyle.Bold, TextAnchor.MiddleLeft)
+                .color = new Color(0.86f, 0.68f, 0.30f, 1f);
+
+            Label(
+                panelObject.transform, "CardScaleLabel", "卡槽大小", 24f, 302f, 96f, 26f,
+                14, FontStyle.Normal, TextAnchor.MiddleLeft)
                 .color = TextColor;
 
             Slider scaleSlider = MakeSlider(
-                panelObject.transform, new Vector2(92f, -338f), new Vector2(210f, 26f),
+                panelObject.transform, new Vector2(130f, -303f), new Vector2(230f, 24f),
                 0.75f, 1.25f, 1f);
-            cardScaleValue = BoardHudOverlayFactory.CreateText(
-                panelObject.transform, "CardScaleValue", "100%", font, 14, FontStyle.Normal,
-                new Vector2(196f, -338f), new Vector2(64f, 24f), TextAnchor.MiddleRight);
+
+            cardScaleValue = Label(
+                panelObject.transform, "CardScaleValue", "100%", 366f, 302f, 70f, 26f,
+                14, FontStyle.Normal, TextAnchor.MiddleRight);
             cardScaleValue.color = Brass;
+
             scaleSlider.onValueChanged.AddListener(value =>
             {
                 cardScaleValue.text = Mathf.RoundToInt(value * 100f) + "%";
                 onCardScale?.Invoke(value);
             });
 
-            BoardHudOverlayFactory.CreateText(
-                panelObject.transform, "PathsLabel", "地图路径线", font, 14, FontStyle.Normal,
-                new Vector2(-200f, -384f), new Vector2(110f, 24f), TextAnchor.MiddleLeft)
+            Label(
+                panelObject.transform, "PathsLabel", "地图路径线", 24f, 344f, 110f, 26f,
+                14, FontStyle.Normal, TextAnchor.MiddleLeft)
                 .color = TextColor;
 
-            pathToggleButton = MakeSmallButton(
-                panelObject.transform, "显示", new Vector2(120f, -384f), new Vector2(120f, 30f), () =>
+            pathToggleButton = MakeTopButton(
+                panelObject.transform, "显示", 300f, 342f, 120f, 30f, () =>
                 {
                     pathsVisible = !pathsVisible;
                     pathToggleLabel.text = pathsVisible ? "显示" : "隐藏";
                     onPathsVisible?.Invoke(pathsVisible);
                 });
             pathToggleLabel = pathToggleButton.GetComponentInChildren<Text>();
+
+            Text footer = Label(
+                panelObject.transform, "Footer", "设置只影响表现，不改任何规则数值", 24f, 394f, 472f, 22f,
+                12, FontStyle.Normal, TextAnchor.MiddleCenter);
+            footer.color = MutedText;
         }
 
-        private Button MakeButton(Transform parent, string label, float offsetY, System.Action onClick)
+        /// <summary>左上角锚点定位的文字（x/y 从面板左上角量起，y 向下为负）。</summary>
+        private Text Label(
+            Transform parent,
+            string name,
+            string content,
+            float x,
+            float y,
+            float width,
+            float height,
+            int fontSize,
+            FontStyle style,
+            TextAnchor alignment)
         {
-            GameObject buttonObject = BoardHudOverlayFactory.CreateBar(
-                parent, "Button_" + label,
-                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(-92f, offsetY - 22f), new Vector2(92f, offsetY + 22f),
-                new Color(0.89f, 0.64f, 0.20f, 1f));
-            Button button = buttonObject.AddComponent<Button>();
-            button.transition = Selectable.Transition.None;
-            button.onClick.AddListener(() => onClick?.Invoke());
-            Text text = BoardHudOverlayFactory.CreateText(
-                buttonObject.transform, "Label", label, font, 15, FontStyle.Bold,
-                new Vector2(0f, 0f), new Vector2(184f, 44f), TextAnchor.MiddleCenter);
-            text.rectTransform.anchorMin = Vector2.zero;
-            text.rectTransform.anchorMax = Vector2.one;
-            text.rectTransform.pivot = new Vector2(0.5f, 0.5f);
-            text.rectTransform.offsetMin = Vector2.zero;
-            text.rectTransform.offsetMax = Vector2.zero;
-            text.color = new Color(0.09f, 0.08f, 0.05f, 1f);
-            return button;
+            return BoardHudOverlayFactory.CreateText(
+                parent, name, content, font, fontSize, style,
+                new Vector2(x, -y), new Vector2(width, height), alignment);
         }
 
-        private Button MakeSmallButton(
+        private Button MakeButton(Transform parent, string label, float y, System.Action onClick)
+        {
+            const float width = 184f;
+            return MakeTopButton(
+                parent, label, (PanelWidth - width) * 0.5f, y, width, 44f, onClick);
+        }
+
+        private Button MakeTopButton(
             Transform parent,
             string label,
-            Vector2 anchoredPosition,
-            Vector2 size,
+            float x,
+            float y,
+            float width,
+            float height,
             System.Action onClick)
         {
             GameObject buttonObject = BoardHudOverlayFactory.CreateBar(
                 parent, "Button_" + label,
-                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                anchoredPosition - size * 0.5f, anchoredPosition + size * 0.5f,
-                new Color(0.89f, 0.64f, 0.20f, 0.92f));
+                new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(x, -(y + height)), new Vector2(x + width, -y),
+                new Color(0.89f, 0.64f, 0.20f, 1f));
+            Image image = buttonObject.GetComponent<Image>();
+            image.raycastTarget = true;
+
             Button button = buttonObject.AddComponent<Button>();
             button.transition = Selectable.Transition.None;
+            button.targetGraphic = image;
             button.onClick.AddListener(() => onClick?.Invoke());
+
             Text text = BoardHudOverlayFactory.CreateText(
-                buttonObject.transform, "Label", label, font, 14, FontStyle.Bold,
-                Vector2.zero, size, TextAnchor.MiddleCenter);
-            text.rectTransform.anchorMin = Vector2.zero;
-            text.rectTransform.anchorMax = Vector2.one;
-            text.rectTransform.pivot = new Vector2(0.5f, 0.5f);
-            text.rectTransform.offsetMin = Vector2.zero;
-            text.rectTransform.offsetMax = Vector2.zero;
+                buttonObject.transform, "Label", label, font, 15, FontStyle.Bold,
+                Vector2.zero, new Vector2(width, height), TextAnchor.MiddleCenter);
+            RectTransform rect = text.rectTransform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
             text.color = new Color(0.09f, 0.08f, 0.05f, 1f);
             return button;
         }
 
-        private Slider MakeSlider(
+        private static Slider MakeSlider(
             Transform parent,
             Vector2 anchoredPosition,
             Vector2 size,
@@ -635,9 +664,9 @@ namespace ProjectArtOfAll.Board
                 typeof(Slider));
             RectTransform rect = sliderObject.GetComponent<RectTransform>();
             rect.SetParent(parent, false);
-            rect.anchorMin = new Vector2(0.5f, 0.5f);
-            rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
             rect.sizeDelta = size;
             rect.anchoredPosition = anchoredPosition;
 
@@ -674,14 +703,16 @@ namespace ProjectArtOfAll.Board
             GameObject handle = BoardHudOverlayFactory.CreateBar(
                 handleArea.transform, "Handle",
                 new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
-                new Vector2(-8f, -11f), new Vector2(8f, 11f),
+                new Vector2(-9f, -12f), new Vector2(9f, 12f),
                 new Color(0.98f, 0.86f, 0.52f, 1f));
+            Image handleImage = handle.GetComponent<Image>();
+            handleImage.raycastTarget = true;
 
             Slider slider = sliderObject.GetComponent<Slider>();
             slider.transition = Selectable.Transition.None;
             slider.fillRect = fill.GetComponent<RectTransform>();
             slider.handleRect = handle.GetComponent<RectTransform>();
-            slider.targetGraphic = handle.GetComponent<Image>();
+            slider.targetGraphic = handleImage;
             slider.direction = Slider.Direction.LeftToRight;
             slider.minValue = minimum;
             slider.maxValue = maximum;
