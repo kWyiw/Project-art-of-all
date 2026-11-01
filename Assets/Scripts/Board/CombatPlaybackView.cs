@@ -16,7 +16,7 @@ namespace ProjectArtOfAll.Board
     /// 施放闪动与伤害跳字。纯表现层——结算早已在 CombatSimulation 里跑完，
     /// 这里只沿着事件时间轴复现一遍，所以不会影响任何对局结果。
     ///
-    /// 版式（画面正中的一条横带）：
+    /// 版式（铺满全屏）：
     ///   对手生命（最上，红）→ 对手战斗栏 → 自己战斗栏 → 自己生命（最下，红）。
     /// </summary>
     public sealed class CombatPlaybackView : MonoBehaviour
@@ -24,14 +24,15 @@ namespace ProjectArtOfAll.Board
         private const int TicksPerSecond = CombatSimulation.TicksPerSecond;
         private const float FlashSeconds = 0.22f;
         private const float PopupSeconds = 0.8f;
-        private const float Pad = 14f;
-        private const float HeaderHeight = 24f;
-        private const float HealthHeight = 22f;
-        private const float ShieldHeight = 7f;
-        private const float StatusHeight = 14f;
-        private const float ControlsHeight = 30f;
+        private const float Pad = 26f;
+        private const float HeaderHeight = 34f;
+        private const float HealthHeight = 26f;
+        private const float ShieldHeight = 8f;
+        private const float StatusHeight = 18f;
+        private const float ControlsHeight = 44f;
+        private const float BlockGap = 10f;
 
-        private static readonly Color PanelColor = new Color(0.043f, 0.070f, 0.082f, 0.96f);
+        private static readonly Color PanelColor = new Color(0.043f, 0.070f, 0.082f, 0.98f);
         private static readonly Color BrassColor = new Color(0.92f, 0.69f, 0.27f, 1f);
         private static readonly Color InkColor = new Color(0.93f, 0.92f, 0.86f, 1f);
         private static readonly Color MutedColor = new Color(0.66f, 0.70f, 0.68f, 1f);
@@ -107,7 +108,7 @@ namespace ProjectArtOfAll.Board
             overlayRect.offsetMax = Vector2.zero;
 
             Image scrim = overlay.GetComponent<Image>();
-            scrim.color = new Color(0.01f, 0.018f, 0.022f, 0.42f);
+            scrim.color = new Color(0.01f, 0.018f, 0.022f, 0.92f);
             scrim.raycastTarget = true;
 
             CombatPlaybackView view = overlay.AddComponent<CombatPlaybackView>();
@@ -146,19 +147,14 @@ namespace ProjectArtOfAll.Board
             finished = false;
             duration = Mathf.Max(0.5f, result.EndTick / (float)TicksPerSecond);
 
-            float panelWidth = PanelWidth();
-            float panelHeight = PanelHeight();
-            panel.sizeDelta = new Vector2(panelWidth, panelHeight);
+            // 全屏：面板直接铺满画布，尺寸从画布实时读出来。
+            panel.anchorMin = Vector2.zero;
+            panel.anchorMax = Vector2.one;
+            panel.offsetMin = Vector2.zero;
+            panel.offsetMax = Vector2.zero;
 
             ClearContent();
-            BuildBody(
-                result,
-                battle,
-                panelWidth,
-                panelHeight,
-                leftIsHuman,
-                leftTitle,
-                rightTitle);
+            BuildBody(result, battle, CanvasWidth(), CanvasHeight(), leftIsHuman, leftTitle, rightTitle);
 
             gameObject.SetActive(true);
             transform.SetAsLastSibling();
@@ -168,16 +164,16 @@ namespace ProjectArtOfAll.Board
             StartCoroutine(Run());
         }
 
-        private float PanelWidth()
+        private float CanvasWidth()
         {
             float width = root != null && root.rect.width > 1f ? root.rect.width : Screen.width;
-            return Mathf.Clamp(width * 0.58f, 620f, 1080f);
+            return Mathf.Max(720f, width);
         }
 
-        private float PanelHeight()
+        private float CanvasHeight()
         {
             float height = root != null && root.rect.height > 1f ? root.rect.height : Screen.height;
-            return Mathf.Clamp(height * 0.34f, 250f, 430f);
+            return Mathf.Max(480f, height);
         }
 
         private void Build(RectTransform overlay, Font font)
@@ -191,11 +187,11 @@ namespace ProjectArtOfAll.Board
             panelObject.transform.SetParent(overlay, false);
 
             panel = (RectTransform)panelObject.transform;
-            panel.anchorMin = new Vector2(0.5f, 0.5f);
-            panel.anchorMax = new Vector2(0.5f, 0.5f);
+            panel.anchorMin = Vector2.zero;
+            panel.anchorMax = Vector2.one;
             panel.pivot = new Vector2(0.5f, 0.5f);
-            panel.anchoredPosition = Vector2.zero;
-            panel.sizeDelta = new Vector2(900f, 340f);
+            panel.offsetMin = Vector2.zero;
+            panel.offsetMax = Vector2.zero;
 
             Image panelImage = panelObject.GetComponent<Image>();
             panelImage.color = PanelColor;
@@ -210,11 +206,11 @@ namespace ProjectArtOfAll.Board
                 "BrassRule",
                 new Vector2(0f, 1f),
                 new Vector2(1f, 1f),
-                new Vector2(0f, 4f),
+                new Vector2(0f, 5f),
                 new Vector2(0f, 0f),
                 BrassColor);
 
-            content = MakeRect(panel, "Content", Vector2.zero, new Vector2(900f, 340f));
+            content = MakeRect(panel, "Content", Vector2.zero, new Vector2(1000f, 600f));
             Stretch(content);
         }
 
@@ -249,9 +245,14 @@ namespace ProjectArtOfAll.Board
             Font font = BoardHudOverlayFactory.CreateFont();
             float innerWidth = panelWidth - Pad * 2f;
 
-            float sideBlock = HealthHeight + ShieldHeight + StatusHeight + 8f;
-            float rows = panelHeight - 16f - HeaderHeight - sideBlock * 2f - ControlsHeight - 12f;
-            float rowHeight = Mathf.Max(56f, rows * 0.5f);
+            float sideBlock = HealthHeight + ShieldHeight + StatusHeight + BlockGap * 2f;
+            float rows = panelHeight
+                - Pad * 2f
+                - HeaderHeight
+                - sideBlock * 2f
+                - ControlsHeight
+                - BlockGap * 3f;
+            float rowHeight = Mathf.Max(90f, rows * 0.5f);
 
             // ---- 顶部：标题 + 计时 ----
             subtitleLabel = BoardHudOverlayFactory.CreateText(
@@ -259,27 +260,27 @@ namespace ProjectArtOfAll.Board
                 "Subtitle",
                 string.Concat(leftTitle, "　对　", rightTitle),
                 font,
-                15,
+                24,
                 FontStyle.Bold,
                 new Vector2(Pad, 0f),
                 new Vector2(innerWidth * 0.62f, HeaderHeight),
                 TextAnchor.UpperLeft);
-            AnchorTopLeft(subtitleLabel.rectTransform, new Vector2(Pad, 0f));
+            AnchorTopLeft(subtitleLabel.rectTransform, new Vector2(Pad, -4f));
 
             clockLabel = BoardHudOverlayFactory.CreateText(
                 content,
                 "Clock",
                 "0.0s / 0.0s",
                 font,
-                14,
+                22,
                 FontStyle.Bold,
                 Vector2.zero,
                 new Vector2(innerWidth * 0.38f, HeaderHeight),
                 TextAnchor.UpperRight);
-            AnchorTopRight(clockLabel.rectTransform, new Vector2(-Pad, 0f));
+            AnchorTopRight(clockLabel.rectTransform, new Vector2(-Pad, -4f));
             clockLabel.color = BrassColor;
 
-            float top = -HeaderHeight;
+            float top = -(HeaderHeight + BlockGap);
 
             // ---- 上半：对手（生命在最上，战斗栏在下）----
             int leftId = battle != null ? battle.Left.PlayerId : result.WinnerPlayerId;
@@ -308,7 +309,7 @@ namespace ProjectArtOfAll.Board
                 foeMaxHealth,
                 out float foeHeight);
             AnchorTopLeft(foeSide.Root, new Vector2(Pad, top));
-            top -= foeHeight + 6f;
+            top -= foeHeight + BlockGap;
 
             // ---- 下半：自己（战斗栏在上，生命在最下）----
             selfSide = BuildSide(
@@ -320,7 +321,7 @@ namespace ProjectArtOfAll.Board
                 selfSnapshot,
                 selfMaxHealth,
                 out float selfHeight);
-            float selfTop = -panelHeight + 10f + ControlsHeight + selfHeight;
+            float selfTop = -panelHeight + Pad + ControlsHeight + BlockGap + selfHeight;
             AnchorTopLeft(selfSide.Root, new Vector2(Pad, selfTop));
 
             // ---- 底部：日志 + 速度 ----
@@ -329,30 +330,31 @@ namespace ProjectArtOfAll.Board
                 "Log",
                 "战斗开始",
                 font,
-                14,
+                18,
                 FontStyle.Normal,
                 Vector2.zero,
-                new Vector2(innerWidth - 300f, ControlsHeight),
+                new Vector2(innerWidth - 420f, ControlsHeight),
                 TextAnchor.MiddleLeft);
-            AnchorBottomLeft(logLabel.rectTransform, new Vector2(Pad, 4f));
+            AnchorBottomLeft(logLabel.rectTransform, new Vector2(Pad, Pad * 0.5f));
             logLabel.color = new Color(0.86f, 0.80f, 0.62f, 1f);
 
-            const float buttonWidth = 62f;
-            float startX = -Pad - 132f - 6f - buttonWidth * 3f - 8f;
+            const float buttonWidth = 78f;
+            float skipWidth = 150f;
+            float startX = -Pad - skipWidth - BlockGap - buttonWidth * 3f - BlockGap;
             CreateSpeedButton(font, "1x", 1f, startX);
-            CreateSpeedButton(font, "2x", 2f, startX + buttonWidth + 3f);
-            CreateSpeedButton(font, "4x", 4f, startX + (buttonWidth + 3f) * 2f);
+            CreateSpeedButton(font, "2x", 2f, startX + buttonWidth + 6f);
+            CreateSpeedButton(font, "4x", 4f, startX + (buttonWidth + 6f) * 2f);
 
             Button skip = MakeButton(
                 content,
                 "Skip",
                 "跳过",
                 font,
-                13,
+                18,
                 Vector2.zero,
-                new Vector2(132f, ControlsHeight - 4f),
+                new Vector2(skipWidth, ControlsHeight - 6f),
                 () => skipped = true);
-            AnchorBottomRight((RectTransform)skip.transform, new Vector2(-Pad, 4f));
+            AnchorBottomRight((RectTransform)skip.transform, new Vector2(-Pad, Pad * 0.5f));
         }
 
         private SideRuntime BuildSide(
@@ -393,19 +395,19 @@ namespace ProjectArtOfAll.Board
                     new Vector2(innerWidth, rowHeight));
                 AnchorTopLeft(row, Vector2.zero);
                 side.CardRow = row;
-                used += rowHeight + 4f;
+                used += rowHeight + BlockGap;
 
                 side.StatusLabel = BoardHudOverlayFactory.CreateText(
                     rootRect,
                     "Status",
                     string.Empty,
                     font,
-                    11,
+                    16,
                     FontStyle.Normal,
                     Vector2.zero,
                     new Vector2(innerWidth, StatusHeight),
                     TextAnchor.UpperLeft);
-                AnchorTopLeft(side.StatusLabel.rectTransform, new Vector2(0f, -used));
+                AnchorTopLeft(side.StatusLabel.rectTransform, new Vector2(2f, -used));
                 side.StatusLabel.color = new Color(0.80f, 0.74f, 0.60f, 1f);
                 used += StatusHeight;
 
@@ -417,7 +419,7 @@ namespace ProjectArtOfAll.Board
                 AnchorTopLeft(shield, new Vector2(0f, -used));
                 MakeFill(shield, "Back", ShieldBack, innerWidth);
                 side.ShieldFill = MakeFill(shield, "Fill", ShieldColor, innerWidth);
-                used += ShieldHeight + 2f;
+                used += ShieldHeight + 3f;
 
                 RectTransform health = MakeRect(
                     rootRect,
@@ -432,14 +434,14 @@ namespace ProjectArtOfAll.Board
                     "HealthLabel",
                     string.Empty,
                     font,
-                    12,
+                    20,
                     FontStyle.Bold,
                     Vector2.zero,
                     new Vector2(innerWidth - 16f, HealthHeight),
                     TextAnchor.MiddleCenter);
                 Stretch(side.HealthLabel.rectTransform);
-                side.HealthLabel.rectTransform.offsetMin = new Vector2(10f, 0f);
-                side.HealthLabel.rectTransform.offsetMax = new Vector2(-10f, 0f);
+                side.HealthLabel.rectTransform.offsetMin = new Vector2(12f, 0f);
+                side.HealthLabel.rectTransform.offsetMax = new Vector2(-12f, 0f);
                 side.HealthLabel.color = InkColor;
                 used += HealthHeight;
             }
@@ -459,16 +461,16 @@ namespace ProjectArtOfAll.Board
                     "HealthLabel",
                     string.Empty,
                     font,
-                    12,
+                    20,
                     FontStyle.Bold,
                     Vector2.zero,
                     new Vector2(innerWidth - 16f, HealthHeight),
                     TextAnchor.MiddleCenter);
                 Stretch(side.HealthLabel.rectTransform);
-                side.HealthLabel.rectTransform.offsetMin = new Vector2(10f, 0f);
-                side.HealthLabel.rectTransform.offsetMax = new Vector2(-10f, 0f);
+                side.HealthLabel.rectTransform.offsetMin = new Vector2(12f, 0f);
+                side.HealthLabel.rectTransform.offsetMax = new Vector2(-12f, 0f);
                 side.HealthLabel.color = InkColor;
-                used += HealthHeight + 2f;
+                used += HealthHeight + 3f;
 
                 RectTransform shield = MakeRect(
                     rootRect,
@@ -485,12 +487,12 @@ namespace ProjectArtOfAll.Board
                     "Status",
                     string.Empty,
                     font,
-                    11,
+                    16,
                     FontStyle.Normal,
                     Vector2.zero,
                     new Vector2(innerWidth, StatusHeight),
                     TextAnchor.UpperLeft);
-                AnchorTopLeft(side.StatusLabel.rectTransform, new Vector2(0f, -used));
+                AnchorTopLeft(side.StatusLabel.rectTransform, new Vector2(2f, -used));
                 side.StatusLabel.color = new Color(0.80f, 0.74f, 0.60f, 1f);
                 used += StatusHeight;
 
@@ -506,7 +508,7 @@ namespace ProjectArtOfAll.Board
 
             BuildChips(side, snapshot, innerWidth, rowHeight);
 
-            height = used + 4f;
+            height = used + 2f;
             rootRect.sizeDelta = new Vector2(innerWidth, height);
 
             RectTransform popup = MakeRect(
@@ -522,32 +524,42 @@ namespace ProjectArtOfAll.Board
                 "ShieldLabel",
                 string.Empty,
                 font,
-                11,
+                14,
                 FontStyle.Normal,
                 Vector2.zero,
                 new Vector2(innerWidth, ShieldHeight + 4f),
                 TextAnchor.UpperLeft);
-            AnchorBottomLeft(side.ShieldLabel.rectTransform, new Vector2(6f, 2f));
-            side.ShieldLabel.color = ShieldColor;
 
+            // 护盾读数挂在盾条左侧，避免压住血条上的字。
+            if (isSelf)
+            {
+                AnchorBottomLeft(side.ShieldLabel.rectTransform, new Vector2(6f, HealthHeight + ShieldHeight + 2f));
+            }
+            else
+            {
+                AnchorTopLeft(side.ShieldLabel.rectTransform, new Vector2(6f, -(HealthHeight + 1f)));
+            }
+
+            side.ShieldLabel.color = ShieldColor;
             return side;
         }
 
-        /// <summary>把这一侧的战斗栏画成一排小卡，横向居中。</summary>
+        /// <summary>把这一侧的战斗栏画成一排小卡，横向居中；牌多时自动缩小。</summary>
         private void BuildChips(
             SideRuntime side,
             CombatantSnapshot snapshot,
             float innerWidth,
             float rowHeight)
         {
+            Font font = BoardHudOverlayFactory.CreateFont();
             if (snapshot == null || snapshot.BattleCards.Count == 0)
             {
                 Text empty = BoardHudOverlayFactory.CreateText(
                     side.CardRow,
                     "Empty",
                     "空战斗栏",
-                    BoardHudOverlayFactory.CreateFont(),
-                    12,
+                    font,
+                    18,
                     FontStyle.Normal,
                     Vector2.zero,
                     new Vector2(innerWidth, rowHeight),
@@ -558,12 +570,14 @@ namespace ProjectArtOfAll.Board
             }
 
             List<CardInstance> cards = snapshot.BattleCards.ToList();
-            float chipHeight = Mathf.Max(46f, rowHeight - 6f);
-            float chipWidth = chipHeight * 0.72f;
-            const float gap = 6f;
+            const float gap = 10f;
+            float fitWidth = (innerWidth - (cards.Count - 1) * gap) / cards.Count;
+            float maxWidth = Mathf.Max(56f, Mathf.Min(rowHeight * 0.72f, fitWidth));
+            float chipWidth = maxWidth;
+            float chipHeight = Mathf.Min(rowHeight - 8f, chipWidth / 0.72f);
             float total = cards.Count * chipWidth + (cards.Count - 1) * gap;
             float startX = Mathf.Max(0f, (innerWidth - total) * 0.5f);
-            int fontSize = chipHeight >= 90f ? 13 : 11;
+            int fontSize = Mathf.Clamp(Mathf.RoundToInt(chipHeight * 0.075f), 12, 26);
 
             for (int index = 0; index < cards.Count; index++)
             {
@@ -573,26 +587,30 @@ namespace ProjectArtOfAll.Board
                     "Chip" + index,
                     Vector2.zero,
                     new Vector2(chipWidth, chipHeight));
-                AnchorTopLeft(chip, new Vector2(startX + index * (chipWidth + gap), 0f));
+                AnchorTopLeft(chip, new Vector2(
+                    startX + index * (chipWidth + gap),
+                    (rowHeight - chipHeight) * 0.5f));
 
                 Image background = chip.gameObject.GetComponent<Image>();
                 background.color = ChipColor;
 
                 Outline outline = chip.gameObject.AddComponent<Outline>();
                 outline.effectColor = FrameColor(card.Definition.SlotSize);
-                outline.effectDistance = new Vector2(2f, -2f);
+                outline.effectDistance = new Vector2(3f, -3f);
 
                 Text label = BoardHudOverlayFactory.CreateText(
                     chip,
                     "Name",
                     card.Definition.DisplayName,
-                    BoardHudOverlayFactory.CreateFont(),
+                    font,
                     fontSize,
                     FontStyle.Bold,
                     Vector2.zero,
-                    new Vector2(chipWidth - 8f, chipHeight - 22f),
-                    TextAnchor.UpperCenter);
-                AnchorTopLeft(label.rectTransform, new Vector2(4f, -4f));
+                    new Vector2(chipWidth - 12f, chipHeight - 34f),
+                    TextAnchor.MiddleCenter);
+                Stretch(label.rectTransform);
+                label.rectTransform.offsetMin = new Vector2(6f, 26f);
+                label.rectTransform.offsetMax = new Vector2(-6f, -6f);
                 label.horizontalOverflow = HorizontalWrapMode.Wrap;
                 label.color = InkColor;
 
@@ -601,15 +619,16 @@ namespace ProjectArtOfAll.Board
                     "Meta",
                     string.Concat(
                         card.Definition.SlotSize.ToString(),
-                        "c·",
+                        "c · ",
                         CardText.Seconds(card.Definition.CooldownTicks)),
-                    BoardHudOverlayFactory.CreateFont(),
-                    Mathf.Max(9, fontSize - 2),
+                    font,
+                    Mathf.Max(11, fontSize - 5),
                     FontStyle.Normal,
                     Vector2.zero,
-                    new Vector2(chipWidth - 8f, 14f),
+                    new Vector2(chipWidth - 12f, 20f),
                     TextAnchor.LowerCenter);
-                AnchorBottomLeft(meta.rectTransform, new Vector2(4f, 3f));
+                AnchorBottomLeft(meta.rectTransform, new Vector2(6f, 5f));
+                meta.rectTransform.sizeDelta = new Vector2(chipWidth - 12f, 20f);
                 meta.color = MutedColor;
 
                 side.Chips.Add(new Chip
@@ -887,15 +906,18 @@ namespace ProjectArtOfAll.Board
                 "　生命 ",
                 side.Health.ToString(),
                 " / ",
-                side.MaxHealth.ToString(),
-                "　护盾 ",
-                side.Shield.ToString());
+                side.MaxHealth.ToString());
 
             float shieldFraction = Mathf.Clamp01(
                 side.Shield / (float)Mathf.Max(1, side.MaxHealth));
             side.ShieldFill.sizeDelta = new Vector2(side.HealthWidth * shieldFraction, 0f);
 
             List<string> statuses = new List<string>();
+            if (side.Shield > 0)
+            {
+                statuses.Add(string.Concat("护盾 ", side.Shield.ToString()));
+            }
+
             if (side.Poison > 0)
             {
                 statuses.Add(string.Concat("中毒 ", side.Poison.ToString()));
@@ -911,7 +933,13 @@ namespace ProjectArtOfAll.Board
                 statuses.Add(string.Concat("再生 ", side.Regeneration.ToString()));
             }
 
-            side.StatusLabel.text = string.Join(" · ", statuses);
+            side.StatusLabel.text = string.Join("   ", statuses);
+            if (side.ShieldLabel != null)
+            {
+                side.ShieldLabel.text = side.Shield > 0
+                    ? string.Concat("护盾 ", side.Shield.ToString())
+                    : string.Empty;
+            }
         }
 
         private void RefreshClock()
@@ -992,18 +1020,18 @@ namespace ProjectArtOfAll.Board
                 "Popup",
                 content,
                 BoardHudOverlayFactory.CreateFont(),
-                22,
+                34,
                 FontStyle.Bold,
                 Vector2.zero,
-                new Vector2(200f, 32f),
+                new Vector2(260f, 48f),
                 TextAnchor.MiddleCenter);
             popup.color = color;
             popup.rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
             popup.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
             popup.rectTransform.pivot = new Vector2(0.5f, 0.5f);
             popup.rectTransform.anchoredPosition = new Vector2(
-                UnityEngine.Random.Range(-60f, 60f),
-                UnityEngine.Random.Range(-6f, 6f));
+                UnityEngine.Random.Range(-90f, 90f),
+                UnityEngine.Random.Range(-10f, 10f));
             StartCoroutine(FloatPopup(popup));
         }
 
@@ -1017,7 +1045,7 @@ namespace ProjectArtOfAll.Board
             {
                 elapsed += Time.unscaledDeltaTime;
                 float t = Mathf.Clamp01(elapsed / PopupSeconds);
-                rect.anchoredPosition = start + new Vector2(0f, 34f * t);
+                rect.anchoredPosition = start + new Vector2(0f, 46f * t);
                 color.a = 1f - t;
                 if (popup != null)
                 {
@@ -1085,11 +1113,11 @@ namespace ProjectArtOfAll.Board
                 "Speed" + value.ToString("0"),
                 label,
                 font,
-                13,
+                18,
                 Vector2.zero,
-                new Vector2(62f, ControlsHeight - 4f),
+                new Vector2(78f, ControlsHeight - 6f),
                 () => ApplySpeed(value));
-            AnchorBottomRight((RectTransform)button.transform, new Vector2(xFromRight, 4f));
+            AnchorBottomRight((RectTransform)button.transform, new Vector2(xFromRight, Pad * 0.5f));
         }
 
         private void ApplySpeed(float value)
