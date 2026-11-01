@@ -65,13 +65,15 @@ namespace ProjectArtOfAll.Board
             public Text ShieldLabel;
             public Text StatusLabel;
             public readonly List<Chip> Chips = new List<Chip>();
+            public readonly List<GameObject> Cells = new List<GameObject>();
         }
 
         private sealed class Chip
         {
             public int CardUid;
             public Image Background;
-            public Text Label;
+            public CanvasGroup Group;
+            public string CardName;
             public bool Destroyed;
             public float FlashUntil;
         }
@@ -570,72 +572,37 @@ namespace ProjectArtOfAll.Board
             }
 
             List<CardInstance> cards = snapshot.BattleCards.ToList();
-            const float gap = 10f;
-            float fitWidth = (innerWidth - (cards.Count - 1) * gap) / cards.Count;
-            float maxWidth = Mathf.Max(56f, Mathf.Min(rowHeight * 0.72f, fitWidth));
-            float chipWidth = maxWidth;
-            float chipHeight = Mathf.Min(rowHeight - 8f, chipWidth / 0.72f);
-            float total = cards.Count * chipWidth + (cards.Count - 1) * gap;
-            float startX = Mathf.Max(0f, (innerWidth - total) * 0.5f);
-            int fontSize = Mathf.Clamp(Mathf.RoundToInt(chipHeight * 0.075f), 12, 26);
+            int capacity = snapshot.Level >= 6
+                ? 10
+                : LoadoutRules.GetBattleCapacity(snapshot.Level);
+            CardRowRenderer renderer = new CardRowRenderer(BoardHudOverlayFactory.CreateFont())
+            {
+                RowWidth = innerWidth,
+                InBattle = true
+            };
+            renderer.Scale = renderer.FitScale(Mathf.Max(90f, rowHeight - 8f));
+            renderer.TopInset = Mathf.Max(0f, (rowHeight - renderer.CardHeight) * 0.5f);
+            renderer.BuildCells(side.CardRow, side.Cells, Mathf.Max(capacity, cards.Count));
+            float startX = CardRowRenderer.RowInset;
 
             for (int index = 0; index < cards.Count; index++)
             {
                 CardInstance card = cards[index];
-                RectTransform chip = MakeRect(
+                float width = renderer.WidthOf(card);
+                GameObject widget = renderer.AddCard(
                     side.CardRow,
-                    "Chip" + index,
-                    Vector2.zero,
-                    new Vector2(chipWidth, chipHeight));
-                AnchorTopLeft(chip, new Vector2(
-                    startX + index * (chipWidth + gap),
-                    (rowHeight - chipHeight) * 0.5f));
-
-                Image background = chip.gameObject.GetComponent<Image>();
-                background.color = ChipColor;
-
-                Outline outline = chip.gameObject.AddComponent<Outline>();
-                outline.effectColor = FrameColor(card.Definition.SlotSize);
-                outline.effectDistance = new Vector2(3f, -3f);
-
-                Text label = BoardHudOverlayFactory.CreateText(
-                    chip,
-                    "Name",
-                    card.Definition.DisplayName,
-                    font,
-                    fontSize,
-                    FontStyle.Bold,
-                    Vector2.zero,
-                    new Vector2(chipWidth - 12f, chipHeight - 34f),
-                    TextAnchor.MiddleCenter);
-                Stretch(label.rectTransform);
-                label.rectTransform.offsetMin = new Vector2(6f, 26f);
-                label.rectTransform.offsetMax = new Vector2(-6f, -6f);
-                label.horizontalOverflow = HorizontalWrapMode.Wrap;
-                label.color = InkColor;
-
-                Text meta = BoardHudOverlayFactory.CreateText(
-                    chip,
-                    "Meta",
-                    string.Concat(
-                        card.Definition.SlotSize.ToString(),
-                        "c · ",
-                        CardText.Seconds(card.Definition.CooldownTicks)),
-                    font,
-                    Mathf.Max(11, fontSize - 5),
-                    FontStyle.Normal,
-                    Vector2.zero,
-                    new Vector2(chipWidth - 12f, 20f),
-                    TextAnchor.LowerCenter);
-                AnchorBottomLeft(meta.rectTransform, new Vector2(6f, 5f));
-                meta.rectTransform.sizeDelta = new Vector2(chipWidth - 12f, 20f);
-                meta.color = MutedColor;
+                    card,
+                    startX,
+                    width,
+                    CardRowRenderer.BonusBadge(cards, index));
+                startX += width + renderer.SlotGap;
 
                 side.Chips.Add(new Chip
                 {
                     CardUid = card.Uid,
-                    Background = background,
-                    Label = label
+                    Background = widget.GetComponent<Image>(),
+                    Group = widget.GetComponent<CanvasGroup>(),
+                    CardName = card.Definition.DisplayName
                 });
             }
         }
@@ -814,7 +781,10 @@ namespace ProjectArtOfAll.Board
                     }
 
                     chip.Destroyed = true;
-                    chip.Label.color = MutedColor;
+                    if (chip.Group != null)
+                    {
+                        chip.Group.alpha = 0.32f;
+                    }
                 }
 
                 logLabel.text = string.Concat(
@@ -975,11 +945,23 @@ namespace ProjectArtOfAll.Board
 
                 if (chip.Destroyed)
                 {
+                    if (chip.Group != null)
+                    {
+                        chip.Group.alpha = 0.32f;
+                    }
+
                     chip.Background.color = ChipDead;
                     continue;
                 }
 
-                chip.Background.color = now < chip.FlashUntil ? ChipFlash : ChipColor;
+                if (chip.Group != null)
+                {
+                    chip.Group.alpha = 1f;
+                }
+
+                chip.Background.color = now < chip.FlashUntil
+                    ? ChipFlash
+                    : CardRowRenderer.BattleColor;
             }
         }
 
@@ -1001,7 +983,7 @@ namespace ProjectArtOfAll.Board
             {
                 if (chip.CardUid == cardUid)
                 {
-                    return chip.Label.text;
+                    return string.IsNullOrEmpty(chip.CardName) ? "卡牌" : chip.CardName;
                 }
             }
 
