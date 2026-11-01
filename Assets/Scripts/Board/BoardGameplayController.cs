@@ -112,14 +112,25 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
-            if (tokensByPlayer.TryGetValue(match.State.CurrentPlayer.Id, out BoardPlayerToken token))
+            if (!tokensByPlayer.TryGetValue(match.State.CurrentPlayer.Id, out BoardPlayerToken token)
+                || token == null
+                || cameraController == null)
             {
-                cameraController?.SetFollowTarget(token.transform);
+                return;
             }
+
+            // token == null 走的是 Unity 重载的 ==：棋子所在的场景已经卸载时这里为 true，
+            // 不加这个判断就会去读 token.transform 并抛 MissingReferenceException。
+            cameraController.SetFollowTarget(token.transform);
         }
 
         public void SetPathLinesVisible(bool visible)
         {
+            if (this == null)
+            {
+                return;
+            }
+
             if (pathLines != null)
             {
                 pathLines.SetActive(visible);

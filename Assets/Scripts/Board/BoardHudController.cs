@@ -106,11 +106,23 @@ namespace ProjectArtOfAll.Board
             HideForkChoices();
             HideEncounter();
             RefreshDrawerScrim();
+            GameSettings.Changed -= OnGameSettingsChanged;
             GameSettings.Changed += OnGameSettingsChanged;
             if (boardGameplay == null)
             {
                 boardGameplay = FindObjectOfType<BoardGameplayController>();
             }
+        }
+
+        /// <summary>
+        /// <see cref="GameSettings.Changed"/> 是静态事件。<c>GameSession</c> 用 LoadScene 切场景、
+        /// 暂停菜单的「重开本局」也是 LoadScene，所以旧的 HUD 会被销毁；不在这里退订的话，
+        /// 新场景里再点设置项仍会回调到已销毁的实例，进而去摸已经销毁的棋子，抛出
+        /// MissingReferenceException（BoardPlayerToken has been destroyed）。
+        /// </summary>
+        private void OnDestroy()
+        {
+            GameSettings.Changed -= OnGameSettingsChanged;
         }
 
         private void Update()
@@ -850,7 +862,19 @@ namespace ProjectArtOfAll.Board
         /// <summary>把 <see cref="GameSettings"/> 里的表现项落到实际对象上（启动、改动、自动降档后都走这里）。</summary>
         public void ApplyGameSettings()
         {
+            // 已销毁（场景已卸载）时静态事件可能还压着一次回调，这里直接吞掉，
+            // 否则下面的 boardGameplay?. 会因为 Unity 的"假 null"绕过去而踩到已销毁对象。
+            if (this == null || !Application.isPlaying)
+            {
+                return;
+            }
+
             GameSettings.EnsureLoaded();
+
+            if (boardGameplay == null)
+            {
+                boardGameplay = FindObjectOfType<BoardGameplayController>();
+            }
 
             if (cardBand != null && !autoDegraded)
             {
@@ -858,12 +882,22 @@ namespace ProjectArtOfAll.Board
                 cardBand.ApplyScreenLayout();
             }
 
-            boardGameplay?.SetPathLinesVisible(GameSettings.PathLinesVisible && !autoDegraded);
-            boardGameplay?.SetCameraFollow(GameSettings.CameraFollow);
+            if (boardGameplay == null)
+            {
+                return;
+            }
+
+            boardGameplay.SetPathLinesVisible(GameSettings.PathLinesVisible && !autoDegraded);
+            boardGameplay.SetCameraFollow(GameSettings.CameraFollow);
         }
 
         private void OnGameSettingsChanged(string _)
         {
+            if (this == null)
+            {
+                return;
+            }
+
             ApplyGameSettings();
         }
 
