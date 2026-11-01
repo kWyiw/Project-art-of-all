@@ -140,7 +140,7 @@ namespace ProjectArtOfAll.Board
 
             MatchPlayerState movingPlayer = match.State.CurrentPlayer;
             int current = movingPlayer.CurrentNode;
-            int previous = -1;
+            int previous = movingPlayer.LastArrivalNode;
             List<int> forkDirections = new List<int>();
             int encounterNode = -1;
 

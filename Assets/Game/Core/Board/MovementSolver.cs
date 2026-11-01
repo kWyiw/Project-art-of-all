@@ -15,6 +15,7 @@ namespace ProjectArtOfAll.Core.Board
             MapGraph graph,
             int playerId,
             int startNodeId,
+            int previousNodeId,
             int remainingSteps,
             IReadOnlyDictionary<int, int> playerNodeIds)
         {
@@ -37,7 +38,7 @@ namespace ProjectArtOfAll.Core.Board
                 graph,
                 playerId,
                 startNodeId,
-                -1,
+                previousNodeId,
                 remainingSteps,
                 occupants,
                 path,
@@ -53,6 +54,7 @@ namespace ProjectArtOfAll.Core.Board
         public static IReadOnlyList<IReadOnlyList<int>> FindPaths(
             MapGraph graph,
             int startNodeId,
+            int previousNodeId,
             int steps)
         {
             if (graph == null)
@@ -68,7 +70,7 @@ namespace ProjectArtOfAll.Core.Board
             graph.GetNode(startNodeId);
             List<IReadOnlyList<int>> paths = new List<IReadOnlyList<int>>();
             List<int> current = new List<int>();
-            WalkPaths(graph, startNodeId, -1, steps, current, paths);
+            WalkPaths(graph, startNodeId, previousNodeId, steps, current, paths);
 
             return paths
                 .OrderBy(path => string.Join(",", path))
@@ -82,6 +84,7 @@ namespace ProjectArtOfAll.Core.Board
         public static IReadOnlyList<int> ResolvePathByChoices(
             MapGraph graph,
             int startNodeId,
+            int previousNodeId,
             IReadOnlyList<int> outgoingEdgeChoices)
         {
             if (graph == null)
@@ -96,7 +99,7 @@ namespace ProjectArtOfAll.Core.Board
 
             List<int> path = new List<int>(outgoingEdgeChoices.Count);
             int current = startNodeId;
-            int previous = -1;
+            int previous = previousNodeId;
 
             for (int step = 0; step < outgoingEdgeChoices.Count; step++)
             {

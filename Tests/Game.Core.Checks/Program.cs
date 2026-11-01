@@ -89,6 +89,7 @@ namespace ProjectArtOfAll.Core.Checks
                     graph,
                     playerId: 0,
                     startNodeId: 1,
+                    previousNodeId: -1,
                     remainingSteps: 3,
                     playerNodeIds: playerNodes);
 
@@ -104,6 +105,7 @@ namespace ProjectArtOfAll.Core.Checks
                     graph,
                     playerId: 0,
                     startNodeId: 7,
+                    previousNodeId: -1,
                     remainingSteps: 1,
                     playerNodeIds: playerNodes);
             Assert(homeCandidates.Count == 1 &&
@@ -113,12 +115,13 @@ namespace ProjectArtOfAll.Core.Checks
             IReadOnlyList<int> path = MovementSolver.ResolvePathByChoices(
                 graph,
                 startNodeId: 1,
+                previousNodeId: -1,
                 outgoingEdgeChoices: new[] { 1, 0, 0 });
             Assert(path.SequenceEqual(new[] { 5, 6, 7 }),
                 "Explicit edge choices must resolve deterministically.");
 
             IReadOnlyList<IReadOnlyList<int>> passThroughPaths =
-                MovementSolver.FindPaths(graph, startNodeId: 0, steps: 2);
+                MovementSolver.FindPaths(graph, startNodeId: 0, previousNodeId: -1, steps: 2);
             Assert(
                 passThroughPaths.Count == 2 &&
                 passThroughPaths.Any(path => path.SequenceEqual(new[] { 1, 2 })) &&

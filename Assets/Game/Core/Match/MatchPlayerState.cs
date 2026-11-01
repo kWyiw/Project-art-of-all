@@ -32,6 +32,12 @@ namespace ProjectArtOfAll.Core.Match
         public string Name { get; }
         public int HomeNode { get; }
         public int CurrentNode { get; internal set; }
+
+        /// <summary>
+        /// Node the player stepped off to reach <see cref="CurrentNode"/>; -1 when unknown
+        /// (spawn, teleport). Used so a fork at the start of a move never offers the way back.
+        /// </summary>
+        public int LastArrivalNode { get; internal set; } = -1;
         public int Level { get; internal set; }
         public int Shards { get; internal set; }
         public int Wins { get; internal set; }

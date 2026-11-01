@@ -146,6 +146,7 @@ namespace ProjectArtOfAll.Core.Match
                     graph,
                     command.PlayerId,
                     State.CurrentPlayer.CurrentNode,
+                    State.CurrentPlayer.LastArrivalNode,
                     State.LastRoll,
                     State.GetPlayerNodeIds()));
 
@@ -180,6 +181,7 @@ namespace ProjectArtOfAll.Core.Match
                         stepIndex,
                         visitKind));
                 player.CurrentNode = nextNode;
+                player.LastArrivalNode = fromNode;
                 fromNode = nextNode;
             }
 
@@ -202,6 +204,7 @@ namespace ProjectArtOfAll.Core.Match
                             arrivalNode,
                             warpTarget));
                     player.CurrentNode = warpTarget;
+                    player.LastArrivalNode = -1;
                     arrivalNode = warpTarget;
                     isWarpDestination = true;
                     arrival = graph.GetNode(arrivalNode);
@@ -359,6 +362,7 @@ namespace ProjectArtOfAll.Core.Match
                 paths = MovementSolver.FindPaths(
                     graph,
                     State.CurrentPlayer.CurrentNode,
+                    State.CurrentPlayer.LastArrivalNode,
                     State.LastRoll);
             }
 
@@ -392,7 +396,7 @@ namespace ProjectArtOfAll.Core.Match
             IReadOnlyList<int> forkDirections)
         {
             int current = State.CurrentPlayer.CurrentNode;
-            int previous = -1;
+            int previous = State.CurrentPlayer.LastArrivalNode;
             int choiceIndex = 0;
 
             foreach (int next in path)
@@ -435,7 +439,7 @@ namespace ProjectArtOfAll.Core.Match
             int outgoingEdgeIndex)
         {
             int current = State.CurrentPlayer.CurrentNode;
-            int previous = -1;
+            int previous = State.CurrentPlayer.LastArrivalNode;
             foreach (int next in path)
             {
                 IReadOnlyList<int> legal = graph.LegalNextNodes(current, previous);
