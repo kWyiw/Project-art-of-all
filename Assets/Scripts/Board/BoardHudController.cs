@@ -69,6 +69,10 @@ namespace ProjectArtOfAll.Board
         private CardBandController cardBand;
         private BoardHudCombatResultView combatResultView;
         private BoardHudRewardChoiceView rewardView;
+        private BoardHudShopView shopView;
+        private Action<int> shopBuyHandler;
+        private Action shopRerollHandler;
+        private Action shopLeaveHandler;
         private Action<int> rewardChoiceHandler;
         private MatchPlayerState cachedPlayer;
         private MatchState cachedState;
@@ -825,6 +829,20 @@ namespace ProjectArtOfAll.Board
                 }
             }
 
+            if (shopView == null)
+            {
+                shopView = BoardHudOverlayFactory.CreateShopView(transform, font);
+                for (int index = 0; index < shopView.Buttons.Length; index++)
+                {
+                    int captured = index;
+                    shopView.Buttons[index].onClick.AddListener(
+                        () => OnShopBuy(captured));
+                }
+
+                shopView.RerollButton.onClick.AddListener(OnShopReroll);
+                shopView.LeaveButton.onClick.AddListener(OnShopLeave);
+            }
+
             if (combatResultView == null)
             {
                 combatResultView =
@@ -1119,6 +1137,126 @@ namespace ProjectArtOfAll.Board
             }
 
             rewardChoiceHandler = null;
+        }
+
+        /// <summary>商店面板：3 张货 + 重掷一次 + 离开（规则书 §2.5、R-ECO-004）。</summary>
+        public void ShowShop(
+            MatchPlayerState player,
+            ShopSession shop,
+            Action<int> onBuy,
+            Action onReroll,
+            Action onLeave)
+        {
+            if (!Application.isPlaying || player == null || shop == null)
+            {
+                return;
+            }
+
+            EnsureOverlayViews();
+            if (shopView == null)
+            {
+                return;
+            }
+
+            shopBuyHandler = onBuy;
+            shopRerollHandler = onReroll;
+            shopLeaveHandler = onLeave;
+            RenderShop(player, shop);
+            shopView.Overlay.SetActive(true);
+            shopView.Overlay.transform.SetAsLastSibling();
+        }
+
+        public void HideShop()
+        {
+            if (shopView != null)
+            {
+                shopView.Overlay.SetActive(false);
+            }
+        }
+
+        private void RenderShop(MatchPlayerState player, ShopSession shop)
+        {
+            shopView.Title.text = string.Concat(
+                "商店 · 玩家 ",
+                (player.Id + 1).ToString(),
+                " · 停留结算");
+            shopView.Subtitle.text = string.Concat(
+                "持有 ",
+                player.Shards.ToString(),
+                " 碎片 · 背包 ",
+                player.OwnedCardWidth.ToString(),
+                "/",
+                LoadoutRules.BagCapacity.ToString(),
+                "c · 价格 1c=2 / 2c=4 / 3c=8 碎片 · 每次停留刷新一次（§2.5）");
+
+            for (int index = 0; index < shopView.Buttons.Length; index++)
+            {
+                bool visible = index < shop.Offers.Count;
+                shopView.Buttons[index].gameObject.SetActive(visible);
+                if (!visible)
+                {
+                    continue;
+                }
+
+                ShopOffer offer = shop.Offers[index];
+                CardDefinition definition = offer.Definition;
+                bool fits = player.OwnedCardWidth + definition.SlotSize <=
+                    LoadoutRules.BagCapacity;
+                bool canPay = player.Shards >= offer.Price;
+                bool purchasable = offer.IsAvailable && fits && canPay;
+
+                shopView.Names[index].text = definition.DisplayName;
+                shopView.Details[index].text = CardText.Description(definition);
+
+                string meta = CardText.Meta(definition);
+                if (offer.IsAvailable && !fits)
+                {
+                    meta = string.Concat(
+                        meta,
+                        "  ·  背包装不下（需要 ",
+                        definition.SlotSize.ToString(),
+                        "c）");
+                }
+                else if (offer.IsAvailable && !canPay)
+                {
+                    meta = string.Concat(meta, "  ·  碎片不足");
+                }
+
+                shopView.Metas[index].text = meta;
+                shopView.Prices[index].text = offer.IsAvailable
+                    ? string.Concat(offer.Price.ToString(), " 碎片")
+                    : "已买下";
+                shopView.Prices[index].color = purchasable
+                    ? new Color(0.92f, 0.69f, 0.27f, 1f)
+                    : new Color(0.6f, 0.58f, 0.54f, 1f);
+                shopView.Buttons[index].interactable = purchasable;
+            }
+
+            bool canReroll = !shop.RerollUsed &&
+                player.Shards >= MatchController.ShopRerollCost;
+            shopView.RerollButton.interactable = canReroll;
+            shopView.RerollLabel.text = string.Concat(
+                "重掷 · ",
+                MatchController.ShopRerollCost.ToString(),
+                " 碎片");
+            shopView.RerollHint.text = shop.RerollUsed
+                ? "本次停留已经重掷过（R-ECO-004）"
+                : "每次停留只能重掷 1 次";
+        }
+
+        private void OnShopBuy(int offerIndex)
+        {
+            shopBuyHandler?.Invoke(offerIndex);
+        }
+
+        private void OnShopReroll()
+        {
+            shopRerollHandler?.Invoke();
+        }
+
+        private void OnShopLeave()
+        {
+            shopLeaveHandler?.Invoke();
         }
 
         private void OnRewardChosen(int index)

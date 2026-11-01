@@ -17,7 +17,8 @@ namespace ProjectArtOfAll.Core.Match
     {
         private const int ShopOfferCount = 3;
         private const int RewardChoiceCount = 2;
-        private const int ShopRerollCost = 2;
+        /// <summary>每次停留只能重掷一次，重掷花费 2 碎片（规则书 §2.5）。</summary>
+        public const int ShopRerollCost = 2;
         private const int GlobalShardGrant = 5;
         private const int GlobalGrantRoundInterval = 3;
 

@@ -35,6 +35,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckWarpTeleport();
                 CheckCardBandCommands();
                 CheckSceneMapTeleport();
+                CheckShopTile();
                 CheckM3FullMatch();
                 CheckM3MatchReport();
                 Console.WriteLine("Game.Core checks passed.");
@@ -716,6 +717,130 @@ namespace ProjectArtOfAll.Core.Checks
 
             throw new InvalidOperationException(
                 "Could not find a seed whose first roll is 3.");
+        }
+
+        private static void CheckShopTile()
+        {
+            MapGraph graph = MapGraph.Create(
+                new[]
+                {
+                    new MapNode(0, TileType.Home, 0, 1),
+                    new MapNode(1, TileType.Shop, -1, 2),
+                    new MapNode(2, TileType.Home, 1, 3),
+                    new MapNode(3, TileType.Neutral, -1, 4),
+                    new MapNode(4, TileType.Home, 2, 5),
+                    new MapNode(5, TileType.Shop, -1, 6),
+                    new MapNode(6, TileType.Home, 3, 7),
+                    new MapNode(7, TileType.Neutral, -1, 0)
+                },
+                playerCount: 4);
+
+            for (ulong seed = 1UL; seed <= 4096UL; seed++)
+            {
+                MatchController controller = new MatchController(graph, seed);
+                MatchPlayerState player = controller.State.CurrentPlayer;
+                int shardsBefore = player.Shards;
+                controller.Submit(new RollCommand(player.Id));
+                if (controller.State.LastRoll != 1)
+                {
+                    continue;
+                }
+
+                controller.Submit(new MoveCommand(player.Id));
+
+                Assert(
+                    controller.State.Phase == MatchPhase.AwaitShop,
+                    "Landing on a Shop tile must open the shop phase.");
+                Assert(
+                    controller.CurrentShop != null,
+                    "The shop session must exist while the phase is AwaitShop.");
+                Assert(
+                    controller.CurrentShop.Offers.Count == 3,
+                    "Rule 2.5: the shop shows three offers.");
+                Assert(
+                    !controller.CurrentShop.RerollUsed,
+                    "A fresh shop visit must not be flagged as rerolled.");
+
+                foreach (ShopOffer offer in controller.CurrentShop.Offers)
+                {
+                    int expected = offer.Definition.SlotSize == 1
+                        ? 2
+                        : offer.Definition.SlotSize == 2 ? 4 : 8;
+                    Assert(
+                        offer.Price == expected,
+                        "Rule 2.5: 1c/2c/3c cost 2/4/8 Shards.");
+                    Assert(
+                        offer.IsAvailable,
+                        "Fresh offers must be available.");
+                }
+
+                int price = controller.CurrentShop.Offers[0].Price;
+                bool bought = false;
+                try
+                {
+                    controller.Submit(new ShopActionCommand(
+                        player.Id,
+                        ShopActionType.Buy,
+                        0));
+                    bought = true;
+                }
+                catch (InvalidOperationException)
+                {
+                }
+
+                if (shardsBefore < price)
+                {
+                    Assert(
+                        !bought,
+                        "Buying without enough Shards must be rejected.");
+                    Assert(
+                        controller.CurrentShop.Offers[0].IsAvailable,
+                        "A rejected purchase must not consume the offer.");
+                }
+                else
+                {
+                    Assert(
+                        bought && player.Shards == shardsBefore - price,
+                        "A purchase must deduct the offer price.");
+                    Assert(
+                        !controller.CurrentShop.Offers[0].IsAvailable,
+                        "A bought offer must leave the shelf.");
+                    bool boughtTwice = false;
+                    try
+                    {
+                        controller.Submit(new ShopActionCommand(
+                            player.Id,
+                            ShopActionType.Buy,
+                            0));
+                        boughtTwice = true;
+                    }
+                    catch (InvalidOperationException)
+                    {
+                    }
+
+                    Assert(
+                        !boughtTwice,
+                        "An offer can only be bought once per visit.");
+                }
+
+                int moverId = player.Id;
+                controller.Submit(new ShopActionCommand(
+                    moverId,
+                    ShopActionType.Leave));
+                Assert(
+                    controller.State.Phase == MatchPhase.AwaitRoll,
+                    "Leaving the shop must end the turn.");
+                Assert(
+                    controller.State.CurrentPlayer.Id != moverId,
+                    "Leaving the shop must pass the turn on.");
+                Console.WriteLine(
+                    $"[shop] offers=3 seed={seed} bought={bought} " +
+                    $"shards={shardsBefore}");
+                return;
+            }
+
+            throw new InvalidOperationException(
+                "Could not find a seed whose first roll lands on the shop.");
         }
 
         private static void CheckM3FullMatch()

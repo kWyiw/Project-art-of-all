@@ -57,6 +57,7 @@ namespace ProjectArtOfAll.Board
         private bool isMoving;
         private bool awaitingFork;
         private bool awaitingRewardChoice;
+        private bool awaitingShop;
         private bool awaitingEncounterAcceptance;
 
         /// <summary>真人席位数：正常模式固定 0；无CPU测试模式为 -1（表示"当前行动者"）。</summary>
@@ -395,6 +396,7 @@ namespace ProjectArtOfAll.Board
             hud?.SetDiceInteractable(
                 !match.IsFinished &&
                 !awaitingRewardChoice &&
+                !awaitingShop &&
                 IsHumanSeat(match.State.CurrentPlayer) &&
                 match.State.Phase == MatchPhase.AwaitRoll);
             ActivateCurrentPlayer();
@@ -544,7 +546,7 @@ namespace ProjectArtOfAll.Board
 
         private void ResolveDeferredCorePhase()
         {
-            if (awaitingRewardChoice)
+            if (awaitingRewardChoice || awaitingShop)
             {
                 return;
             }
@@ -580,6 +582,21 @@ namespace ProjectArtOfAll.Board
                         match.Submit(new ChooseRewardCommand(player.Id, rewardIndex));
                         continue;
                     case MatchPhase.AwaitShop:
+                        if (hud != null &&
+                            IsHumanSeat(player) &&
+                            match.CurrentShop != null)
+                        {
+                            awaitingShop = true;
+                            hud.SetDiceInteractable(false);
+                            hud.ShowShop(
+                                player,
+                                match.CurrentShop,
+                                OnShopBuy,
+                                OnShopReroll,
+                                OnShopLeave);
+                            return;
+                        }
+
                         match.Submit(new ShopActionCommand(player.Id, ShopActionType.Leave));
                         continue;
                     default:
@@ -620,8 +637,132 @@ namespace ProjectArtOfAll.Board
                 chosenName));
         }
 
+        private void OnShopBuy(int offerIndex)
+        {
+            if (!awaitingShop ||
+                match == null ||
+                match.State.Phase != MatchPhase.AwaitShop ||
+                match.CurrentShop == null)
+            {
+                return;
+            }
+
+            MatchPlayerState player = match.State.CurrentPlayer;
+            if (offerIndex < 0 || offerIndex >= match.CurrentShop.Offers.Count)
+            {
+                return;
+            }
+
+            ShopOffer offer = match.CurrentShop.Offers[offerIndex];
+            if (!offer.IsAvailable ||
+                player.Shards < offer.Price ||
+                player.OwnedCardWidth + offer.Definition.SlotSize >
+                    LoadoutRules.BagCapacity)
+            {
+                return;
+            }
+
+            try
+            {
+                match.Submit(new ShopActionCommand(
+                    player.Id,
+                    ShopActionType.Buy,
+                    offerIndex));
+            }
+            catch (InvalidOperationException exception)
+            {
+                hud?.SetMatchStatus(string.Concat("买不了：", exception.Message));
+                return;
+            }
+
+            hud?.SetMatchStatus(string.Concat(
+                "玩家 ",
+                (player.Id + 1).ToString(),
+                " 买下 ",
+                offer.Definition.DisplayName,
+                "（-",
+                offer.Price.ToString(),
+                " 碎片）"));
+            hud?.RefreshCardBand(player);
+            RefreshShopPanel();
+        }
+
+        private void OnShopReroll()
+        {
+            if (!awaitingShop ||
+                match == null ||
+                match.State.Phase != MatchPhase.AwaitShop ||
+                match.CurrentShop == null)
+            {
+                return;
+            }
+
+            MatchPlayerState player = match.State.CurrentPlayer;
+            if (match.CurrentShop.RerollUsed ||
+                player.Shards < MatchController.ShopRerollCost)
+            {
+                return;
+            }
+
+            try
+            {
+                match.Submit(new ShopActionCommand(player.Id, ShopActionType.Reroll));
+            }
+            catch (InvalidOperationException exception)
+            {
+                hud?.SetMatchStatus(string.Concat("重掷失败：", exception.Message));
+                return;
+            }
+
+            hud?.SetMatchStatus("货架已重掷（-2 碎片）");
+            RefreshShopPanel();
+        }
+
+        private void OnShopLeave()
+        {
+            if (!awaitingShop ||
+                match == null ||
+                match.State.Phase != MatchPhase.AwaitShop)
+            {
+                return;
+            }
+
+            MatchPlayerState player = match.State.CurrentPlayer;
+            awaitingShop = false;
+            hud?.HideShop();
+            match.Submit(new ShopActionCommand(player.Id, ShopActionType.Leave));
+            FinishDeferredPhase(string.Concat(
+                "玩家 ",
+                (player.Id + 1).ToString(),
+                " 离开商店"));
+        }
+
+        /// <summary>买完 / 重掷后按当前货架重画；商店已结束就收起面板。</summary>
+        private void RefreshShopPanel()
+        {
+            if (match.State.Phase == MatchPhase.AwaitShop &&
+                match.CurrentShop != null)
+            {
+                MatchPlayerState player = match.State.CurrentPlayer;
+                hud?.ShowShop(
+                    player,
+                    match.CurrentShop,
+                    OnShopBuy,
+                    OnShopReroll,
+                    OnShopLeave);
+                hud?.RefreshPlayerPanels(match.State);
+                return;
+            }
+
+            awaitingShop = false;
+            hud?.HideShop();
+            FinishDeferredPhase(null);
+        }
+
         private void FinishDeferredPhase(string message)
         {
+            awaitingShop = false;
+            hud?.HideShop();
             ResolveDeferredCorePhase();
             isMoving = false;
             automaticTurn = false;
@@ -773,6 +914,7 @@ namespace ProjectArtOfAll.Board
             hud?.SetDiceInteractable(
                 !match.IsFinished &&
                 !awaitingRewardChoice &&
+                !awaitingShop &&
                 IsHumanSeat(actor) &&
                 match.State.Phase == MatchPhase.AwaitRoll);
         }
@@ -805,7 +947,8 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
-            if (isMoving || awaitingFork || awaitingRewardChoice || awaitingEncounterAcceptance)
+            if (isMoving || awaitingFork || awaitingRewardChoice ||
+                awaitingShop || awaitingEncounterAcceptance)
             {
                 return;
             }

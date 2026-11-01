@@ -111,6 +111,54 @@ namespace ProjectArtOfAll.Board
         public Text[] Details { get; }
     }
 
+    /// <summary>商店面板：3 张货、重掷一次、离开（R-ECO-004 / 规则书 §2.5）。</summary>
+    public sealed class BoardHudShopView
+    {
+        public BoardHudShopView(
+            GameObject overlay,
+            Text title,
+            Text subtitle,
+            Button[] buttons,
+            Text[] names,
+            Text[] metas,
+            Text[] details,
+            Text[] prices,
+            Button rerollButton,
+            Text rerollLabel,
+            Text rerollHint,
+            Button leaveButton,
+            Text leaveLabel)
+        {
+            Overlay = overlay;
+            Title = title;
+            Subtitle = subtitle;
+            Buttons = buttons;
+            Names = names;
+            Metas = metas;
+            Details = details;
+            Prices = prices;
+            RerollButton = rerollButton;
+            RerollLabel = rerollLabel;
+            RerollHint = rerollHint;
+            LeaveButton = leaveButton;
+            LeaveLabel = leaveLabel;
+        }
+
+        public GameObject Overlay { get; }
+        public Text Title { get; }
+        public Text Subtitle { get; }
+        public Button[] Buttons { get; }
+        public Text[] Names { get; }
+        public Text[] Metas { get; }
+        public Text[] Details { get; }
+        public Text[] Prices { get; }
+        public Button RerollButton { get; }
+        public Text RerollLabel { get; }
+        public Text RerollHint { get; }
+        public Button LeaveButton { get; }
+        public Text LeaveLabel { get; }
+    }
+
     public sealed class BoardHudCombatResultView
     {
         public BoardHudCombatResultView(
@@ -692,6 +740,272 @@ namespace ProjectArtOfAll.Board
                 names,
                 metas,
                 details);
+        }
+
+        /// <summary>商店面板。3 张货 + 重掷 + 离开，价格与刷新规则取自规则书 §2.5。</summary>
+        public static BoardHudShopView CreateShopView(Transform parent, Font font)
+        {
+            const int offerCount = 3;
+
+            GameObject overlay = new GameObject(
+                "ShopOverlay",
+                typeof(RectTransform),
+                typeof(Image));
+            overlay.transform.SetParent(parent, false);
+            Stretch(overlay.GetComponent<RectTransform>());
+
+            Image overlayImage = overlay.GetComponent<Image>();
+            overlayImage.color = new Color(0.01f, 0.018f, 0.022f, 0.82f);
+            overlayImage.raycastTarget = true;
+
+            GameObject panelObject = new GameObject(
+                "ShopPanel",
+                typeof(RectTransform),
+                typeof(Image),
+                typeof(Outline));
+            panelObject.transform.SetParent(overlay.transform, false);
+
+            RectTransform panel = panelObject.GetComponent<RectTransform>();
+            panel.anchorMin = new Vector2(0.5f, 0.5f);
+            panel.anchorMax = new Vector2(0.5f, 0.5f);
+            panel.pivot = new Vector2(0.5f, 0.5f);
+            panel.anchoredPosition = Vector2.zero;
+            panel.sizeDelta = new Vector2(900f, 620f);
+
+            Image panelImage = panelObject.GetComponent<Image>();
+            panelImage.color = new Color(0.048f, 0.078f, 0.09f, 0.99f);
+            panelImage.raycastTarget = true;
+
+            Outline panelOutline = panelObject.GetComponent<Outline>();
+            panelOutline.effectColor = new Color(0.86f, 0.68f, 0.35f, 0.72f);
+            panelOutline.effectDistance = new Vector2(2f, -2f);
+
+            CreateBar(
+                panel,
+                "BrassRule",
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0f, 5f),
+                new Vector2(0f, 0f),
+                new Color(0.92f, 0.69f, 0.27f, 1f));
+
+            Text title = CreateText(
+                panel,
+                "Title",
+                "商店",
+                font,
+                28,
+                FontStyle.Bold,
+                new Vector2(34f, -22f),
+                new Vector2(760f, 40f),
+                TextAnchor.UpperLeft);
+            title.color = new Color(0.96f, 0.88f, 0.69f, 1f);
+
+            Text subtitle = CreateText(
+                panel,
+                "Subtitle",
+                "",
+                font,
+                16,
+                FontStyle.Normal,
+                new Vector2(34f, -62f),
+                new Vector2(832f, 24f),
+                TextAnchor.UpperLeft);
+            subtitle.color = new Color(0.72f, 0.7f, 0.64f, 1f);
+            subtitle.horizontalOverflow = HorizontalWrapMode.Wrap;
+
+            Button[] buttons = new Button[offerCount];
+            Text[] names = new Text[offerCount];
+            Text[] metas = new Text[offerCount];
+            Text[] details = new Text[offerCount];
+            Text[] prices = new Text[offerCount];
+
+            for (int index = 0; index < offerCount; index++)
+            {
+                GameObject optionObject = new GameObject(
+                    "ShopOffer" + index.ToString(),
+                    typeof(RectTransform),
+                    typeof(Image),
+                    typeof(Button),
+                    typeof(Outline));
+                optionObject.transform.SetParent(panel, false);
+
+                RectTransform option = optionObject.GetComponent<RectTransform>();
+                option.anchorMin = new Vector2(0f, 1f);
+                option.anchorMax = new Vector2(0f, 1f);
+                option.pivot = new Vector2(0f, 1f);
+                option.anchoredPosition = new Vector2(34f, -96f - (index * 146f));
+                option.sizeDelta = new Vector2(832f, 132f);
+
+                Image optionImage = optionObject.GetComponent<Image>();
+                optionImage.color = new Color(0.07f, 0.11f, 0.125f, 1f);
+
+                Outline optionOutline = optionObject.GetComponent<Outline>();
+                optionOutline.effectColor = new Color(0.86f, 0.68f, 0.35f, 0.42f);
+                optionOutline.effectDistance = new Vector2(1f, -1f);
+
+                Button button = optionObject.GetComponent<Button>();
+                ColorBlock colors = button.colors;
+                colors.normalColor = Color.white;
+                colors.highlightedColor = new Color(1.16f, 1.12f, 1.02f, 1f);
+                colors.pressedColor = new Color(0.86f, 0.8f, 0.68f, 1f);
+                colors.disabledColor = new Color(0.42f, 0.42f, 0.42f, 0.6f);
+                button.colors = colors;
+
+                CreateBar(
+                    option,
+                    "Accent",
+                    new Vector2(0f, 0f),
+                    new Vector2(0f, 1f),
+                    new Vector2(0f, 0f),
+                    new Vector2(6f, 0f),
+                    new Color(0.92f, 0.69f, 0.27f, 0.9f));
+
+                names[index] = CreateText(
+                    option,
+                    "Name",
+                    "-",
+                    font,
+                    26,
+                    FontStyle.Bold,
+                    new Vector2(26f, -12f),
+                    new Vector2(430f, 34f),
+                    TextAnchor.UpperLeft);
+                names[index].color = new Color(0.96f, 0.92f, 0.82f, 1f);
+
+                metas[index] = CreateText(
+                    option,
+                    "Meta",
+                    "-",
+                    font,
+                    16,
+                    FontStyle.Normal,
+                    new Vector2(26f, -50f),
+                    new Vector2(600f, 22f),
+                    TextAnchor.UpperLeft);
+                metas[index].color = new Color(0.72f, 0.7f, 0.64f, 1f);
+
+                details[index] = CreateText(
+                    option,
+                    "Detail",
+                    "-",
+                    font,
+                    15,
+                    FontStyle.Normal,
+                    new Vector2(26f, -78f),
+                    new Vector2(650f, 46f),
+                    TextAnchor.UpperLeft);
+                details[index].color = new Color(0.88f, 0.86f, 0.8f, 1f);
+                details[index].horizontalOverflow = HorizontalWrapMode.Wrap;
+
+                prices[index] = CreateText(
+                    option,
+                    "Price",
+                    "-",
+                    font,
+                    22,
+                    FontStyle.Bold,
+                    new Vector2(690f, -14f),
+                    new Vector2(120f, 34f),
+                    TextAnchor.UpperRight);
+                prices[index].color = new Color(0.92f, 0.69f, 0.27f, 1f);
+
+                buttons[index] = button;
+            }
+
+            GameObject rerollObject = new GameObject(
+                "RerollButton",
+                typeof(RectTransform),
+                typeof(Image),
+                typeof(Button),
+                typeof(Outline));
+            rerollObject.transform.SetParent(panel, false);
+            RectTransform rerollRect = rerollObject.GetComponent<RectTransform>();
+            rerollRect.anchorMin = new Vector2(0f, 0f);
+            rerollRect.anchorMax = new Vector2(0f, 0f);
+            rerollRect.pivot = new Vector2(0f, 0f);
+            rerollRect.anchoredPosition = new Vector2(34f, 30f);
+            rerollRect.sizeDelta = new Vector2(250f, 48f);
+            rerollObject.GetComponent<Image>().color = new Color(0.16f, 0.2f, 0.18f, 1f);
+            rerollObject.GetComponent<Outline>().effectColor =
+                new Color(0.86f, 0.68f, 0.35f, 0.42f);
+            Button rerollButton = rerollObject.GetComponent<Button>();
+            Text rerollLabel = CreateText(
+                rerollObject.transform,
+                "Label",
+                "重掷",
+                font,
+                18,
+                FontStyle.Bold,
+                Vector2.zero,
+                new Vector2(250f, 48f),
+                TextAnchor.MiddleCenter);
+            rerollLabel.rectTransform.anchorMin = Vector2.zero;
+            rerollLabel.rectTransform.anchorMax = Vector2.one;
+            rerollLabel.rectTransform.offsetMin = Vector2.zero;
+            rerollLabel.rectTransform.offsetMax = Vector2.zero;
+            rerollLabel.color = new Color(0.92f, 0.84f, 0.66f, 1f);
+
+            Text rerollHint = CreateText(
+                panel,
+                "RerollHint",
+                "",
+                font,
+                15,
+                FontStyle.Normal,
+                new Vector2(300f, 44f),
+                new Vector2(360f, 22f),
+                TextAnchor.UpperLeft);
+            rerollHint.color = new Color(0.66f, 0.64f, 0.58f, 1f);
+
+            GameObject leaveObject = new GameObject(
+                "LeaveButton",
+                typeof(RectTransform),
+                typeof(Image),
+                typeof(Button),
+                typeof(Outline));
+            leaveObject.transform.SetParent(panel, false);
+            RectTransform leaveRect = leaveObject.GetComponent<RectTransform>();
+            leaveRect.anchorMin = new Vector2(1f, 0f);
+            leaveRect.anchorMax = new Vector2(1f, 0f);
+            leaveRect.pivot = new Vector2(1f, 0f);
+            leaveRect.anchoredPosition = new Vector2(-34f, 30f);
+            leaveRect.sizeDelta = new Vector2(226f, 48f);
+            leaveObject.GetComponent<Image>().color = new Color(0.2f, 0.16f, 0.1f, 1f);
+            leaveObject.GetComponent<Outline>().effectColor =
+                new Color(0.92f, 0.69f, 0.27f, 0.6f);
+            Button leaveButton = leaveObject.GetComponent<Button>();
+            Text leaveLabel = CreateText(
+                leaveObject.transform,
+                "Label",
+                "离开商店",
+                font,
+                18,
+                FontStyle.Bold,
+                Vector2.zero,
+                new Vector2(226f, 48f),
+                TextAnchor.MiddleCenter);
+            leaveLabel.rectTransform.anchorMin = Vector2.zero;
+            leaveLabel.rectTransform.anchorMax = Vector2.one;
+            leaveLabel.rectTransform.offsetMin = Vector2.zero;
+            leaveLabel.rectTransform.offsetMax = Vector2.zero;
+            leaveLabel.color = new Color(0.96f, 0.88f, 0.69f, 1f);
+
+            overlay.SetActive(false);
+            return new BoardHudShopView(
+                overlay,
+                title,
+                subtitle,
+                buttons,
+                names,
+                metas,
+                details,
+                prices,
+                rerollButton,
+                rerollLabel,
+                rerollHint,
+                leaveButton,
+                leaveLabel);
         }
 
         public static BoardHudCombatResultView CreateCombatResultView(
