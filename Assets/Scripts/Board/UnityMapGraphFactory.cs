@@ -28,7 +28,7 @@ namespace ProjectArtOfAll.Board
                          .ThenBy(view => view.Column))
             {
                 int id = NodeId(view.Row, view.Column);
-                List<int> outgoing = BuildCounterClockwiseEdges(view, byId);
+                List<int> outgoing = BuildAdjacencyEdges(view, byId);
                 nodes.Add(
                     new MapNode(
                         id,
@@ -65,7 +65,7 @@ namespace ProjectArtOfAll.Board
             return new Vector2Int(nodeId / GridSize, nodeId % GridSize);
         }
 
-        private static List<int> BuildCounterClockwiseEdges(
+        private static List<int> BuildAdjacencyEdges(
             BoardTileView source,
             IReadOnlyDictionary<int, BoardTileView> byId)
         {
@@ -77,7 +77,6 @@ namespace ProjectArtOfAll.Board
                 new Vector2Int(0, -1)
             };
 
-            float sourceAngle = PolarAngle(source.Row, source.Column);
             List<int> outgoing = new List<int>();
 
             foreach (Vector2Int offset in offsets)
@@ -90,13 +89,7 @@ namespace ProjectArtOfAll.Board
                     continue;
                 }
 
-                float delta = Mathf.DeltaAngle(
-                    sourceAngle,
-                    PolarAngle(target.Row, target.Column));
-                if (delta > AngleEpsilon)
-                {
-                    outgoing.Add(id);
-                }
+                outgoing.Add(id);
             }
 
             return outgoing.OrderBy(id => id).ToList();

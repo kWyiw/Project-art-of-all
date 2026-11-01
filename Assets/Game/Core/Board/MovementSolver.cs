@@ -37,6 +37,7 @@ namespace ProjectArtOfAll.Core.Board
                 graph,
                 playerId,
                 startNodeId,
+                -1,
                 remainingSteps,
                 occupants,
                 path,
@@ -67,7 +68,7 @@ namespace ProjectArtOfAll.Core.Board
             graph.GetNode(startNodeId);
             List<IReadOnlyList<int>> paths = new List<IReadOnlyList<int>>();
             List<int> current = new List<int>();
-            WalkPaths(graph, startNodeId, steps, current, paths);
+            WalkPaths(graph, startNodeId, -1, steps, current, paths);
 
             return paths
                 .OrderBy(path => string.Join(",", path))
@@ -95,19 +96,21 @@ namespace ProjectArtOfAll.Core.Board
 
             List<int> path = new List<int>(outgoingEdgeChoices.Count);
             int current = startNodeId;
+            int previous = -1;
 
             for (int step = 0; step < outgoingEdgeChoices.Count; step++)
             {
-                MapNode node = graph.GetNode(current);
+                IReadOnlyList<int> legal = graph.LegalNextNodes(current, previous);
                 int choice = outgoingEdgeChoices[step];
-                if (choice < 0 || choice >= node.OutEdges.Count)
+                if (choice < 0 || choice >= legal.Count)
                 {
                     throw new ArgumentOutOfRangeException(
                         nameof(outgoingEdgeChoices),
                         $"Step {step} choice {choice} is invalid at node {current}.");
                 }
 
-                current = node.OutEdges[choice];
+                previous = current;
+                current = legal[choice];
                 path.Add(current);
             }
 
@@ -118,6 +121,7 @@ namespace ProjectArtOfAll.Core.Board
             MapGraph graph,
             int playerId,
             int currentNodeId,
+            int previousNodeId,
             int stepsLeft,
             IReadOnlyDictionary<int, List<int>> occupants,
             List<int> path,
@@ -128,8 +132,7 @@ namespace ProjectArtOfAll.Core.Board
                 return;
             }
 
-            MapNode current = graph.GetNode(currentNodeId);
-            foreach (int next in current.OutEdges.OrderBy(edge => edge))
+            foreach (int next in graph.LegalNextNodes(currentNodeId, previousNodeId))
             {
                 path.Add(next);
 
@@ -142,6 +145,7 @@ namespace ProjectArtOfAll.Core.Board
                     graph,
                     playerId,
                     next,
+                    currentNodeId,
                     stepsLeft - 1,
                     occupants,
                     path,
@@ -154,6 +158,7 @@ namespace ProjectArtOfAll.Core.Board
         private static void WalkPaths(
             MapGraph graph,
             int currentNodeId,
+            int previousNodeId,
             int stepsLeft,
             List<int> currentPath,
             List<IReadOnlyList<int>> paths)
@@ -164,11 +169,10 @@ namespace ProjectArtOfAll.Core.Board
                 return;
             }
 
-            MapNode current = graph.GetNode(currentNodeId);
-            foreach (int next in current.OutEdges.OrderBy(edge => edge))
+            foreach (int next in graph.LegalNextNodes(currentNodeId, previousNodeId))
             {
                 currentPath.Add(next);
-                WalkPaths(graph, next, stepsLeft - 1, currentPath, paths);
+                WalkPaths(graph, next, currentNodeId, stepsLeft - 1, currentPath, paths);
                 currentPath.RemoveAt(currentPath.Count - 1);
             }
         }

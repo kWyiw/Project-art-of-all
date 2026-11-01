@@ -781,6 +781,30 @@ namespace ProjectArtOfAll.Core.Checks
             MapGraph graph = CreateSceneMapGraph();
             int warps = graph.Nodes.Count(node => node.TileType == TileType.Warp);
             Assert(warps >= 2, "The scene map must contain at least two Warp tiles.");
+            Assert(
+                graph.Nodes.All(node => node.OutEdges.Count >= 1),
+                "Every scene tile needs at least one outgoing edge (R-MAP-003).");
+
+            int junctions = graph.Nodes.Count(node => node.OutEdges.Count >= 3);
+            Console.WriteLine("[scene] junctions=" + junctions.ToString());
+            Assert(
+                junctions >= 4,
+                "The scene map needs three-way junctions for the fork UI, found "
+                    + junctions.ToString() + ".");
+
+            // 从任一侧进入三岔口，除"原路返回"外至少还有两条可走（直行 / 拐弯）。
+            MapNode firstJunction = graph.Nodes.First(node => node.OutEdges.Count >= 3);
+            foreach (int entry in firstJunction.OutEdges)
+            {
+                IReadOnlyList<int> legal = graph.LegalNextNodes(firstJunction.Id, entry);
+                Assert(
+                    legal.Count >= 2,
+                    "A junction must offer at least two ways forward besides the way back.");
+                Assert(
+                    legal.All(edge => edge != entry),
+                    "Walking straight back the way you came is not a legal choice.");
+            }
+
 
             Dictionary<int, TileType> types = graph.Nodes
                 .ToDictionary(node => node.Id, node => node.TileType);
@@ -924,7 +948,6 @@ namespace ProjectArtOfAll.Core.Checks
             foreach (SceneCell cell in cells)
             {
                 int id = cell.Row * gridSize + cell.Column;
-                float sourceAngle = PolarAngle(cell.Row, cell.Column);
                 List<int> outgoing = new List<int>();
                 for (int index = 0; index < 4; index++)
                 {
@@ -935,10 +958,7 @@ namespace ProjectArtOfAll.Core.Checks
                         continue;
                     }
 
-                    if (DeltaAngle(sourceAngle, PolarAngle(neighbour.Row, neighbour.Column)) > 0.001f)
-                    {
-                        outgoing.Add(neighbour.Row * gridSize + neighbour.Column);
-                    }
+                    outgoing.Add(neighbour.Row * gridSize + neighbour.Column);
                 }
 
                 outgoing.Sort();
@@ -954,27 +974,6 @@ namespace ProjectArtOfAll.Core.Checks
                 nodes,
                 playerCount: 4,
                 teleportGroups: new[] { warpIds.ToArray() });
-        }
-
-        private static float PolarAngle(int row, int column)
-        {
-            return (float)(Math.Atan2(5.5 - row, column - 5.5) * (180.0 / Math.PI));
-        }
-
-        private static float DeltaAngle(float from, float to)
-        {
-            float delta = (to - from) % 360f;
-            if (delta > 180f)
-            {
-                delta -= 360f;
-            }
-
-            if (delta < -180f)
-            {
-                delta += 360f;
-            }
-
-            return delta;
         }
 
         private static void CheckM3MatchReport()

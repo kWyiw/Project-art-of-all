@@ -72,6 +72,26 @@ namespace ProjectArtOfAll.Core.Board
             return node;
         }
 
+        /// <summary>
+        /// Edges a player may take when arriving at <paramref name="nodeId"/> from
+        /// <paramref name="previousNodeId"/>. Walking straight back the way you came is
+        /// not a choice (R-MOVE-001); at a dead end the only edge is still returned.
+        /// </summary>
+        public IReadOnlyList<int> LegalNextNodes(int nodeId, int previousNodeId)
+        {
+            MapNode node = GetNode(nodeId);
+            if (previousNodeId < 0 || node.OutEdges.Count <= 1)
+            {
+                return node.OutEdges;
+            }
+
+            List<int> legal = node.OutEdges
+                .Where(edge => edge != previousNodeId)
+                .ToList();
+
+            return legal.Count == 0 ? node.OutEdges : legal.AsReadOnly();
+        }
+
         public int StepsBetween(int startNodeId, int targetNodeId)
         {
             MapNode start = GetNode(startNodeId);

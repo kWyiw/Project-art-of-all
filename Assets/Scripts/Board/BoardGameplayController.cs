@@ -140,31 +140,33 @@ namespace ProjectArtOfAll.Board
 
             MatchPlayerState movingPlayer = match.State.CurrentPlayer;
             int current = movingPlayer.CurrentNode;
+            int previous = -1;
             List<int> forkDirections = new List<int>();
             int encounterNode = -1;
 
             for (int step = 0; step < steps; step++)
             {
                 MapNode node = graph.GetNode(current);
-                if (node.OutEdges.Count == 0)
+                IReadOnlyList<int> legalEdges = graph.LegalNextNodes(current, previous);
+                if (legalEdges.Count == 0)
                 {
                     break;
                 }
 
                 int selectedEdgeIndex;
-                if (node.OutEdges.Count == 1)
+                if (legalEdges.Count == 1)
                 {
                     selectedEdgeIndex = 0;
                 }
                 else
                 {
                     pendingForkEdges.Clear();
-                    pendingForkEdges.AddRange(node.OutEdges);
+                    pendingForkEdges.AddRange(legalEdges);
                     pendingForkSelection = -1;
                     awaitingFork = true;
 
                     hud?.ShowForkChoices(
-                        CreateForkChoices(current, node.OutEdges),
+                        CreateForkChoices(current, legalEdges),
                         SelectFork);
 
                     while (pendingForkSelection < 0)
@@ -178,13 +180,14 @@ namespace ProjectArtOfAll.Board
                     forkDirections.Add(selectedEdgeIndex);
                 }
 
-                int next = node.OutEdges[selectedEdgeIndex];
+                int next = legalEdges[selectedEdgeIndex];
                 BoardTileView fromTile = tilesByNode[current];
                 BoardTileView toTile = tilesByNode[next];
                 UpdateHudStatus(
                     $"掷出 {match.State.LastRoll}  ·  移动 {step + 1}/{steps}");
                 yield return AnimateStep(activeToken, fromTile, toTile);
 
+                previous = current;
                 current = next;
                 Vector2Int currentCell =
                     UnityMapGraphFactory.CellFromNodeId(current);

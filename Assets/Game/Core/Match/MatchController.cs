@@ -392,12 +392,13 @@ namespace ProjectArtOfAll.Core.Match
             IReadOnlyList<int> forkDirections)
         {
             int current = State.CurrentPlayer.CurrentNode;
+            int previous = -1;
             int choiceIndex = 0;
 
             foreach (int next in path)
             {
-                MapNode node = graph.GetNode(current);
-                if (node.OutEdges.Count >= 2)
+                IReadOnlyList<int> legal = graph.LegalNextNodes(current, previous);
+                if (legal.Count >= 2)
                 {
                     if (choiceIndex >= forkDirections.Count)
                     {
@@ -405,9 +406,9 @@ namespace ProjectArtOfAll.Core.Match
                     }
 
                     int selectedEdge = -1;
-                    for (int edgeIndex = 0; edgeIndex < node.OutEdges.Count; edgeIndex++)
+                    for (int edgeIndex = 0; edgeIndex < legal.Count; edgeIndex++)
                     {
-                        if (node.OutEdges[edgeIndex] == next)
+                        if (legal[edgeIndex] == next)
                         {
                             selectedEdge = edgeIndex;
                             break;
@@ -422,6 +423,7 @@ namespace ProjectArtOfAll.Core.Match
                     choiceIndex++;
                 }
 
+                previous = current;
                 current = next;
             }
 
@@ -433,20 +435,22 @@ namespace ProjectArtOfAll.Core.Match
             int outgoingEdgeIndex)
         {
             int current = State.CurrentPlayer.CurrentNode;
+            int previous = -1;
             foreach (int next in path)
             {
-                MapNode node = graph.GetNode(current);
-                if (node.OutEdges.Count >= 2)
+                IReadOnlyList<int> legal = graph.LegalNextNodes(current, previous);
+                if (legal.Count >= 2)
                 {
-                    for (int edgeIndex = 0; edgeIndex < node.OutEdges.Count; edgeIndex++)
+                    for (int edgeIndex = 0; edgeIndex < legal.Count; edgeIndex++)
                     {
-                        if (node.OutEdges[edgeIndex] == next)
+                        if (legal[edgeIndex] == next)
                         {
                             return edgeIndex == outgoingEdgeIndex;
                         }
                     }
                 }
 
+                previous = current;
                 current = next;
             }
 
