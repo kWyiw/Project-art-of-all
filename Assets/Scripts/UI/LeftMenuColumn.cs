@@ -30,11 +30,15 @@ namespace ProjectArtOfAll.UI
 
         private void Awake()
         {
-            if (transform.Find("LeftMenuCanvas") == null)
+            // 版式只认代码这一份。场景里如果还留着早期烘焙出来的旧界面（旧按钮绑着已经删掉的方法），
+            // 直接销毁重建，避免"看到的是旧主页面"。
+            Transform staleCanvas = transform.Find("LeftMenuCanvas");
+            if (staleCanvas != null)
             {
-                BuildMenu();
+                Destroy(staleCanvas.gameObject);
             }
 
+            BuildMenu();
             ApplyMenuFont();
         }
 

@@ -27,8 +27,28 @@ namespace ProjectArtOfAll.Environment
 
         private void OnValidate()
         {
+#if UNITY_EDITOR
+            // 直接在 OnValidate 里换 mesh 会让 Unity 在检查阶段触发 SendMessage（WhiteRing: OnMeshFilterChanged），
+            // 控制台每改一次参数就刷一条报错。推迟到下一次编辑器 tick 再重建。
+            UnityEditor.EditorApplication.delayCall -= DelayedRebuild;
+            UnityEditor.EditorApplication.delayCall += DelayedRebuild;
+#else
+            RebuildMesh();
+#endif
+        }
+
+#if UNITY_EDITOR
+        private void DelayedRebuild()
+        {
+            UnityEditor.EditorApplication.delayCall -= DelayedRebuild;
+            if (this == null || !isActiveAndEnabled)
+            {
+                return;
+            }
+
             RebuildMesh();
         }
+#endif
 
         public void RebuildMesh()
         {
