@@ -108,11 +108,36 @@ namespace ProjectArtOfAll.Core.Board
                     return node.OutEdges;
                 }
 
-                List<int> choices = node.OutEdges
+                // 岔路口：只能直行或逆时针拐弯（顺时针不在选项里）。
+                if (TryDirection(previousNodeId, nodeId, out int dr, out int dc))
+                {
+                    List<int> choices = new List<int>(node.OutEdges.Count);
+                    foreach (int next in node.OutEdges)
+                    {
+                        if (!TryDirection(nodeId, next, out int ndr, out int ndc))
+                        {
+                            continue;
+                        }
+
+                        bool straight = ndr == dr && ndc == dc;
+                        bool turnsCounterClockwise = ndr == -dc && ndc == dr;
+                        if (straight || turnsCounterClockwise)
+                        {
+                            choices.Add(next);
+                        }
+                    }
+
+                    if (choices.Count > 0)
+                    {
+                        return choices.AsReadOnly();
+                    }
+                }
+
+                List<int> fallback = node.OutEdges
                     .Where(edge => edge != previousNodeId)
                     .ToList();
 
-                return choices.Count == 0 ? node.OutEdges : choices.AsReadOnly();
+                return fallback.Count == 0 ? node.OutEdges : fallback.AsReadOnly();
             }
 
             int counterClockwise = FindCounterClockwiseNeighbour(node);
@@ -178,6 +203,22 @@ namespace ProjectArtOfAll.Core.Board
             }
 
             return value;
+        }
+
+        private bool TryDirection(int fromNodeId, int toNodeId, out int row, out int column)
+        {
+            MapNode from = GetNode(fromNodeId);
+            MapNode to = GetNode(toNodeId);
+            row = 0;
+            column = 0;
+            if (!from.HasGridPosition || !to.HasGridPosition)
+            {
+                return false;
+            }
+
+            row = to.GridRow - from.GridRow;
+            column = to.GridColumn - from.GridColumn;
+            return row != 0 || column != 0;
         }
 
         public int StepsBetween(int startNodeId, int targetNodeId)
