@@ -592,6 +592,30 @@ namespace ProjectArtOfAll.Core.Checks
             Assert(
                 player.BattleCardWidth <= capacity,
                 "The battle row must never exceed the capacity of the current level.");
+
+            CardInstance doomed = player.OwnedCards[0];
+            int valueBefore = doomed.Value;
+            int shardsBefore = player.Shards;
+            controller.Submit(new SellCardCommand(player.Id, doomed.Uid));
+            Assert(
+                player.Shards == shardsBefore + valueBefore,
+                "R-ECO-005: selling must pay the card's current value.");
+            Assert(
+                player.OwnedCards.All(card => card.Uid != doomed.Uid),
+                "CJ-6.5: a sold card is gone for good.");
+            bool soldTwice = false;
+            try
+            {
+                controller.Submit(new SellCardCommand(player.Id, doomed.Uid));
+                soldTwice = true;
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
+            Assert(!soldTwice, "A sold card cannot be sold again.");
+            Console.WriteLine(
+                $"[sell] value={valueBefore} shards={player.Shards}");
         }
 
         private static void CheckRewardChoice()

@@ -164,14 +164,21 @@ namespace ProjectArtOfAll.Board
             UpdateHudStatus();
         }
 
-        /// <summary>拖进出售区松手 = 立即出售，无确认无撤销（UI-4.1.1）。</summary>
+        /// <summary>拖进出售区松手 / 详情面板点「出售」= 立即出售，无确认无撤销（UI-4.1.1）。</summary>
         public void SubmitSellCard(int cardUid)
         {
-            if (match == null || match.IsFinished)
+            if (match == null)
             {
                 return;
             }
 
+            if (match.IsFinished)
+            {
+                hud?.SetMatchStatus("对局已经结束，不能再出售卡牌。");
+                return;
+            }
+
+            int eventStart = match.Events.History.Count;
             try
             {
                 match.Submit(new SellCardCommand(humanPlayerId, cardUid));
@@ -182,7 +189,24 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
-            UpdateHudStatus();
+            CardSoldEvent sold = match.Events.History
+                .Skip(eventStart)
+                .OfType<CardSoldEvent>()
+                .LastOrDefault();
+            string soldName = sold == null
+                ? "卡牌"
+                : CardDatabase.Instance.Get(sold.CardId).DisplayName;
+            int refund = sold == null ? 0 : sold.Shards;
+
+            hud?.RefreshCardBand(HumanPlayer);
+            UpdateHudStatus(string.Concat(
+                "玩家 ",
+                (humanPlayerId + 1).ToString(),
+                " 出售 ",
+                soldName,
+                "  +",
+                refund.ToString(),
+                " 碎片"));
         }
 
         public void RefreshCardBand()

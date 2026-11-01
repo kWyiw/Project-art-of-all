@@ -41,6 +41,8 @@ namespace ProjectArtOfAll.Board
         private readonly RectTransform detailPanel;
         private readonly Text detailText;
         private readonly Text detailTitle;
+        private readonly Button detailSellButton;
+        private readonly Text detailSellLabel;
         private readonly Image sellImage;
         private readonly Text sellLabel;
         private readonly Text bagLabel;
@@ -60,6 +62,7 @@ namespace ProjectArtOfAll.Board
         private bool collapsed;
         private float scale = 1f;
         private MatchPlayerState lastPlayer;
+        private CardInstance selectedCard;
 
         private CardBandController(BoardGameplayController gameplay, RectTransform root, Font font)
         {
@@ -126,7 +129,7 @@ namespace ProjectArtOfAll.Board
                 new Vector2(1f, 0f),
                 new Vector2(1f, 0f),
                 new Vector2(-456f, 20f),
-                new Vector2(-16f, 260f),
+                new Vector2(-16f, 318f),
                 new Color(0.048f, 0.078f, 0.09f, 0.98f));
             detailPanel = detailObject.GetComponent<RectTransform>();
             detailTitle = BoardHudOverlayFactory.CreateText(
@@ -148,9 +151,49 @@ namespace ProjectArtOfAll.Board
                 15,
                 FontStyle.Normal,
                 new Vector2(18f, -50f),
-                new Vector2(404f, 190f),
+                new Vector2(404f, 196f),
                 TextAnchor.UpperLeft);
             detailText.color = TextColor;
+            detailText.verticalOverflow = VerticalWrapMode.Truncate;
+
+            GameObject sellButtonObject = new GameObject(
+                "SellButton",
+                typeof(RectTransform),
+                typeof(Image),
+                typeof(Button),
+                typeof(Outline));
+            sellButtonObject.transform.SetParent(detailObject.transform, false);
+            RectTransform sellButtonRect =
+                sellButtonObject.GetComponent<RectTransform>();
+            sellButtonRect.anchorMin = new Vector2(0f, 0f);
+            sellButtonRect.anchorMax = new Vector2(1f, 0f);
+            sellButtonRect.pivot = new Vector2(0.5f, 0f);
+            sellButtonRect.offsetMin = new Vector2(18f, 12f);
+            sellButtonRect.offsetMax = new Vector2(-18f, 54f);
+
+            sellButtonObject.GetComponent<Image>().color =
+                new Color(0.32f, 0.16f, 0.11f, 1f);
+            sellButtonObject.GetComponent<Outline>().effectColor =
+                new Color(0.92f, 0.45f, 0.28f, 0.7f);
+            detailSellButton = sellButtonObject.GetComponent<Button>();
+            detailSellLabel = BoardHudOverlayFactory.CreateText(
+                sellButtonObject.transform,
+                "Label",
+                "出售",
+                font,
+                17,
+                FontStyle.Bold,
+                Vector2.zero,
+                new Vector2(404f, 42f),
+                TextAnchor.MiddleCenter);
+            detailSellLabel.rectTransform.anchorMin = Vector2.zero;
+            detailSellLabel.rectTransform.anchorMax = Vector2.one;
+            detailSellLabel.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            detailSellLabel.rectTransform.offsetMin = Vector2.zero;
+            detailSellLabel.rectTransform.offsetMax = Vector2.zero;
+            detailSellLabel.color = new Color(1f, 0.88f, 0.7f, 1f);
+            detailSellButton.onClick.AddListener(SellSelectedCard);
+
             detailObject.SetActive(false);
 
             root.gameObject.AddComponent<CardBandLayoutDriver>().Bind(this);
@@ -348,6 +391,12 @@ namespace ProjectArtOfAll.Board
         public void Refresh(MatchPlayerState player)
         {
             lastPlayer = player;
+            if (selectedCard != null &&
+                (player == null || !player.OwnedCards.Contains(selectedCard)))
+            {
+                HideDetail();
+            }
+
             ClearWidgets(bagWidgets);
             ClearWidgets(battleWidgets);
             if (player == null)
@@ -750,7 +799,7 @@ namespace ProjectArtOfAll.Board
                 rect.position = world;
             }
 
-            bool overSell = Contains(sellZone, eventData);
+            bool overSell = ContainsPadded(sellZone, eventData, 18f);
             sellImage.color = overSell ? SellHotColor : SellColor;
             sellLabel.text = overSell && dragging != null
                 ? string.Concat("+", dragging.Value.ToString(), " 碎片")
@@ -775,8 +824,9 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
-            if (Contains(sellZone, eventData))
+            if (ContainsPadded(sellZone, eventData, 18f))
             {
+                HideDetail();
                 gameplay.SubmitSellCard(card.Uid);
                 return;
             }
@@ -833,7 +883,13 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
+            selectedCard = card;
             detailPanel.gameObject.SetActive(true);
+            detailSellButton.interactable = true;
+            detailSellLabel.text = string.Concat(
+                "出售 · +",
+                card.Value.ToString(),
+                " 碎片");
             detailTitle.text = string.Concat(
                 card.Definition.DisplayName,
                 "   ",
@@ -864,9 +920,67 @@ namespace ProjectArtOfAll.Board
             return null;
         }
 
+        /// <summary>详情面板里的「出售」：和拖进出售区等价，无确认无撤销（UI-4.1.1）。</summary>
+        private void SellSelectedCard()
+        {
+            if (selectedCard == null)
+            {
+                return;
+            }
+
+            gameplay.SubmitSellCard(selectedCard.Uid);
+        }
+
+        private void HideDetail()
+        {
+            selectedCard = null;
+            detailPanel.gameObject.SetActive(false);
+        }
+
         private bool Contains(RectTransform rect, PointerEventData eventData)
         {
             return RectTransformUtility.RectangleContainsScreenPoint(rect, eventData.position, CameraFor());
+        }
+
+        /// <summary>出售热区放一点余量，免得差几个像素就判成"没拖到"。</summary>
+        private bool ContainsPadded(
+            RectTransform rect,
+            PointerEventData eventData,
+            float padding)
+        {
+            Vector3[] corners = new Vector3[4];
+            rect.GetWorldCorners(corners);
+            Vector2 min;
+            Vector2 max;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    rect,
+                    corners[0],
+                    CameraFor(),
+                    out min) ||
+                !RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    rect,
+                    corners[2],
+                    CameraFor(),
+                    out max))
+            {
+                return Contains(rect, eventData);
+            }
+
+            Vector2 local;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    rect,
+                    eventData.position,
+                    CameraFor(),
+                    out local))
+            {
+                return false;
+            }
+
+            float pad = padding / Mathf.Max(0.0001f, scale);
+            return local.x >= min.x - pad &&
+                local.x <= max.x + pad &&
+                local.y >= min.y - pad &&
+                local.y <= max.y + pad;
         }
 
         private int IndexAt(RectTransform row, PointerEventData eventData)
