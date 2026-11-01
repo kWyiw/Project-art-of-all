@@ -103,10 +103,14 @@ namespace ProjectArtOfAll.Core.Match
             }
         }
 
-        internal void RestoreMonster(int nodeId)
+        internal void RestoreAllBosses()
         {
-            bossNodes.Remove(nodeId);
-            monsterPools[nodeId] = 3;
+            foreach (int nodeId in bossNodes.ToArray())
+            {
+                monsterPools[nodeId] = 3;
+            }
+
+            bossNodes.Clear();
         }
 
         internal void RefillMonsterPools()

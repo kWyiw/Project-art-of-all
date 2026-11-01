@@ -301,7 +301,8 @@ namespace ProjectArtOfAll.Core.Match
                     $"Player {command.PlayerId} does not own card {command.CardUid}.");
             }
 
-            int refund = card.Definition.Value;
+            // R-ECO-005：出售按这张牌的当前价值结算（幸运饼干这类会成长）。
+            int refund = card.Value;
             AddShards(State.CurrentPlayer, refund);
             Publish(
                 new CardSoldEvent(
@@ -676,7 +677,8 @@ namespace ProjectArtOfAll.Core.Match
 
                 if (boss)
                 {
-                    State.RestoreMonster(arrival.Id);
+                    // R-TILE-004：Boss 被击败后**所有** BOSS 格恢复为怪物格。
+                    State.RestoreAllBosses();
                 }
             }
             else if (!result.IsDraw)

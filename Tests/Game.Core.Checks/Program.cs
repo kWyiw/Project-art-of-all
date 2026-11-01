@@ -30,6 +30,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckM1MatchDurability();
                 CheckHomeProgression();
                 CheckM3FullMatch();
+                CheckM3MatchReport();
                 Console.WriteLine("Game.Core checks passed.");
                 return 0;
             }
@@ -587,6 +588,93 @@ namespace ProjectArtOfAll.Core.Checks
                         !gameEvent.IgnoresShield);
             Assert(chariotHit.Amount >= 4 && chariotHit.Amount <= 24,
                 "Golden chariot must roll one die per point of value (4d6).");
+        }
+
+        private static void CheckM3MatchReport()
+        {
+            ulong[] seeds = { 777UL, 9091UL, 20261031UL, 424242UL };
+            int shardChoices = 0;
+            int winChoices = 0;
+            int playerBattles = 0;
+            int closedMatches = 0;
+
+            foreach (ulong seed in seeds)
+            {
+                MatchController controller = new MatchController(CreateM3Graph(), seed);
+
+                using (MatchStatistics statistics = MatchStatistics.Attach(controller))
+                {
+                    MatchAutomationReport report =
+                        SimpleMatchAutoplayer.Run(controller, maximumTurns: 4000);
+
+                    Assert(report.Finished, $"Seed {seed} must reach a winner.");
+                    Assert(
+                        report.WinnerPlayerId >= 0 && report.WinnerPlayerId < 4,
+                        $"Seed {seed} must produce a valid winner seat.");
+                    Assert(
+                        controller.State.Players.Any(player => player.Level >= 6),
+                        $"Seed {seed} winner must reach level 6.");
+                    Assert(
+                        statistics.Turns == statistics.Players.Sum(player => player.Turns),
+                        $"Seed {seed} per-seat turn counters must add up.");
+                    Assert(
+                        statistics.ShardCurveByRound().Count >= 3,
+                        $"Seed {seed} must sample the Shard curve once per round.");
+                    Assert(
+                        statistics.Players.Any(player => player.BattlesFought > 0),
+                        $"Seed {seed} must include combat.");
+                    Assert(
+                        statistics.ToReport().Contains("M3 match report"),
+                        "The statistics report must render.");
+
+                    shardChoices += statistics.NormaChosenCount(NormaType.Shard);
+                    winChoices += statistics.NormaChosenCount(NormaType.Wins);
+                    playerBattles +=
+                        statistics.Players.Sum(player => player.PlayerBattlesFought) / 2;
+
+                    if (statistics.Finished)
+                    {
+                        closedMatches++;
+                    }
+                }
+            }
+
+            Assert(closedMatches == seeds.Length, "Every seed must close out.");
+            Assert(shardChoices > 0, "The Shard Norma route must be exercised.");
+            Assert(winChoices > 0, "The Win Norma route must be exercised.");
+            Assert(
+                playerBattles > 0,
+                "The ambush policy must trigger player-versus-player fights.");
+        }
+
+        private static MapGraph CreateM3Graph()
+        {
+            // Stand-in for the 12x12 scene board: 24 nodes, one ring, the tile mix of
+            // 规则书 §1.5 (no Trap: its effect is still undefined in the rule book).
+            TileType[] layout =
+            {
+                TileType.Home, TileType.Neutral, TileType.Monster, TileType.Reward,
+                TileType.Shop, TileType.Neutral, TileType.Home, TileType.Neutral,
+                TileType.Monster, TileType.Reward, TileType.Shop, TileType.Neutral,
+                TileType.Home, TileType.Neutral, TileType.Monster, TileType.Reward,
+                TileType.Shop, TileType.Neutral, TileType.Home, TileType.Neutral,
+                TileType.Reward, TileType.Reward, TileType.Neutral, TileType.Neutral
+            };
+            int[] homeOwners = { 0, 1, 2, 3 };
+            int homeIndex = 0;
+            MapNode[] nodes = new MapNode[layout.Length];
+
+            for (int index = 0; index < layout.Length; index++)
+            {
+                bool isHome = layout[index] == TileType.Home;
+                nodes[index] = new MapNode(
+                    index,
+                    layout[index],
+                    isHome ? homeOwners[homeIndex++] : -1,
+                    (index + 1) % layout.Length);
+            }
+
+            return MapGraph.Create(nodes, playerCount: 4);
         }
 
         private static MapGraph CreateTestGraph()

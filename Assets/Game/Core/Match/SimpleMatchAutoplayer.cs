@@ -1,3 +1,4 @@
+using System.Linq;
 using ProjectArtOfAll.Core.Board;
 using ProjectArtOfAll.Core.Cards;
 using ProjectArtOfAll.Core.Commands;
@@ -58,10 +59,7 @@ namespace ProjectArtOfAll.Core.Match
                         controller.Submit(ChooseMove(controller));
                         break;
                     case MatchPhase.AwaitNorma:
-                        controller.Submit(
-                            new SetNormaCommand(
-                                player.Id,
-                                NormaType.Shard));
+                        controller.Submit(ChooseNorma(controller, player));
                         break;
                     case MatchPhase.AwaitReward:
                         ChooseReward(controller, player);
@@ -101,10 +99,97 @@ namespace ProjectArtOfAll.Core.Match
                     firstForkDirection: null);
             }
 
+            MovementCandidate ambush = SelectAmbushCandidate(controller, player);
+            if (ambush != null)
+            {
+                return new MoveCommand(
+                    player.Id,
+                    ambush.TargetNodeId,
+                    firstForkDirection: null);
+            }
+
             return new MoveCommand(
                 player.Id,
                 targetNodeId: null,
                 firstForkDirection: 0);
+        }
+
+        /// <summary>
+        /// Picks the reachable landing node that holds the richest opponent we can beat.
+        /// Player-versus-player combat only happens on an explicit landing, so the seat has
+        /// to aim for it; without this the whole steal pillar never runs in headless play.
+        /// </summary>
+        private static MovementCandidate SelectAmbushCandidate(
+            MatchController controller,
+            MatchPlayerState player)
+        {
+            MovementCandidate bestCandidate = null;
+            int bestShards = -1;
+
+            foreach (MovementCandidate candidate in controller.CurrentCandidates)
+            {
+                MapNode node = controller.State.Map.GetNode(candidate.TargetNodeId);
+                if (node.TileType == TileType.Home)
+                {
+                    continue;
+                }
+
+                MatchPlayerState defender = controller.State.Players
+                    .Where(other => other.Id != player.Id &&
+                                    other.CurrentNode == candidate.TargetNodeId)
+                    .OrderByDescending(other => other.Shards)
+                    .FirstOrDefault();
+
+                if (defender == null ||
+                    defender.Shards < 2 ||
+                    !LooksFavourable(player, defender) ||
+                    defender.Shards <= bestShards)
+                {
+                    continue;
+                }
+
+                bestCandidate = candidate;
+                bestShards = defender.Shards;
+            }
+
+            return bestCandidate;
+        }
+
+        private static bool LooksFavourable(
+            MatchPlayerState attacker,
+            MatchPlayerState defender)
+        {
+            return BattleStrength(attacker) >= BattleStrength(defender);
+        }
+
+        private static int BattleStrength(MatchPlayerState player)
+        {
+            return player.BattleCardWidth * 2 + player.BattleCards.Count;
+        }
+
+        /// <summary>
+        /// Two-track Norma: stay on the route that is furthest along relative to its own
+        /// threshold. The per-seat margin stands in for the M5 personality weights so that
+        /// both the Shard and the Win route are exercised in headless runs.
+        /// </summary>
+        private static SetNormaCommand ChooseNorma(
+            MatchController controller,
+            MatchPlayerState player)
+        {
+            int shardThreshold = NormaRules.GetThreshold(player.Level, NormaType.Shard);
+            int winThreshold = NormaRules.GetThreshold(player.Level, NormaType.Wins);
+            double shardProgress = shardThreshold <= 0
+                ? 0.0
+                : player.Shards / (double)shardThreshold;
+            double winProgress = winThreshold <= 0
+                ? 0.0
+                : player.Wins / (double)winThreshold;
+
+            double margin = player.Id % 2 == 0 ? 0.5 : -0.5;
+            NormaType chosen = winProgress > shardProgress + margin
+                ? NormaType.Wins
+                : NormaType.Shard;
+            return new SetNormaCommand(player.Id, chosen);
         }
 
         private static MovementCandidate FirstOrDefaultForPlayerHome(
