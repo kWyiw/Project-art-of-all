@@ -14,6 +14,8 @@ namespace ProjectArtOfAll.Core.Board
         private readonly ReadOnlyCollection<MapNode> nodes;
         private readonly IReadOnlyDictionary<int, MapNode> nodesById;
         private readonly ReadOnlyCollection<ReadOnlyCollection<int>> teleportGroups;
+        private readonly double centreRow;
+        private readonly double centreColumn;
 
         private MapGraph(
             IEnumerable<MapNode> sourceNodes,
@@ -35,6 +37,14 @@ namespace ProjectArtOfAll.Core.Board
             {
                 throw new InvalidOperationException(
                     "Invalid map graph:\n- " + string.Join("\n- ", errors));
+            }
+
+            // 逆时针方向以整张图的中心为基准，中心取带网格坐标节点的包围盒中点。
+            List<MapNode> placed = orderedNodes.Where(node => node.HasGridPosition).ToList();
+            if (placed.Count > 0)
+            {
+                centreRow = (placed.Min(node => node.GridRow) + placed.Max(node => node.GridRow)) * 0.5;
+                centreColumn = (placed.Min(node => node.GridColumn) + placed.Max(node => node.GridColumn)) * 0.5;
             }
 
             nodes = Array.AsReadOnly(orderedNodes.ToArray());
@@ -77,42 +87,40 @@ namespace ProjectArtOfAll.Core.Board
         /// <paramref name="previousNodeId"/>. Walking straight back the way you came is
         /// not a choice (R-MOVE-001); at a dead end the only edge is still returned.
         /// </summary>
+        /// <summary>
+        /// Where a player may go after arriving at <paramref name="nodeId"/> from
+        /// <paramref name="previousNodeId"/>.
+        /// R-MAP-002：走廊（只有前后两格）只能**逆时针**走；岔路口（三岔及以上）
+        /// 由玩家选，除原路返回外皆可。
+        /// </summary>
         public IReadOnlyList<int> LegalNextNodes(int nodeId, int previousNodeId)
         {
             MapNode node = GetNode(nodeId);
-            if (previousNodeId < 0 || node.OutEdges.Count <= 1)
+            if (node.OutEdges.Count <= 1)
             {
                 return node.OutEdges;
             }
 
-            // R-MAP-002：到达岔路后只能「直行」或「逆时针拐弯」。
-            // 网格 y 轴向下（row 越大越靠下），把 (dr, dc) 逆时针转 90° 就是 (-dc, dr)。
-            if (TryDirection(previousNodeId, nodeId, out int dr, out int dc))
+            if (node.OutEdges.Count >= 3)
             {
-                List<int> choices = new List<int>(node.OutEdges.Count);
-                foreach (int next in node.OutEdges)
+                if (previousNodeId < 0)
                 {
-                    if (!TryDirection(nodeId, next, out int ndr, out int ndc))
-                    {
-                        continue;
-                    }
-
-                    bool straight = ndr == dr && ndc == dc;
-                    bool counterClockwise = ndr == -dc && ndc == dr;
-                    if (straight || counterClockwise)
-                    {
-                        choices.Add(next);
-                    }
+                    return node.OutEdges;
                 }
 
-                if (choices.Count > 0)
-                {
-                    return choices.AsReadOnly();
-                }
+                List<int> choices = node.OutEdges
+                    .Where(edge => edge != previousNodeId)
+                    .ToList();
+
+                return choices.Count == 0 ? node.OutEdges : choices.AsReadOnly();
             }
 
-            // 没有网格坐标（测试里的合成图）或在该格没有任何合规方向时，
-            // 退回「除了来路都能走」。
+            int counterClockwise = FindCounterClockwiseNeighbour(node);
+            if (counterClockwise >= 0)
+            {
+                return new[] { counterClockwise };
+            }
+
             List<int> legal = node.OutEdges
                 .Where(edge => edge != previousNodeId)
                 .ToList();
@@ -120,20 +128,56 @@ namespace ProjectArtOfAll.Core.Board
             return legal.Count == 0 ? node.OutEdges : legal.AsReadOnly();
         }
 
-        private bool TryDirection(int fromNodeId, int toNodeId, out int row, out int column)
+        /// <summary>
+        /// The neighbour that lies counter-clockwise from <paramref name="node"/> around
+        /// the board centre (smallest positive angle step). -1 when nodes carry no grid
+        /// position or there is no such neighbour.
+        /// </summary>
+        private int FindCounterClockwiseNeighbour(MapNode node)
         {
-            MapNode from = GetNode(fromNodeId);
-            MapNode to = GetNode(toNodeId);
-            row = 0;
-            column = 0;
-            if (!from.HasGridPosition || !to.HasGridPosition)
+            if (!node.HasGridPosition)
             {
-                return false;
+                return -1;
             }
 
-            row = to.GridRow - from.GridRow;
-            column = to.GridColumn - from.GridColumn;
-            return row != 0 || column != 0;
+            double sourceAngle = PolarAngle(node.GridRow, node.GridColumn);
+            int best = -1;
+            double bestDelta = double.MaxValue;
+
+            foreach (int edge in node.OutEdges)
+            {
+                MapNode neighbour = GetNode(edge);
+                if (!neighbour.HasGridPosition)
+                {
+                    continue;
+                }
+
+                double delta = NormalizeDegrees(
+                    PolarAngle(neighbour.GridRow, neighbour.GridColumn) - sourceAngle);
+                if (delta > 0.0001 && delta < bestDelta)
+                {
+                    bestDelta = delta;
+                    best = edge;
+                }
+            }
+
+            return best;
+        }
+
+        private double PolarAngle(int row, int column)
+        {
+            return Math.Atan2(centreRow - row, column - centreColumn) * (180.0 / Math.PI);
+        }
+
+        private static double NormalizeDegrees(double degrees)
+        {
+            double value = degrees % 360.0;
+            if (value < 0)
+            {
+                value += 360.0;
+            }
+
+            return value;
         }
 
         public int StepsBetween(int startNodeId, int targetNodeId)

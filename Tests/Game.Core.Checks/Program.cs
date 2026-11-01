@@ -792,34 +792,31 @@ namespace ProjectArtOfAll.Core.Checks
                 "The scene map needs three-way junctions for the fork UI, found "
                     + junctions.ToString() + ".");
 
-            // R-MAP-002：进入岔路后只能「直行」或「逆时针拐弯」，原路折返与顺时针都不允许。
-            foreach (MapNode junction in graph.Nodes.Where(node => node.OutEdges.Count >= 3))
+            // R-MAP-002：走廊只能逆时针走（唯一方向）；岔路口除来路外任选。
+            foreach (MapNode node in graph.Nodes.Where(n => n.OutEdges.Count == 2))
+            {
+                IReadOnlyList<int> fromFirst = graph.LegalNextNodes(node.Id, node.OutEdges[0]);
+                IReadOnlyList<int> fromSecond = graph.LegalNextNodes(node.Id, node.OutEdges[1]);
+                Assert(
+                    fromFirst.Count == 1,
+                    "A corridor tile must have exactly one legal way forward.");
+                Assert(
+                    fromFirst[0] == fromSecond[0],
+                    "A corridor tile always leads the same way (counter-clockwise), "
+                        + "no matter which side the player came from.");
+            }
+
+            foreach (MapNode junction in graph.Nodes.Where(n => n.OutEdges.Count >= 3))
             {
                 foreach (int entry in junction.OutEdges)
                 {
-                    MapNode from = graph.GetNode(entry);
-                    int dr = junction.GridRow - from.GridRow;
-                    int dc = junction.GridColumn - from.GridColumn;
                     IReadOnlyList<int> legal = graph.LegalNextNodes(junction.Id, entry);
-
                     Assert(
-                        legal.Count >= 1,
-                        "A junction must always leave at least one legal way forward.");
+                        legal.Count == junction.OutEdges.Count - 1,
+                        "A junction must offer every way except the way back.");
                     Assert(
                         legal.All(edge => edge != entry),
-                        "Walking straight back the way you came is not a legal choice.");
-
-                    foreach (int next in legal)
-                    {
-                        MapNode target = graph.GetNode(next);
-                        int ndr = target.GridRow - junction.GridRow;
-                        int ndc = target.GridColumn - junction.GridColumn;
-                        bool straight = ndr == dr && ndc == dc;
-                        bool counterClockwise = ndr == -dc && ndc == dr;
-                        Assert(
-                            straight || counterClockwise,
-                            "Only going straight or turning counter-clockwise is legal at a junction.");
-                    }
+                        "A junction must not offer the way back.");
                 }
             }
 
