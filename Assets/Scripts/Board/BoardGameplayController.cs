@@ -703,6 +703,7 @@ namespace ProjectArtOfAll.Board
             hud.SetMatchStatus(status);
             hud.ShowCards(player);
             hud.SetAssemblyLevel(player.Level);
+            hud.RefreshPlayerPanels(match.State);
         }
 
         private int ResolveEntryPlayerId()

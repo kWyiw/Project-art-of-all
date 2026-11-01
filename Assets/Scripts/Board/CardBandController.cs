@@ -53,6 +53,7 @@ namespace ProjectArtOfAll.Board
         private readonly List<GameObject> battleWidgets = new List<GameObject>();
 
         private CardInstance dragging;
+        private CardTooltipView tooltip;
         private bool collapsed;
         private float scale = 1f;
         private MatchPlayerState lastPlayer;
@@ -171,6 +172,9 @@ namespace ProjectArtOfAll.Board
 
         /// <summary>掷骰子按钮：由 HUD 注进来，跟着带高一起挪到带上方右侧的空地。</summary>
         public RectTransform DiceButtonTarget { get; set; }
+
+        /// <summary>带子当前高度（四角玩家栏用它把下方两块抬到带子上沿）。</summary>
+        public float CurrentBandHeight => root.rect.height;
 
         /// <summary>带高 = 画布高度的一半（盖满下半屏）。</summary>
         public void ApplyScreenLayout()
@@ -431,6 +435,7 @@ namespace ProjectArtOfAll.Board
 
         public void BeginDrag(CardBandDragHandler handler, PointerEventData eventData)
         {
+            HideTooltip();
             dragging = handler.Card;
             handler.transform.SetParent(root.parent, true);
             handler.transform.SetAsLastSibling();
@@ -498,6 +503,35 @@ namespace ProjectArtOfAll.Board
             }
 
             gameplay.RefreshCardBand();
+        }
+
+        public void ShowTooltip(CardBandDragHandler handler, Vector2 screenPosition)
+        {
+            if (handler == null || handler.Card == null)
+            {
+                return;
+            }
+
+            if (tooltip == null)
+            {
+                RectTransform canvas = root.parent as RectTransform;
+                if (canvas == null)
+                {
+                    return;
+                }
+
+                tooltip = CardTooltipView.Create(canvas, font);
+            }
+
+            tooltip.Show(handler.Card, screenPosition, root.parent as RectTransform);
+        }
+
+        public void HideTooltip()
+        {
+            if (tooltip != null)
+            {
+                tooltip.Hide();
+            }
         }
 
         public void Select(CardBandDragHandler handler)
@@ -594,7 +628,9 @@ namespace ProjectArtOfAll.Board
         IBeginDragHandler,
         IDragHandler,
         IEndDragHandler,
-        IPointerClickHandler
+        IPointerClickHandler,
+        IPointerEnterHandler,
+        IPointerExitHandler
     {
         private CardBandController owner;
         private CardInstance card;
@@ -628,6 +664,16 @@ namespace ProjectArtOfAll.Board
         public void OnPointerClick(PointerEventData eventData)
         {
             owner?.Select(this);
+        }
+
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            owner?.ShowTooltip(this, eventData.position);
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            owner?.HideTooltip();
         }
     }
 }

@@ -69,6 +69,11 @@ namespace ProjectArtOfAll.Board
         private BoardHudRewardChoiceView rewardView;
         private Action<int> rewardChoiceHandler;
         private MatchPlayerState cachedPlayer;
+        private MatchState cachedState;
+        private int humanPlayerId = -1;
+        private PlayerCornerPanels cornerPanels;
+        private OpponentDossierView dossier;
+        private PauseOverlayView pauseOverlay;
 
         private void Awake()
         {
@@ -101,6 +106,11 @@ namespace ProjectArtOfAll.Board
 
         private void Update()
         {
+            if (Application.isPlaying && Input.GetKeyDown(KeyCode.Escape))
+            {
+                TogglePause();
+            }
+
             if (drawerPanel == null)
             {
                 return;
@@ -254,6 +264,10 @@ namespace ProjectArtOfAll.Board
             }
 
             cardBand.Refresh(player ?? boardGameplay?.HumanPlayer);
+            if (cornerPanels != null)
+            {
+                cornerPanels.ApplyBandTop(cardBand.CurrentBandHeight);
+            }
         }
 
         public void ToggleCardView()
@@ -772,6 +786,102 @@ namespace ProjectArtOfAll.Board
                     combatResultView.CloseButton.onClick.AddListener(HideCombatResult);
                 }
             }
+
+            if (cornerPanels == null)
+            {
+                cornerPanels = PlayerCornerPanels.Create((RectTransform)transform, font, ShowDossier);
+            }
+
+            if (dossier == null)
+            {
+                dossier = OpponentDossierView.Create((RectTransform)transform, font, HideDossier);
+            }
+
+            if (pauseOverlay == null)
+            {
+                pauseOverlay = PauseOverlayView.Create((RectTransform)transform, font, TogglePause);
+            }
+        }
+
+        /// <summary>Esc 暂停（只遮输入；内核没有暂停态，重开走重载场景）。</summary>
+        public void TogglePause()
+        {
+            if (pauseOverlay == null || !Application.isPlaying)
+            {
+                return;
+            }
+
+            if (pauseOverlay.IsOpen)
+            {
+                pauseOverlay.Hide();
+                return;
+            }
+
+            pauseOverlay.transform.SetAsLastSibling();
+            pauseOverlay.Show();
+        }
+
+        /// <summary>四角玩家栏：显示所有座位的等级、碎片、胜场与占用。</summary>
+        public void RefreshPlayerPanels(MatchState state)
+        {
+            if (state == null)
+            {
+                return;
+            }
+
+            cachedState = state;
+            if (cornerPanels == null)
+            {
+                return;
+            }
+
+            if (humanPlayerId < 0 && boardGameplay != null && boardGameplay.HumanPlayer != null)
+            {
+                humanPlayerId = boardGameplay.HumanPlayer.Id;
+            }
+
+            cornerPanels.Refresh(state, humanPlayerId);
+            if (cardBand != null)
+            {
+                cornerPanels.ApplyBandTop(cardBand.CurrentBandHeight);
+            }
+
+            if (dossier != null && dossier.IsOpen)
+            {
+                MatchPlayerState shown = state.Players.FirstOrDefault(
+                    player => player.Id == dossierPlayerId);
+                if (shown != null)
+                {
+                    dossier.Show(shown);
+                }
+            }
+        }
+
+        private int dossierPlayerId = -1;
+
+        /// <summary>对手档案（§2.7）：战斗栏按真实顺序，背包只给占用量与总价值。</summary>
+        public void ShowDossier(int playerId)
+        {
+            if (cachedState == null || dossier == null)
+            {
+                return;
+            }
+
+            MatchPlayerState player = cachedState.Players.FirstOrDefault(
+                candidate => candidate.Id == playerId);
+            if (player == null)
+            {
+                return;
+            }
+
+            dossierPlayerId = playerId;
+            dossier.Show(player);
+        }
+
+        public void HideDossier()
+        {
+            dossierPlayerId = -1;
+            dossier?.Hide();
         }
 
         /// <summary>奖励格二选一：装不下的选项会置灰，不可放弃（R-TILE-006）。</summary>
