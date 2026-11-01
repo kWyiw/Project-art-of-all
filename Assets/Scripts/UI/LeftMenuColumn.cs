@@ -30,12 +30,19 @@ namespace ProjectArtOfAll.UI
 
         private void Awake()
         {
-            // 版式只认代码这一份。场景里如果还留着早期烘焙出来的旧界面（旧按钮绑着已经删掉的方法），
-            // 直接销毁重建，避免"看到的是旧主页面"。
-            Transform staleCanvas = transform.Find("LeftMenuCanvas");
-            if (staleCanvas != null)
+            // 版式只认代码这一份。场景里如果还留着早期烘焙出来的旧界面
+            // （旧按钮绑着已经被删掉的方法），先清掉再重建，避免"看到的是旧主页面"。
+            // 用全场景搜索而不是 transform.Find：早期烘焙出来的 Canvas 不一定是本物体的子节点。
+            Transform[] allTransforms = Object.FindObjectsOfType<Transform>(true);
+            for (int index = 0; index < allTransforms.Length; index++)
             {
-                Destroy(staleCanvas.gameObject);
+                Transform candidate = allTransforms[index];
+                if (candidate != null &&
+                    candidate != transform &&
+                    candidate.name == "LeftMenuCanvas")
+                {
+                    Destroy(candidate.gameObject);
+                }
             }
 
             BuildMenu();
