@@ -35,6 +35,9 @@
 Thumbs.db
 Desktop.ini
 
+# Local scratch space (backups, probe projects)
+_tmp/
+
 # Build / test output
 TestResults/
 CodeCoverage/
