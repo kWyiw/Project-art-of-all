@@ -32,6 +32,9 @@ namespace ProjectArtOfAll.Board
         [Header("Match")]
         [SerializeField] private ulong matchSeed = 20261031UL;
 
+        /// <summary>CPU 每一步之间的表现延迟（秒）。</summary>
+        private const float CpuThinkSeconds = 0.7f;
+
         [Header("Movement")]
         [SerializeField, Min(0.05f)] private float stepDuration = 0.2f;
         [SerializeField, Min(0f)] private float hopHeight = 0.18f;
@@ -56,6 +59,15 @@ namespace ProjectArtOfAll.Board
         private bool awaitingRewardChoice;
         private bool awaitingEncounterAcceptance;
 
+        /// <summary>真人席位数：正常模式固定 0；无CPU测试模式为 -1（表示"当前行动者"）。</summary>
+        private int humanSeat = -1;
+
+        /// <summary>本回合由 CPU 自动推进：跳过岔路弹窗与遭遇确认，岔路取合法列表第一项。</summary>
+        private bool automaticTurn;
+
+        /// <summary>CPU 下一次行动的时间点（表现延迟，便于看清它做了什么）。</summary>
+        private float cpuActAfter;
+
         private void Start()
         {
             BuildSceneLookup();
@@ -69,7 +81,10 @@ namespace ProjectArtOfAll.Board
             cameraController = Camera.main != null
                 ? Camera.main.GetComponent<BoardCameraController>()
                 : null;
-            humanPlayerId = match.State.CurrentPlayer.Id;
+            humanSeat = GameSession.HumanSeat;
+            humanPlayerId = humanSeat >= 0
+                ? humanSeat
+                : match.State.CurrentPlayer.Id;
             BindHud();
             SynchronizeTokensFromCore();
             ActivateCurrentPlayer();
@@ -77,7 +92,6 @@ namespace ProjectArtOfAll.Board
             hud?.ShowOpeningHints();
         }
 
-        /// <summary>M4 设置项：地图路径线显隐。</summary>
         /// <summary>设置：镜头是否跟随当前行动的棋子（GameSettings.CameraFollow）。</summary>
         public void SetCameraFollow(bool enabled)
         {
@@ -247,6 +261,12 @@ namespace ProjectArtOfAll.Board
                 {
                     selectedEdgeIndex = 0;
                 }
+                else if (automaticTurn)
+                {
+                    // CPU 与无 CPU 测试模式下的自动推进：取合法列表第一项（内核会照常校验）。
+                    selectedEdgeIndex = 0;
+                    forkDirections.Add(selectedEdgeIndex);
+                }
                 else
                 {
                     pendingForkEdges.Clear();
@@ -291,12 +311,14 @@ namespace ProjectArtOfAll.Board
                 }
 
                 encounterNode = current;
-                awaitingEncounterAcceptance =
-                    hud != null &&
-                    hud.ShowPlayerEncounter(
+                if (!automaticTurn && hud != null)
+                {
+                    awaitingEncounterAcceptance = hud.ShowPlayerEncounter(
                         movingPlayer,
                         defender,
                         () => awaitingEncounterAcceptance = false);
+                }
+
                 while (awaitingEncounterAcceptance)
                 {
                     yield return null;
@@ -353,9 +375,11 @@ namespace ProjectArtOfAll.Board
             cameraController?.NotifyPlayerMoved();
             ResolveDeferredCorePhase();
             isMoving = false;
+            automaticTurn = false;
             hud?.SetDiceInteractable(
                 !match.IsFinished &&
                 !awaitingRewardChoice &&
+                IsHumanSeat(match.State.CurrentPlayer) &&
                 match.State.Phase == MatchPhase.AwaitRoll);
             ActivateCurrentPlayer();
 
@@ -511,7 +535,9 @@ namespace ProjectArtOfAll.Board
                         match.Submit(new SetNormaCommand(player.Id, NormaType.Shard));
                         continue;
                     case MatchPhase.AwaitReward:
-                        if (hud != null && match.CurrentRewardChoices.Count > 0)
+                        if (hud != null &&
+                            IsHumanSeat(player) &&
+                            match.CurrentRewardChoices.Count > 0)
                         {
                             awaitingRewardChoice = true;
                             hud?.SetDiceInteractable(false);
@@ -575,8 +601,11 @@ namespace ProjectArtOfAll.Board
         {
             ResolveDeferredCorePhase();
             isMoving = false;
+            automaticTurn = false;
             hud?.SetDiceInteractable(
-                !match.IsFinished && match.State.Phase == MatchPhase.AwaitRoll);
+                !match.IsFinished &&
+                IsHumanSeat(match.State.CurrentPlayer) &&
+                match.State.Phase == MatchPhase.AwaitRoll);
             ActivateCurrentPlayer();
             UpdateHudStatus(message);
         }
@@ -701,15 +730,114 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
-            if (!tokensByPlayer.TryGetValue(
-                    match.State.CurrentPlayer.Id,
-                    out activeToken))
+            MatchPlayerState actor = match.State.CurrentPlayer;
+            if (humanSeat < 0)
+            {
+                // 无 CPU 测试模式：卡槽跟着当前行动者走，四个座位都由玩家一人操作。
+                humanPlayerId = actor.Id;
+            }
+
+            ScheduleCpuTurn(actor);
+
+            if (!tokensByPlayer.TryGetValue(actor.Id, out activeToken))
             {
                 return;
             }
 
             cameraController?.SetFollowTarget(
                 cameraFollowEnabled ? activeToken.transform : null);
+
+            hud?.SetDiceInteractable(
+                !match.IsFinished &&
+                !awaitingRewardChoice &&
+                IsHumanSeat(actor) &&
+                match.State.Phase == MatchPhase.AwaitRoll);
+        }
+
+        /// <summary>当前席位是否由玩家操作（无 CPU 测试模式下恒为真）。</summary>
+        private bool IsHumanSeat(MatchPlayerState player)
+        {
+            return humanSeat < 0 || player == null || player.Id == humanSeat;
+        }
+
+        /// <summary>轮到 CPU 时把骰子锁掉，并排一次带表现延迟的自动行动。</summary>
+        private void ScheduleCpuTurn(MatchPlayerState actor)
+        {
+            if (actor == null || match.IsFinished || IsHumanSeat(actor))
+            {
+                cpuActAfter = 0f;
+                return;
+            }
+
+            cpuActAfter = Time.unscaledTime + CpuThinkSeconds;
+            hud?.SetDiceInteractable(false);
+            hud?.SetMatchStatus(string.Concat(
+                "CPU P", (actor.Id + 1).ToString(), " 正在行动…"));
+        }
+
+        private void Update()
+        {
+            if (!Application.isPlaying || match == null || match.IsFinished)
+            {
+                return;
+            }
+
+            if (isMoving || awaitingFork || awaitingRewardChoice || awaitingEncounterAcceptance)
+            {
+                return;
+            }
+
+            MatchPlayerState actor = match.State.CurrentPlayer;
+            if (IsHumanSeat(actor) || match.State.Phase == MatchPhase.AwaitMove)
+            {
+                return;
+            }
+
+            if (Time.unscaledTime < cpuActAfter)
+            {
+                return;
+            }
+
+            cpuActAfter = Time.unscaledTime + CpuThinkSeconds;
+            AdvanceCpuTurn(actor);
+        }
+
+        /// <summary>
+        /// CPU 的一步：掷骰走正常表现协程（岔路取第一项、不弹遭遇确认），
+        /// 其余阶段直接替它选最省事的那一项。
+        /// </summary>
+        private void AdvanceCpuTurn(MatchPlayerState actor)
+        {
+            switch (match.State.Phase)
+            {
+                case MatchPhase.AwaitRoll:
+                    automaticTurn = true;
+                    isMoving = true;
+                    hud?.SetDiceInteractable(false);
+                    match.Submit(new RollCommand(actor.Id));
+                    int roll = match.State.LastRoll;
+                    hud?.SetDiceResult(roll);
+                    UpdateHudStatus($"CPU P{actor.Id + 1} 掷出 {roll}");
+                    StartCoroutine(PlanAndSubmitMove(actor.Id, roll));
+                    break;
+                case MatchPhase.AwaitNorma:
+                    match.Submit(new SetNormaCommand(actor.Id, NormaType.Shard));
+                    UpdateHudStatus();
+                    break;
+                case MatchPhase.AwaitReward:
+                    int rewardIndex = FindFirstFittingReward(actor);
+                    if (rewardIndex >= 0)
+                    {
+                        match.Submit(new ChooseRewardCommand(actor.Id, rewardIndex));
+                    }
+
+                    UpdateHudStatus();
+                    break;
+                case MatchPhase.AwaitShop:
+                    match.Submit(new ShopActionCommand(actor.Id, ShopActionType.Leave));
+                    UpdateHudStatus();
+                    break;
+            }
         }
 
         private void UpdateHudStatus(string action = null)
@@ -732,6 +860,7 @@ namespace ProjectArtOfAll.Board
                 ? LoadoutRules.GetBattleCapacity(player.Level)
                 : 10;
             string status =
+                $"{GameSession.CurrentModeLabel}  ·  " +
                 $"回合 {match.State.TurnNumber}  ·  轮次 {match.State.RoundNumber}  ·  " +
                 $"玩家 {player.Id + 1}  ·  碎片 {player.Shards}  ·  胜场 {player.Wins}  ·  " +
                 $"装配 {player.BattleCardWidth}/{battleCapacity}c  ·  " +
