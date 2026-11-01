@@ -246,6 +246,11 @@ namespace ProjectArtOfAll.Board
                     boardGameplay,
                     (RectTransform)transform,
                     BoardHudOverlayFactory.CreateFont());
+                if (diceButton != null)
+                {
+                    cardBand.DiceButtonTarget = (RectTransform)diceButton.transform;
+                    cardBand.ApplyScreenLayout();
+                }
             }
 
             cardBand.Refresh(player ?? boardGameplay?.HumanPlayer);
