@@ -74,6 +74,7 @@ namespace ProjectArtOfAll.Board
             SynchronizeTokensFromCore();
             ActivateCurrentPlayer();
             UpdateHudStatus();
+            hud?.ShowOpeningHints();
         }
 
         /// <summary>M4 设置项：地图路径线显隐。</summary>

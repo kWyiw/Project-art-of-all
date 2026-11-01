@@ -292,6 +292,20 @@ namespace ProjectArtOfAll.Board
             }
         }
 
+        /// <summary>开局三句提示：让没看过规则书的人也知道该按什么、能拖什么。</summary>
+        public void ShowOpeningHints()
+        {
+            if (eventFeed == null || !Application.isPlaying)
+            {
+                return;
+            }
+
+            Color hint = new Color(0.92f, 0.84f, 0.60f, 1f);
+            eventFeed.Enqueue("掷骰子沿逆时针走廊前进；三岔口可以选择直行或逆时针拐弯", hint);
+            eventFeed.Enqueue("把下排卡牌拖进右侧出售区就立刻卖出——出售没有撤销", hint);
+            eventFeed.Enqueue("把牌拖进下排战斗栏即装配，相邻加成会实时亮起", hint);
+        }
+
         public void ToggleCardView()
         {
             if (cardView == null)
