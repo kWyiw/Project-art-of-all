@@ -38,6 +38,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckCardBandCommands();
                 CheckSceneMapTeleport();
                 CheckShopTile();
+                CheckCpuAi();
                 CheckM3FullMatch();
                 CheckM3MatchReport();
                 Console.WriteLine("Game.Core checks passed.");
@@ -1468,6 +1469,181 @@ namespace ProjectArtOfAll.Core.Checks
             Assert(
                 playerBattles > 0,
                 "The ambush policy must trigger player-versus-player fights.");
+        }
+
+        private static void CheckCpuAi()
+        {
+            // --- personalities are deterministic and distinct per seat ---
+            HashSet<CpuArchetype> archetypes = new HashSet<CpuArchetype>();
+            for (int seat = 0; seat < 4; seat++)
+            {
+                CpuPersonality personality = CpuPersonality.ForSeat(seat, CpuDifficulty.Normal, 4);
+                archetypes.Add(personality.Archetype);
+                Assert(
+                    Math.Abs(personality.Aggression - 1.0) + Math.Abs(personality.Economy - 1.0) > 0.05,
+                    "Every archetype must depart from neutral weights.");
+            }
+
+            Assert(archetypes.Count == 4, "Four seats must receive four distinct archetypes.");
+
+            CpuPersonality normal = CpuPersonality.Create(CpuArchetype.Hunter, CpuDifficulty.Normal);
+            CpuPersonality easy = CpuPersonality.Create(CpuArchetype.Hunter, CpuDifficulty.Easy);
+            CpuPersonality hard = CpuPersonality.Create(CpuArchetype.Hunter, CpuDifficulty.Hard);
+            Assert(
+                easy.Noise > normal.Noise && hard.Noise < normal.Noise,
+                "Difficulty must scale decision noise in the expected direction.");
+            Assert(
+                hard.Aggression >= normal.Aggression && easy.Aggression <= normal.Aggression,
+                "Difficulty must sharpen or blur the same weight instead of changing it arbitrarily.");
+
+            // --- information set: the CPU cannot reach hidden state at all ---
+            AssertCpuInformationSetIsClosed();
+
+            // --- three full CPU matches on the stand-in board ---
+            ulong[] seeds = { 424242UL, 9091UL, 20261031UL };
+            int closed = 0;
+            foreach (ulong seed in seeds)
+            {
+                MatchController controller = new MatchController(CreateM3Graph(), seed);
+                CpuMatchRunner runner = new CpuMatchRunner(controller);
+                CpuMatchResult result = runner.Run();
+
+                Assert(result.Finished, $"{seed}: a CPU match must reach a winner.");
+                Assert(
+                    result.WinnerPlayerId >= 0 && result.WinnerPlayerId < 4,
+                    $"{seed}: the winner seat must be valid.");
+                Assert(result.StallReason.Length == 0, $"{seed}: a CPU match must not stall. " + result.StallReason + " / " + result.ToReport());
+                Assert(result.Decisions > 50, $"{seed}: a CPU match must take real decisions.");
+                Assert(
+                    result.Seats.All(seat => seat.Decisions > 0),
+                    $"{seed}: every seat must act.");
+                Assert(
+                    result.Seats.Sum(seat => seat.NormaWins + seat.NormaShard) >= 4,
+                    $"{seed}: every seat must pick a Norma route.");
+                Assert(
+                    result.Seats.Sum(seat => seat.Moves) > 20,
+                    $"{seed}: the CPU must spend turns on movement.");
+                Assert(result.ToReport().Contains("CPU match"), "The CPU report must render.");
+
+                closed++;
+            }
+
+            Assert(closed == seeds.Length, "Every CPU match must close out.");
+
+            // --- the four archetypes price the same move differently ---
+            MatchController probe = new MatchController(CreateM3Graph(), 123456UL);
+            CpuMatchRunner probeRunner = new CpuMatchRunner(probe);
+            CpuObservation observation = null;
+            int guard = 0;
+            while (!probe.IsFinished && guard++ < 4000)
+            {
+                if (probe.State.Phase == MatchPhase.AwaitMove && probe.CurrentCandidates.Count > 0)
+                {
+                    observation = CpuObservation.Capture(probe);
+                    break;
+                }
+
+                string failure;
+                if (!probeRunner.Step(out failure))
+                {
+                    break;
+                }
+            }
+
+            Assert(observation != null, "A CPU match must reach a movement decision.");
+            Assert(observation.Routes.Count > 0, "A movement decision must expose at least one route.");
+            Assert(
+                observation.DescribeInformationSet().Contains("背包"),
+                "The observation dump must describe the observer's own bag.");
+
+            CpuBrain aggressive = new CpuBrain(
+                observation.PlayerId,
+                CpuPersonality.Create(CpuArchetype.Aggressive),
+                7UL,
+                enableNoise: false);
+            CpuBrain guardian = new CpuBrain(
+                observation.PlayerId,
+                CpuPersonality.Create(CpuArchetype.Guardian),
+                7UL,
+                enableNoise: false);
+
+            double largestGap = 0.0;
+            foreach (CpuRoute route in observation.Routes)
+            {
+                double first = aggressive.ScoreRouteForDiagnostics(observation, route);
+                double second = guardian.ScoreRouteForDiagnostics(observation, route);
+                largestGap = Math.Max(largestGap, Math.Abs(first - second));
+            }
+
+            Assert(
+                largestGap > 0.05,
+                "An aggressive and a guardian CPU must price the same route differently.");
+
+            CpuDecision decision = aggressive.Decide(observation);
+            Assert(decision.Action == CpuAction.Move, "A movement phase must yield a move decision.");
+            Assert(
+                decision.ForkDirections.Length <= observation.Routes.Max(route => route.ForkDirections.Length),
+                "The CPU must never invent fork choices.");
+
+            Console.WriteLine(
+                $"[cpu] matches={seeds.Length} probeRoutes={observation.Routes.Count} gap={largestGap:0.00}");
+        }
+
+        /// <summary>
+        /// Reflection guard for R-CPU-002: no public CPU type may expose the controller, the live
+        /// state, or another player's bag cards.
+        /// </summary>
+        private static void AssertCpuInformationSetIsClosed()
+        {
+            System.Reflection.BindingFlags flags =
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance;
+
+            string[] opponentProperties =
+            {
+                "PlayerId", "Level", "Shards", "Wins", "CurrentNode", "Norma",
+                "BattleWidth", "BagWidth", "BagCount", "BattleCards"
+            };
+
+            foreach (System.Reflection.PropertyInfo property in typeof(CpuOpponent).GetProperties(flags))
+            {
+                Assert(
+                    opponentProperties.Contains(property.Name),
+                    "CpuOpponent must not expose " + property.Name + ".");
+            }
+
+            Type[] forbidden =
+            {
+                typeof(MatchController),
+                typeof(MatchState),
+                typeof(MatchPlayerState)
+            };
+
+            foreach (System.Reflection.PropertyInfo property in typeof(CpuObservation).GetProperties(flags))
+            {
+                Assert(
+                    !forbidden.Contains(property.PropertyType),
+                    "CpuObservation must not expose " + property.PropertyType.Name + ".");
+            }
+
+            foreach (System.Reflection.MethodInfo method in typeof(CpuBrain).GetMethods(flags))
+            {
+                if (method.DeclaringType != typeof(CpuBrain))
+                {
+                    continue;
+                }
+
+                foreach (System.Reflection.ParameterInfo parameter in method.GetParameters())
+                {
+                    Assert(
+                        !forbidden.Contains(parameter.ParameterType),
+                        "CpuBrain." + method.Name + " must not accept " + parameter.ParameterType.Name + ".");
+                }
+            }
+
+            Assert(
+                typeof(CpuBrain).GetConstructors().All(constructor =>
+                    constructor.GetParameters().All(parameter => !forbidden.Contains(parameter.ParameterType))),
+                "CpuBrain must be buildable without a live controller.");
         }
 
         private static MapGraph CreateM3Graph()

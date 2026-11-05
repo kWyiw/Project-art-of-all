@@ -588,9 +588,12 @@ DiceBazaar/
 - **验收**：一个没看过文档的人能自己玩完一整局；且**能只靠拖拽把一张牌从背包换到战斗栏、拖到区外自动回弹、并看到相邻加成从"未生效"变"生效"**（出售是终态，**没有撤销**，见 `棋盘层双栏卡槽UI与拖拽交互规格.md` §4）。
 
 ### M5 · CPU 对手与平衡（4 周）："能一个人玩了"
-- 现状：正常模式已经**能让 3 个座位自动行动**（掷骰 → 岔路取合法列表第一项 → 结算 → 交回合），但那是占位策略，不是 L1 效用 AI；真 AI 与人格差异仍在本阶段。
-- L1 → L2 效用 AI、四种人格权重、难度分档、思考延迟（0.8~1.5s 表现延迟，但决策 300ms 内）。
-- **信息集断言**：AI 只能读公共状态 + 自己的卡槽（`R-CPU-002`），要有单测证明它看不到对手背包。
+- 现状（已实现）：内核 `Assets/Game/Core/Match/` 下的 `CpuPersonality.cs` / `CpuObservation.cs` / `CpuBrain.cs` / `CpuMatchRunner.cs`。AI 只读 `CpuObservation`（公共状态 + 自己的卡槽），只通过 `MatchController.Submit` 发命令，`Tests/Game.Core.Checks` 的 `AssertCpuInformationSetIsClosed()` 证明它拿不到对手背包。
+- 决策链：装备规划 → 落点评分（自家 home 升级 / 怪物风险收益 / 奖励 / 商店 / Warp 负面 / 埋伏玩家的 6 次 `CombatSimulation` 采样期望）→ Norma 路线按剩余阈值与收入估算。
+- 四人格按座位确定性分配（激进 / 理财 / 守护 / 狩猎）；难度只缩放同一套权重的噪声，设置页可切（`GameSettings.CpuDifficultyLevel`）。
+- 思考延迟 0.8~1.5 秒随机（`CpuThinkMinSeconds` / `CpuThinkMaxSeconds`），决策本身在 300ms 内。
+- 验收数据（`dotnet run --project Tools/MatchSim -c Release -- --brains --matches 500 --seed 20261101`）：500/500 自然结束、0 卡死，中位 **10 圈**（6~17），平均 40.4 回合，每局装配 3.2 次、商店成交 6.2 次；座位胜率 28.2% / 26.6% / 29.4% / 15.8%，路线 碎片 5.0% / 胜场 95.0%。
+- 未达成：普通难度对新手 ~50%、困难 ~75% 需要真人数据；碎片路线几乎必输（5%），是数值口径问题，等 BalanceSim 报告与真人试玩后再调。
 - BalanceSim 出第一份平衡报告，按报告调数值（这 4 周里至少 1 周纯调数值）。
 - **验收**：3 个 CPU 在同一局里表现出可区分的行为差异；AI 普通难度对新手胜率 ~50%，困难 ~75%；500 局全部自然结束、中位圈数 8~10。**此时可以开始做 Demo 给朋友玩。**
 

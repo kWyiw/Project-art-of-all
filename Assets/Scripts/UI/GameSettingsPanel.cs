@@ -13,7 +13,7 @@ namespace ProjectArtOfAll.UI
     public sealed class GameSettingsPanel : MonoBehaviour
     {
         private const float PanelWidth = 560f;
-        private const float PanelHeight = 430f;
+        private const float PanelHeight = 486f;
 
         private static readonly Color ScrimColor = new Color(0.012f, 0.02f, 0.024f, 0.72f);
         private static readonly Color PanelColor = new Color(0.048f, 0.078f, 0.09f, 0.99f);
@@ -30,6 +30,8 @@ namespace ProjectArtOfAll.UI
         private Text followLabel;
         private Button autoButton;
         private Text autoLabel;
+        private Button difficultyButton;
+        private Text difficultyLabel;
 
         public bool IsOpen => gameObject.activeSelf;
 
@@ -112,19 +114,24 @@ namespace ProjectArtOfAll.UI
                 GameSettings.AutoQuality = !GameSettings.AutoQuality);
             autoLabel = autoButton.GetComponentInChildren<Text>();
 
+            // CPU 难度：只改 AI 的决策参数，四档人格式权重照旧按座位分配。
+            difficultyButton = MakeToggle(panelObject.transform, "CPU 难度", 282f, () =>
+                GameSettings.CpuDifficultyLevel = (GameSettings.CpuDifficultyLevel + 1) % 3);
+            difficultyLabel = difficultyButton.GetComponentInChildren<Text>();
+
             BoardHudOverlayFactory.CreateBar(
                 panelObject.transform, "Divider",
                 new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(24f, -286f), new Vector2(PanelWidth - 24f, -285f),
+                new Vector2(24f, -330f), new Vector2(PanelWidth - 24f, -329f),
                 new Color(0.86f, 0.62f, 0.20f, 0.55f));
 
-            MakeButton(panelObject.transform, "恢复默认", 24f, 306f, 200f, 44f, () =>
+            MakeButton(panelObject.transform, "恢复默认", 24f, 350f, 200f, 44f, () =>
             {
                 GameSettings.ResetToDefaults();
                 RefreshControls();
             });
 
-            MakeButton(panelObject.transform, "返回", PanelWidth - 24f - 200f, 306f, 200f, 44f,
+            MakeButton(panelObject.transform, "返回", PanelWidth - 24f - 200f, 350f, 200f, 44f,
                 () =>
                 {
                     Hide();
@@ -133,7 +140,7 @@ namespace ProjectArtOfAll.UI
 
             Label(panelObject.transform, "Footer",
                     "设置会保存到 PlayerPrefs，下次启动沿用",
-                    24f, 366f, PanelWidth - 48f, 22f,
+                    24f, 410f, PanelWidth - 48f, 22f,
                     12, FontStyle.Normal, TextAnchor.MiddleCenter).color = MutedText;
 
             RefreshControls();
@@ -178,6 +185,11 @@ namespace ProjectArtOfAll.UI
             if (autoLabel != null)
             {
                 autoLabel.text = GameSettings.AutoQuality ? "开" : "关";
+            }
+
+            if (difficultyLabel != null)
+            {
+                difficultyLabel.text = GameSettings.CpuDifficultyLabel;
             }
         }
 

@@ -32,8 +32,12 @@ namespace ProjectArtOfAll.Board
         [Header("Match")]
         [SerializeField] private ulong matchSeed = 20261031UL;
 
-        /// <summary>CPU 每一步之间的表现延迟（秒）。</summary>
-        private const float CpuThinkSeconds = 0.7f;
+        /// <summary>
+        /// CPU 思考延迟区间（秒）。R-CPU-003 要求 0.8~1.5 秒的随机停顿，
+        /// 决策本身在 300ms 内完成，停顿只是让对局看起来像人在想。
+        /// </summary>
+        private const float CpuThinkMinSeconds = 0.8f;
+        private const float CpuThinkMaxSeconds = 1.5f;
 
         [Header("Movement")]
         [SerializeField, Min(0.05f)] private float stepDuration = 0.2f;
@@ -68,6 +72,8 @@ namespace ProjectArtOfAll.Board
 
         /// <summary>CPU 下一次行动的时间点（表现延迟，便于看清它做了什么）。</summary>
         private float cpuActAfter;
+        private readonly Dictionary<int, CpuBrain> cpuBrains =
+            new Dictionary<int, CpuBrain>();
 
         private void Start()
         {
@@ -88,6 +94,7 @@ namespace ProjectArtOfAll.Board
                 ? Camera.main.GetComponent<BoardCameraController>()
                 : null;
             humanSeat = GameSession.HumanSeat;
+            BuildCpuBrains();
             humanPlayerId = humanSeat >= 0
                 ? humanSeat
                 : match.State.CurrentPlayer.Id;
@@ -276,7 +283,10 @@ namespace ProjectArtOfAll.Board
             }
         }
 
-        private IEnumerator PlanAndSubmitMove(int playerId, int steps)
+        private IEnumerator PlanAndSubmitMove(
+            int playerId,
+            int steps,
+            CpuDecision plan = null)
         {
             isMoving = true;
             hud?.SetDiceInteractable(false);
@@ -287,6 +297,9 @@ namespace ProjectArtOfAll.Board
             int previous = movingPlayer.LastArrivalNode;
             List<int> forkDirections = new List<int>();
             int encounterNode = -1;
+            int[] plannedForks = plan != null ? plan.ForkDirections : null;
+            int plannedForkCursor = 0;
+            int targetNodeId = plan != null ? plan.NodeId : -1;
 
             for (int step = 0; step < steps; step++)
             {
@@ -304,8 +317,17 @@ namespace ProjectArtOfAll.Board
                 }
                 else if (automaticTurn)
                 {
-                    // CPU 与无 CPU 测试模式下的自动推进：取合法列表第一项（内核会照常校验）。
-                    selectedEdgeIndex = 0;
+                    // CPU 走 AI 规划好的岔路；没规划（无 CPU 测试模式）时取合法列表第一项。
+                    selectedEdgeIndex =
+                        plannedForks != null && plannedForkCursor < plannedForks.Length
+                            ? plannedForks[plannedForkCursor]
+                            : 0;
+                    if (selectedEdgeIndex < 0 || selectedEdgeIndex >= legalEdges.Count)
+                    {
+                        selectedEdgeIndex = 0;
+                    }
+
+                    plannedForkCursor++;
                     forkDirections.Add(selectedEdgeIndex);
                 }
                 else
@@ -343,6 +365,11 @@ namespace ProjectArtOfAll.Board
                     UnityMapGraphFactory.CellFromNodeId(current);
                 activeToken.SetBoardCell(currentCell.x, currentCell.y);
 
+                if (targetNodeId >= 0 && current == targetNodeId)
+                {
+                    break;
+                }
+
                 MatchPlayerState defender = FindPlayerAtNode(
                     current,
                     movingPlayer.Id);
@@ -374,7 +401,9 @@ namespace ProjectArtOfAll.Board
             match.Submit(
                 new MoveCommand(
                     playerId,
-                    targetNodeId: encounterNode >= 0 ? encounterNode : (int?)null,
+                    targetNodeId: targetNodeId >= 0
+                        ? targetNodeId
+                        : encounterNode >= 0 ? encounterNode : (int?)null,
                     forkDirections: forkDirections));
 
             PlayerTeleportedEvent teleport = match.Events.History
@@ -998,6 +1027,47 @@ namespace ProjectArtOfAll.Board
             return humanSeat < 0 || player == null || player.Id == humanSeat;
         }
 
+        /// <summary>
+        /// 给每个非真人席位建一个 AI。人格按座位号确定性分配（R-CPU-004），
+        /// 难度取设置里的档位；无 CPU 测试模式（humanSeat < 0）下没有席位需要 AI。
+        /// </summary>
+        private void BuildCpuBrains()
+        {
+            cpuBrains.Clear();
+            if (match == null || humanSeat < 0)
+            {
+                return;
+            }
+
+            CpuDifficulty difficulty = GameSettings.CpuDifficultyTier;
+            foreach (MatchPlayerState player in match.State.Players)
+            {
+                if (player.Id == humanSeat)
+                {
+                    continue;
+                }
+
+                CpuPersonality personality = CpuPersonality.ForSeat(
+                    player.Id,
+                    difficulty,
+                    match.State.Players.Count);
+                cpuBrains[player.Id] = new CpuBrain(player.Id, personality, matchSeed);
+            }
+
+            Debug.Log(string.Concat(
+                "[Board] cpu brains ", cpuBrains.Count.ToString(),
+                " difficulty=", difficulty.ToString()));
+        }
+
+        /// <summary>状态行里显示的 CPU 人格标签。</summary>
+        private string CpuLabel(MatchPlayerState player)
+        {
+            CpuBrain brain;
+            return cpuBrains.TryGetValue(player.Id, out brain) && brain != null
+                ? brain.Personality.Label
+                : "CPU";
+        }
+
         /// <summary>轮到 CPU 时把骰子锁掉，并排一次带表现延迟的自动行动。</summary>
         private void ScheduleCpuTurn(MatchPlayerState actor)
         {
@@ -1007,10 +1077,12 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
-            cpuActAfter = Time.unscaledTime + CpuThinkSeconds;
+            cpuActAfter = Time.unscaledTime +
+                UnityEngine.Random.Range(CpuThinkMinSeconds, CpuThinkMaxSeconds);
             hud?.SetDiceInteractable(false);
             hud?.SetMatchStatus(string.Concat(
-                "CPU P", (actor.Id + 1).ToString(), " 正在行动…"));
+                "CPU P", (actor.Id + 1).ToString(),
+                "（", CpuLabel(actor), "）正在思考…"));
         }
 
         private void Update()
@@ -1037,43 +1109,81 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
-            cpuActAfter = Time.unscaledTime + CpuThinkSeconds;
+            cpuActAfter = Time.unscaledTime +
+                UnityEngine.Random.Range(CpuThinkMinSeconds, CpuThinkMaxSeconds);
             AdvanceCpuTurn(actor);
         }
 
         /// <summary>
-        /// CPU 的一步：掷骰走正常表现协程（岔路取第一项、不弹遭遇确认），
-        /// 其余阶段直接替它选最省事的那一项。
+        /// CPU 的一步：让 AI 看当前信息集做出决策，再把决策翻成一条合法命令。
+        /// AI 只能读 <see cref="CpuObservation"/>（公共信息 + 自己的卡槽），也只能 Submit，
+        /// 不碰 state —— 这是 R-CPU-001 / R-CPU-002 的硬性要求。
         /// </summary>
         private void AdvanceCpuTurn(MatchPlayerState actor)
         {
-            switch (match.State.Phase)
+            CpuBrain brain;
+            if (!cpuBrains.TryGetValue(actor.Id, out brain) || brain == null)
             {
-                case MatchPhase.AwaitRoll:
+                return;
+            }
+
+            CpuDecision decision = brain.Decide(CpuObservation.Capture(match));
+            switch (decision.Action)
+            {
+                case CpuAction.Roll:
                     automaticTurn = true;
                     isMoving = true;
                     hud?.SetDiceInteractable(false);
                     match.Submit(new RollCommand(actor.Id));
                     int roll = match.State.LastRoll;
                     hud?.SetDiceResult(roll);
-                    UpdateHudStatus($"CPU P{actor.Id + 1} 掷出 {roll}");
-                    StartCoroutine(PlanAndSubmitMove(actor.Id, roll));
+                    UpdateHudStatus(string.Concat(
+                        "CPU P", (actor.Id + 1).ToString(),
+                        "（", brain.Personality.Label, "）掷出 ", roll.ToString()));
+
+                    // 掷完才轮到"走哪条路"，此时 Phase 已经是 AwaitMove，重新观察一次。
+                    CpuDecision move = brain.Decide(CpuObservation.Capture(match));
+                    StartCoroutine(PlanAndSubmitMove(
+                        actor.Id,
+                        roll,
+                        move.Action == CpuAction.Move ? move : null));
                     break;
-                case MatchPhase.AwaitNorma:
-                    match.Submit(new SetNormaCommand(actor.Id, NormaType.Shard));
-                    UpdateHudStatus();
+                case CpuAction.Move:
+                    // 没有先掷骰就拿到 Move（不该发生）：丢掉，下一拍重新决策。
                     break;
-                case MatchPhase.AwaitReward:
-                    int rewardIndex = FindFirstFittingReward(actor);
-                    if (rewardIndex >= 0)
+                case CpuAction.SetNorma:
+                    match.Submit(new SetNormaCommand(actor.Id, decision.Norma));
+                    UpdateHudStatus(string.Concat(
+                        "CPU P", (actor.Id + 1).ToString(), " 选了",
+                        decision.Norma == NormaType.Shard ? "碎片" : "胜场",
+                        "路线"));
+                    break;
+                case CpuAction.ChooseReward:
+                    if (decision.Index >= 0 &&
+                        decision.Index < match.CurrentRewardChoices.Count)
                     {
-                        match.Submit(new ChooseRewardCommand(actor.Id, rewardIndex));
+                        match.Submit(new ChooseRewardCommand(actor.Id, decision.Index));
                     }
 
                     UpdateHudStatus();
                     break;
-                case MatchPhase.AwaitShop:
-                    match.Submit(new ShopActionCommand(actor.Id, ShopActionType.Leave));
+                case CpuAction.ShopBuy:
+                    match.Submit(new ShopActionCommand(
+                        actor.Id, ShopActionType.Buy, decision.Index));
+                    UpdateHudStatus();
+                    break;
+                case CpuAction.ShopReroll:
+                    match.Submit(new ShopActionCommand(
+                        actor.Id, ShopActionType.Reroll, -1));
+                    UpdateHudStatus();
+                    break;
+                case CpuAction.ShopLeave:
+                    match.Submit(new ShopActionCommand(
+                        actor.Id, ShopActionType.Leave, -1));
+                    UpdateHudStatus();
+                    break;
+                case CpuAction.EquipCard:
+                    match.Submit(new EquipCardCommand(actor.Id, decision.CardUid));
                     UpdateHudStatus();
                     break;
             }
