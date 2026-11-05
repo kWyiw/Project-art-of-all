@@ -5,6 +5,7 @@ using ProjectArtOfAll.Core.Cards;
 using ProjectArtOfAll.Core.Combat;
 using ProjectArtOfAll.Core.Match;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace ProjectArtOfAll.UI
@@ -27,6 +28,15 @@ namespace ProjectArtOfAll.UI
         private const int HealthStep = 25;
         private const int MinimumHealth = 25;
         private const int MaximumHealth = 999;
+
+        /// <summary>战斗栏里一张牌格子的尺寸，拖拽换位时用同一套格子换算落点。</summary>
+        private const float ChipWidth = 148f;
+        private const float ChipHeight = 62f;
+        private const float ChipGap = 8f;
+        private const float DeckRowWidth = 1240f;
+
+        private static int ChipsPerRow =>
+            Mathf.Max(1, Mathf.FloorToInt((DeckRowWidth + ChipGap) / (ChipWidth + ChipGap)));
 
         private static readonly Color BackgroundColor = new Color(0.028f, 0.038f, 0.048f, 1f);
         private static readonly Color PanelColor = new Color(0.055f, 0.075f, 0.088f, 0.97f);
@@ -58,6 +68,9 @@ namespace ProjectArtOfAll.UI
         private float preferredSpeed = 2f;
         private int nextUid = 1;
         private bool busy;
+        private GameObject ghostObject;
+        private CardDefinition dragCard;
+        private bool dragging;
 
         public static CombatLabView Create(RectTransform canvas, Font font)
         {
@@ -106,9 +119,9 @@ namespace ProjectArtOfAll.UI
             AddText(root, "Title", "战斗模拟 · 自定义对局", 48f, 26f, 900f, 48f,
                 32, FontStyle.Bold, TextAnchor.MiddleLeft, Brass);
             AddText(root, "Hint",
-                "从卡牌库复制任意张进左右战斗栏（战斗栏上限 "
-                    + BattleCapacity + "c），各自设定最大生命值，开打后可用 1x / 2x / 4x 调速。",
-                48f, 74f, 1500f, 28f, 16, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
+                "按住卡牌库里的任意一张拖进左边或右边的战斗栏就能放牌，栏内拖动可换顺序、拖出栏外就是移除（战斗栏上限 "
+                    + BattleCapacity + "c）；各自设定最大生命值，开打后可用 1x / 2x / 4x 调速。",
+                48f, 74f, 1700f, 28f, 16, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
 
             BuildCardLibrary();
             BuildDeckPanel(true);
@@ -122,8 +135,8 @@ namespace ProjectArtOfAll.UI
 
             AddText(panel, "Header", "卡牌库", 20f, 14f, 300f, 32f,
                 24, FontStyle.Bold, TextAnchor.MiddleLeft, Brass);
-            AddText(panel, "Sub", "「左」「右」各加一份，可以重复拿同一张", 20f, 46f, 520f, 24f,
-                14, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
+            AddText(panel, "Sub", "直接拖进战斗栏，或用「左」「右」按钮快速加入；同一张可以重复拿",
+                20f, 46f, 520f, 24f, 14, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
 
             List<CardDefinition> cards = CardDatabase.Instance.All
                 .OrderBy(card => card.SlotSize)
@@ -165,6 +178,14 @@ namespace ProjectArtOfAll.UI
                     () => AddCard(captured, true));
                 CreateSmallButton(rowRect, "Right", "右", 216f, 10f, 40f, 26f, RightTint,
                     () => AddCard(captured, false));
+
+                // 整行都可以按住往战斗栏里拖。
+                LabDragHandler drag = rowRect.gameObject.AddComponent<LabDragHandler>();
+                drag.View = this;
+                drag.Card = card;
+                drag.FromLibrary = true;
+                drag.FromLeft = true;
+                drag.Index = index;
             }
         }
 
@@ -384,14 +405,11 @@ namespace ProjectArtOfAll.UI
             if (label != null)
             {
                 label.text = deck.Count + " 张 · 占 " + used + "c / " + BattleCapacity
-                    + "c   （点击卡牌移除）";
+                    + "c   （拖动换顺序，拖出栏外或点击移除）";
                 label.color = used > BattleCapacity ? Brass : MutedText;
             }
 
-            const float chipWidth = 148f;
-            const float chipHeight = 62f;
-            const float gap = 8f;
-            int perRow = Mathf.Max(1, Mathf.FloorToInt((1240f + gap) / (chipWidth + gap)));
+            int perRow = ChipsPerRow;
 
             for (int index = 0; index < deck.Count; index++)
             {
@@ -404,12 +422,19 @@ namespace ProjectArtOfAll.UI
                 chip.anchorMax = new Vector2(0f, 1f);
                 chip.pivot = new Vector2(0f, 1f);
                 chip.anchoredPosition = new Vector2(
-                    column * (chipWidth + gap),
-                    -rowIndex * (chipHeight + gap));
-                chip.sizeDelta = new Vector2(chipWidth, chipHeight);
+                    column * (ChipWidth + ChipGap),
+                    -rowIndex * (ChipHeight + ChipGap));
+                chip.sizeDelta = new Vector2(ChipWidth, ChipHeight);
 
                 Image chipImage = chip.gameObject.AddComponent<Image>();
                 chipImage.color = isLeft ? LeftTint : RightTint;
+
+                LabDragHandler drag = chip.gameObject.AddComponent<LabDragHandler>();
+                drag.View = this;
+                drag.Card = card;
+                drag.FromLibrary = false;
+                drag.FromLeft = isLeft;
+                drag.Index = index;
 
                 Button button = chip.gameObject.AddComponent<Button>();
                 button.targetGraphic = chipImage;
@@ -419,11 +444,11 @@ namespace ProjectArtOfAll.UI
                 CardRowRenderer.AddFramedBorder(chip, CardRowRenderer.FrameColor(card.SlotSize),
                     2f, 9f);
 
-                AddText(chip, "Name", card.DisplayName, 8f, 6f, chipWidth - 16f, 22f,
+                AddText(chip, "Name", card.DisplayName, 8f, 6f, ChipWidth - 16f, 22f,
                     15, FontStyle.Bold, TextAnchor.MiddleLeft, TextColor);
-                AddText(chip, "Meta", CardText.Meta(card), 8f, 28f, chipWidth - 16f, 18f,
+                AddText(chip, "Meta", CardText.Meta(card), 8f, 28f, ChipWidth - 16f, 18f,
                     12, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
-                AddText(chip, "Value", card.Value + "g", chipWidth - 40f, 42f, 34f, 16f,
+                AddText(chip, "Value", card.Value + "g", ChipWidth - 40f, 42f, 34f, 16f,
                     11, FontStyle.Normal, TextAnchor.MiddleRight, Brass);
 
                 chips.Add(chip.gameObject);
@@ -431,8 +456,272 @@ namespace ProjectArtOfAll.UI
 
             if (deck.Count == 0)
             {
-                AddText(row, "Empty", isLeft ? "还没有牌，从左边卡牌库点「左」" : "还没有牌，从左边卡牌库点「右」",
+                Text empty = AddText(row, "Empty",
+                    isLeft ? "把卡牌库里的牌拖到这里" : "把卡牌库里的牌拖到这里",
                     2f, 6f, 600f, 26f, 15, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
+                chips.Add(empty.gameObject);
+            }
+        }
+
+        // ------------------------------------------------------------------ 拖拽排版
+
+        private void InsertCard(CardDefinition card, bool toLeft, int index)
+        {
+            if (busy)
+            {
+                return;
+            }
+
+            List<CardDefinition> deck = toLeft ? leftDeck : rightDeck;
+            int used = deck.Sum(entry => entry.SlotSize);
+            if (used + card.SlotSize > BattleCapacity)
+            {
+                SetStatus((toLeft ? "左方" : "右方") + "战斗栏只有 " + BattleCapacity
+                    + "c，放不下 " + card.DisplayName + "（需要 " + card.SlotSize + "c）。");
+                return;
+            }
+
+            int insert = Mathf.Clamp(index, 0, deck.Count);
+            deck.Insert(insert, card);
+            SetStatus("已把 " + card.DisplayName + " 放进" + (toLeft ? "左方" : "右方")
+                + "第 " + (insert + 1) + " 位。");
+            RebuildDecks();
+        }
+
+        private void MoveCard(bool fromLeft, int index, bool toLeft, int targetIndex)
+        {
+            if (busy)
+            {
+                return;
+            }
+
+            List<CardDefinition> source = fromLeft ? leftDeck : rightDeck;
+            if (index < 0 || index >= source.Count)
+            {
+                return;
+            }
+
+            CardDefinition card = source[index];
+            if (fromLeft == toLeft)
+            {
+                source.RemoveAt(index);
+                int insert = Mathf.Clamp(
+                    targetIndex > index ? targetIndex - 1 : targetIndex, 0, source.Count);
+                source.Insert(insert, card);
+                SetStatus("已把 " + card.DisplayName + " 挪到第 " + (insert + 1) + " 位。");
+                RebuildDecks();
+                return;
+            }
+
+            List<CardDefinition> target = toLeft ? leftDeck : rightDeck;
+            int used = target.Sum(entry => entry.SlotSize);
+            if (used + card.SlotSize > BattleCapacity)
+            {
+                SetStatus((toLeft ? "左方" : "右方") + "战斗栏放不下 " + card.DisplayName + "。");
+                return;
+            }
+
+            source.RemoveAt(index);
+            int targetInsert = Mathf.Clamp(targetIndex, 0, target.Count);
+            target.Insert(targetInsert, card);
+            SetStatus("已把 " + card.DisplayName + " 移到" + (toLeft ? "左方" : "右方")
+                + "第 " + (targetInsert + 1) + " 位。");
+            RebuildDecks();
+        }
+
+        private bool TryResolveDrop(PointerEventData eventData, out bool toLeft, out int index)
+        {
+            toLeft = false;
+            index = 0;
+            if (eventData == null)
+            {
+                return false;
+            }
+
+            Camera camera = eventData.pressEventCamera;
+            if (leftDeckRow != null
+                && RectTransformUtility.RectangleContainsScreenPoint(leftDeckRow, eventData.position, camera))
+            {
+                toLeft = true;
+                index = IndexAt(leftDeckRow, leftDeck.Count, eventData);
+                return true;
+            }
+
+            if (rightDeckRow != null
+                && RectTransformUtility.RectangleContainsScreenPoint(rightDeckRow, eventData.position, camera))
+            {
+                toLeft = false;
+                index = IndexAt(rightDeckRow, rightDeck.Count, eventData);
+                return true;
+            }
+
+            return false;
+        }
+
+        private int IndexAt(RectTransform row, int count, PointerEventData eventData)
+        {
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    row, eventData.position, eventData.pressEventCamera, out Vector2 local))
+            {
+                return count;
+            }
+
+            // row 的 pivot 在左上角：x 向右为正、y 向上为正，所以屏幕下方是负 y。
+            int perRow = ChipsPerRow;
+            int column = Mathf.Clamp(
+                Mathf.FloorToInt(local.x / (ChipWidth + ChipGap)), 0, perRow - 1);
+            int line = Mathf.Clamp(
+                Mathf.FloorToInt(-local.y / (ChipHeight + ChipGap)), 0, 8);
+            return Mathf.Clamp(line * perRow + column, 0, count);
+        }
+
+        private void BeginDrag(
+            CardDefinition card,
+            bool fromLibrary,
+            bool fromLeft,
+            PointerEventData eventData)
+        {
+            if (busy)
+            {
+                return;
+            }
+
+            dragging = true;
+            ShowGhost(card, fromLeft || fromLibrary);
+            MoveGhostTo(eventData);
+        }
+
+        private void DragTo(PointerEventData eventData)
+        {
+            if (!dragging)
+            {
+                return;
+            }
+
+            MoveGhostTo(eventData);
+        }
+
+        private void EndDrag(bool fromLibrary, bool fromLeft, int index, PointerEventData eventData)
+        {
+            if (!dragging)
+            {
+                return;
+            }
+
+            dragging = false;
+            HideGhost();
+            if (busy)
+            {
+                return;
+            }
+
+            bool hasTarget = TryResolveDrop(eventData, out bool toLeft, out int targetIndex);
+            if (fromLibrary)
+            {
+                if (!hasTarget)
+                {
+                    SetStatus("把卡牌拖进左边或右边的战斗栏才会放进去。");
+                    return;
+                }
+
+                InsertCard(dragCard, toLeft, targetIndex);
+                return;
+            }
+
+            if (hasTarget)
+            {
+                MoveCard(fromLeft, index, toLeft, targetIndex);
+                return;
+            }
+
+            RemoveCard(fromLeft, index);
+        }
+
+        private void ShowGhost(CardDefinition card, bool leftTint)
+        {
+            HideGhost();
+            dragCard = card;
+
+            RectTransform ghost = CreateRect("DragGhost", root);
+            ghost.anchorMin = new Vector2(0.5f, 0.5f);
+            ghost.anchorMax = new Vector2(0.5f, 0.5f);
+            ghost.pivot = new Vector2(0.5f, 0.5f);
+            ghost.sizeDelta = new Vector2(ChipWidth, ChipHeight);
+
+            Image image = ghost.gameObject.AddComponent<Image>();
+            image.color = leftTint ? LeftTint : RightTint;
+            image.raycastTarget = false;
+
+            CanvasGroup group = ghost.gameObject.AddComponent<CanvasGroup>();
+            group.blocksRaycasts = false;
+            group.interactable = false;
+            group.alpha = 0.94f;
+
+            CardRowRenderer.AddFramedBorder(
+                ghost, CardRowRenderer.FrameColor(card.SlotSize), 2f, 9f);
+            AddText(ghost, "Name", card.DisplayName, 8f, 6f, ChipWidth - 16f, 22f,
+                15, FontStyle.Bold, TextAnchor.MiddleLeft, TextColor);
+            AddText(ghost, "Meta", CardText.Meta(card), 8f, 28f, ChipWidth - 16f, 18f,
+                12, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
+
+            ghost.SetAsLastSibling();
+            ghostObject = ghost.gameObject;
+        }
+
+        private void MoveGhostTo(PointerEventData eventData)
+        {
+            if (ghostObject == null || root == null || eventData == null)
+            {
+                return;
+            }
+
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    root, eventData.position, eventData.pressEventCamera, out Vector2 local))
+            {
+                ((RectTransform)ghostObject.transform).anchoredPosition = local;
+            }
+        }
+
+        private void HideGhost()
+        {
+            if (ghostObject != null)
+            {
+                Destroy(ghostObject);
+                ghostObject = null;
+            }
+        }
+
+        /// <summary>卡牌库的一行和战斗栏里的卡牌都挂这个，交给 <see cref="CombatLabView"/> 处理落点。</summary>
+        private sealed class LabDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+        {
+            public CombatLabView View;
+            public CardDefinition Card;
+            public bool FromLibrary;
+            public bool FromLeft;
+            public int Index;
+
+            public void OnBeginDrag(PointerEventData eventData)
+            {
+                if (View != null)
+                {
+                    View.BeginDrag(Card, FromLibrary, FromLeft, eventData);
+                }
+            }
+
+            public void OnDrag(PointerEventData eventData)
+            {
+                if (View != null)
+                {
+                    View.DragTo(eventData);
+                }
+            }
+
+            public void OnEndDrag(PointerEventData eventData)
+            {
+                if (View != null)
+                {
+                    View.EndDrag(FromLibrary, FromLeft, Index, eventData);
+                }
             }
         }
 
