@@ -653,18 +653,17 @@ namespace ProjectArtOfAll.UI
             }
 
             float span = Mathf.Max(1, max - min);
-            float dot = Mathf.Clamp(Mathf.Min(width, height) / (span + 1.6f), 5f, 13f);
+            // 棋盘在场景里整体旋转 45°，缩略图也转成菱形才对得上实际形状。
+            float dot = Mathf.Clamp(Mathf.Min(width, height) / (span * 1.45f + 1.2f), 4f, 11f);
+            float half = (width - pad * 2f) * 0.5f;
             for (int index = 0; index < cells.Count; index++)
             {
                 BoardMapCell cell = cells[index];
-                float u = (cell.Column - min) / span;
-                float v = (cell.Row - min) / span;
-                AddTileDot(
-                    rect,
-                    pad + u * (width - pad * 2f),
-                    pad + v * (height - pad * 2f),
-                    dot,
-                    TileDotColor(cell.Type));
+                float u = (cell.Column - min) / span - 0.5f;
+                float v = (cell.Row - min) / span - 0.5f;
+                float x = pad + (width - pad * 2f) * 0.5f + (u - v) * half;
+                float y = pad + (height - pad * 2f) * 0.5f + (u + v) * half;
+                AddTileDot(rect, x, y, dot, TileDotColor(cell.Type));
             }
         }
 

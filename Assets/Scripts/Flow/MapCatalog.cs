@@ -65,10 +65,10 @@ namespace ProjectArtOfAll.Flow
             new BoardMapInfo(
                 SweetRingId,
                 "甜点回廊",
-                "菱形环线 · 四条侧环 · 68 格",
-                "外圈是一整圈菱形回廊，四条边各挂着一小圈回廊；四个角落各有一个家，紫色传送门两两相对。",
+                "菱形环带 · 双层回廊 · 44 格",
+                "两层菱形环带叠在一起，每个角落有一条连接两层的通道，所以每条边都形成一个回廊；四个家分居四条边的中点，紫色传送门两两相对。",
                 BoardMapKind.SweetRing,
-                68)
+                44)
         };
 
         private static string selectedId = ClassicId;

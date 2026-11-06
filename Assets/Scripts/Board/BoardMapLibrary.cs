@@ -24,6 +24,26 @@ namespace ProjectArtOfAll.Board
         public int OwnerPlayerId { get; }
     }
 
+    /// <summary>One walkable link between two tiles of a generated board.</summary>
+    public readonly struct BoardMapEdge
+    {
+        public BoardMapEdge(int rowA, int columnA, int rowB, int columnB)
+        {
+            RowA = rowA;
+            ColumnA = columnA;
+            RowB = rowB;
+            ColumnB = columnB;
+        }
+
+        public int RowA { get; }
+
+        public int ColumnA { get; }
+
+        public int RowB { get; }
+
+        public int ColumnB { get; }
+    }
+
     /// <summary>Two warp gates of a generated board that teleport into each other.</summary>
     public readonly struct BoardMapTeleport
     {
@@ -46,7 +66,7 @@ namespace ProjectArtOfAll.Board
 
     /// <summary>
     /// A board that is not baked into the scene. The grid convention is the one the map
-    /// factory already uses: 12 × 12 cells, <see cref="BoardMapCell.Row"/> down the −Z axis and
+    /// factory already uses: <see cref="BoardMapCell.Row"/> runs down the −Z axis and
     /// <see cref="BoardMapCell.Column"/> along +X.
     /// </summary>
     public sealed class BoardMapDefinition
@@ -56,13 +76,17 @@ namespace ProjectArtOfAll.Board
             string displayName,
             IReadOnlyList<BoardMapCell> cells,
             float rotationYDegrees,
-            IReadOnlyList<BoardMapTeleport> teleports = null)
+            IReadOnlyList<BoardMapTeleport> teleports = null,
+            IReadOnlyList<BoardMapEdge> edges = null,
+            float tileScale = 1f)
         {
             Id = id;
             DisplayName = displayName;
             Cells = cells;
             RotationYDegrees = rotationYDegrees;
             Teleports = teleports ?? new BoardMapTeleport[0];
+            Edges = edges ?? new BoardMapEdge[0];
+            TileScale = tileScale <= 0f ? 1f : tileScale;
         }
 
         public string Id { get; }
@@ -76,22 +100,23 @@ namespace ProjectArtOfAll.Board
 
         /// <summary>Warp gates that link into each other instead of all leading to one shared gate.</summary>
         public IReadOnlyList<BoardMapTeleport> Teleports { get; }
+
+        /// <summary>
+        /// Walkable links between tiles. An empty list means "link grid neighbours", which is
+        /// what a plain block of tiles wants; shaped boards spell their links out.
+        /// </summary>
+        public IReadOnlyList<BoardMapEdge> Edges { get; }
+
+        /// <summary>
+        /// Multiplier on the scene tile size. A diagonal band of tiles needs slightly larger
+        /// plates than a square grid so the band reads as one continuous ribbon.
+        /// </summary>
+        public float TileScale { get; }
     }
 
     /// <summary>Board layouts that are generated at runtime (everything except the baked board).</summary>
     public static class BoardMapLibrary
     {
-        private const int GridSize = 12;
-
-        /// <summary>
-        /// Outer ring, clockwise from the top-left home. One character per tile:
-        /// h = home, Y = reward, R = monster, G = shop, P = warp, B = event.
-        /// </summary>
-        private const string RingPattern = "hYGYBGYGPYGhYRYRBYGPYRhYGPYRYRBYGhYRBYGPYRYR";
-
-        /// <summary>Column of the first tile of the top pocket; the other three are rotated copies.</summary>
-        private const int PocketColumn = 5;
-
         private static BoardMapDefinition sweetRing;
 
         public static BoardMapDefinition SweetRing => sweetRing ?? (sweetRing = CreateSweetRing());
@@ -103,54 +128,66 @@ namespace ProjectArtOfAll.Board
         }
 
         /// <summary>
-        /// A diamond ring with a small loop hanging off each side, built the way the reference
-        /// board looks: four homes on the corners of the diamond, four pockets that bulge inwards,
-        /// four warp gates in two opposing pairs, four event tiles, and a mix of rewards, shops
-        /// and monsters everywhere else (68 tiles in total).
+        /// The board of the reference picture: a diamond band two tiles deep. The outer ring has
+        /// 24 tiles, the inner ring 20, and the two rings are joined by one link in each corner so
+        /// every side carries a loop. The four home tiles sit at the cardinal tips of the inner
+        /// ring, the four warp tiles sit in opposite pairs, and the rest is a mix of rewards,
+        /// shops, monsters and events (44 tiles in total).
         /// </summary>
         private static BoardMapDefinition CreateSweetRing()
         {
-            List<BoardMapCell> cells = new List<BoardMapCell>(68);
+            // Clockwise from the top tile, six tiles per quadrant.
+            string outer = "GYBGPR" + "GYBGPR" + "GYBGPR" + "GYBGPR";
+            // Clockwise from the top home, five tiles per quadrant.
+            string inner = "HGYGY" + "HGYGY" + "HGYGY" + "HGYGY";
 
-            List<KeyValuePair<int, int>> ring = BuildRing();
-            for (int index = 0; index < ring.Count; index++)
+            List<BoardMapCell> cells = new List<BoardMapCell>(44);
+            List<Pair> outerRing = BuildDiamondRing(6);
+            List<Pair> innerRing = BuildDiamondRing(5);
+
+            for (int index = 0; index < outerRing.Count; index++)
             {
-                char code = index < RingPattern.Length ? RingPattern[index] : 'Y';
-                int owner = HomeOwnerOfRingIndex(index);
+                char code = outer[index % outer.Length];
                 cells.Add(new BoardMapCell(
-                    ring[index].Key,
-                    ring[index].Value,
-                    Parse(code.ToString()),
+                    outerRing[index].Row,
+                    outerRing[index].Column,
+                    Parse(code),
+                    -1));
+            }
+
+            // The four homes sit on the inner ring, one per quadrant, in seat order.
+            int homeOwner = 0;
+            for (int index = 0; index < innerRing.Count; index++)
+            {
+                char code = inner[index % inner.Length];
+                int owner = -1;
+                if (code == 'H')
+                {
+                    owner = homeOwner;
+                    homeOwner = (homeOwner + 1) % LobbyState.SeatCount;
+                }
+
+                cells.Add(new BoardMapCell(
+                    innerRing[index].Row,
+                    innerRing[index].Column,
+                    Parse(code),
                     owner));
             }
 
-            // Pocket: two link tiles hanging off the ring, then a 2 × 2 block that closes the loop.
-            List<KeyValuePair<int, int>> pocket = new List<KeyValuePair<int, int>>
-            {
-                Pos(1, PocketColumn),
-                Pos(1, PocketColumn + 1),
-                Pos(2, PocketColumn),
-                Pos(2, PocketColumn + 1),
-                Pos(3, PocketColumn),
-                Pos(3, PocketColumn + 1)
-            };
-            string pocketCodes = "GRYGRY";
+            List<BoardMapEdge> edges = new List<BoardMapEdge>(48);
+            AddRingEdges(edges, outerRing);
+            AddRingEdges(edges, innerRing);
 
-            for (int side = 0; side < 4; side++)
-            {
-                for (int index = 0; index < pocket.Count; index++)
-                {
-                    KeyValuePair<int, int> cell = pocket[index];
-                    cells.Add(new BoardMapCell(cell.Key, cell.Value, Parse(pocketCodes[index].ToString())));
-                }
-
-                pocket = pocket.ConvertAll(cell => Rotate90(cell.Key, cell.Value));
-            }
+            // One link per corner joins the outer ring to the inner ring.
+            edges.Add(new BoardMapEdge(2, 8, 3, 8));
+            edges.Add(new BoardMapEdge(8, 10, 8, 9));
+            edges.Add(new BoardMapEdge(10, 4, 9, 4));
+            edges.Add(new BoardMapEdge(4, 2, 4, 3));
 
             List<BoardMapTeleport> teleports = new List<BoardMapTeleport>
             {
-                new BoardMapTeleport(0, 8, GridSize - 1, 8),
-                new BoardMapTeleport(8, GridSize - 1, 5, 0)
+                new BoardMapTeleport(2, 4, 10, 8),
+                new BoardMapTeleport(4, 10, 8, 2)
             };
 
             return new BoardMapDefinition(
@@ -158,83 +195,82 @@ namespace ProjectArtOfAll.Board
                 "甜点回廊",
                 cells,
                 45f,
-                teleports);
+                teleports,
+                edges,
+                1.25f);
         }
 
-        /// <summary>The 44 ring positions, walked clockwise from the top-left corner.</summary>
-        private static List<KeyValuePair<int, int>> BuildRing()
+        /// <summary>Cells that sit exactly <paramref name="radius"/> steps away from the centre.</summary>
+        private static List<Pair> BuildDiamondRing(int radius)
         {
-            List<KeyValuePair<int, int>> ring = new List<KeyValuePair<int, int>>(44);
-            for (int column = 0; column < GridSize; column++)
+            List<Pair> ring = new List<Pair>(radius * 4);
+            int centre = 6;
+            for (int row = 0; row < centre * 2 + 1; row++)
             {
-                ring.Add(Pos(0, column));
+                for (int column = 0; column < centre * 2 + 1; column++)
+                {
+                    int distance = System.Math.Abs(row - centre) + System.Math.Abs(column - centre);
+                    if (distance != radius)
+                    {
+                        continue;
+                    }
+
+                    ring.Add(new Pair(row, column));
+                }
             }
 
-            for (int row = 1; row < GridSize; row++)
-            {
-                ring.Add(Pos(row, GridSize - 1));
-            }
-
-            for (int column = GridSize - 2; column >= 0; column--)
-            {
-                ring.Add(Pos(GridSize - 1, column));
-            }
-
-            for (int row = GridSize - 2; row >= 1; row--)
-            {
-                ring.Add(Pos(row, 0));
-            }
-
+            // Clockwise from the top: sort by the angle around the centre (screen space, +Y is up).
+            ring.Sort((a, b) => AngleOf(a).CompareTo(AngleOf(b)));
             return ring;
         }
 
-        private static int HomeOwnerOfRingIndex(int index)
+        private static double AngleOf(Pair cell)
         {
-            switch (index)
+            const int centre = 6;
+            double angle = System.Math.Atan2(cell.Column - centre, centre - cell.Row);
+            return angle < 0 ? angle + System.Math.PI * 2.0 : angle;
+        }
+
+        private static void AddRingEdges(List<BoardMapEdge> edges, List<Pair> ring)
+        {
+            for (int index = 0; index < ring.Count; index++)
             {
-                case 0:
-                    return 0;
-                case 11:
-                    return 1;
-                case 22:
-                    return 2;
-                case 33:
-                    return 3;
-                default:
-                    return -1;
+                Pair a = ring[index];
+                Pair b = ring[(index + 1) % ring.Count];
+                edges.Add(new BoardMapEdge(a.Row, a.Column, b.Row, b.Column));
             }
         }
 
-        private static KeyValuePair<int, int> Pos(int row, int column)
-        {
-            return new KeyValuePair<int, int>(row, column);
-        }
-
-        /// <summary>Quarter turn of a cell around the centre of the 12 × 12 grid.</summary>
-        private static KeyValuePair<int, int> Rotate90(int row, int column)
-        {
-            return Pos(column, GridSize - 1 - row);
-        }
-
-        private static TileType Parse(string code)
+        private static TileType Parse(char code)
         {
             switch (code)
             {
-                case "Y":
-                    return TileType.Reward;
-                case "R":
-                    return TileType.Monster;
-                case "G":
-                    return TileType.Shop;
-                case "P":
-                    return TileType.Warp;
-                case "B":
-                    return TileType.Event;
-                case "h":
+                case 'H':
                     return TileType.Home;
+                case 'R':
+                    return TileType.Monster;
+                case 'G':
+                    return TileType.Shop;
+                case 'P':
+                    return TileType.Warp;
+                case 'B':
+                    return TileType.Event;
                 default:
-                    return TileType.Neutral;
+                    return TileType.Reward;
             }
+        }
+
+        private readonly struct Pair
+        {
+            public Pair(int row, int column)
+            {
+                Row = row;
+                Column = column;
+            }
+
+            public int Row { get; }
+
+            public int Column { get; }
         }
     }
 }

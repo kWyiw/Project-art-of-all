@@ -50,6 +50,8 @@ namespace ProjectArtOfAll.Board
                 ? existing[0].transform.parent
                 : controller.transform;
             Vector3 tileScale = existing[0].transform.localScale;
+            float plate = definition.TileScale <= 0f ? 1f : definition.TileScale;
+            tileScale = new Vector3(tileScale.x * plate, tileScale.y, tileScale.z * plate);
             Dictionary<int, Material> materials = CaptureMaterials(existing);
 
             for (int index = 0; index < existing.Length; index++)
