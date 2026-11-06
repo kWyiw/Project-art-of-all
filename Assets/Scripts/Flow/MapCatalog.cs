@@ -1,0 +1,110 @@
+using System;
+using System.Collections.Generic;
+
+namespace ProjectArtOfAll.Flow
+{
+    public enum BoardMapKind
+    {
+        /// <summary>The original 68-tile board baked into the match scene.</summary>
+        Classic = 0,
+
+        /// <summary>Sweet-tooth ring: 36 tiles in a diamond loop, four warp gates.</summary>
+        SweetRing = 1
+    }
+
+    /// <summary>One selectable board. Maps are data, so adding a board never touches the kernel.</summary>
+    public sealed class BoardMapInfo
+    {
+        public BoardMapInfo(
+            string id,
+            string displayName,
+            string subtitle,
+            string description,
+            BoardMapKind kind,
+            int tileCount)
+        {
+            Id = id ?? throw new ArgumentNullException(nameof(id));
+            DisplayName = displayName ?? string.Empty;
+            Subtitle = subtitle ?? string.Empty;
+            Description = description ?? string.Empty;
+            Kind = kind;
+            TileCount = tileCount;
+        }
+
+        public string Id { get; }
+
+        public string DisplayName { get; }
+
+        public string Subtitle { get; }
+
+        public string Description { get; }
+
+        public BoardMapKind Kind { get; }
+
+        public int TileCount { get; }
+
+        /// <summary>True when the board has to be built at runtime instead of read from the scene.</summary>
+        public bool IsGenerated => Kind != BoardMapKind.Classic;
+    }
+
+    /// <summary>The board list shown by the map-select page, plus the current choice.</summary>
+    public static class MapCatalog
+    {
+        public const string ClassicId = "classic";
+        public const string SweetRingId = "sweet-ring";
+
+        private static readonly BoardMapInfo[] Maps =
+        {
+            new BoardMapInfo(
+                ClassicId,
+                "经典广场",
+                "12 × 12 棋盘 · 68 格",
+                "四角各有一个家，8 个三岔口把棋盘切成环线；商店、奖励、怪物与传送门交错分布。",
+                BoardMapKind.Classic,
+                68),
+            new BoardMapInfo(
+                SweetRingId,
+                "甜点回廊",
+                "菱形环线 · 36 格",
+                "一整圈不设分岔：沿着逆时针一路向前，四个角落各有一个家，紫色传送门两两相对。",
+                BoardMapKind.SweetRing,
+                36)
+        };
+
+        private static string selectedId = ClassicId;
+
+        public static IReadOnlyList<BoardMapInfo> All => Maps;
+
+        /// <summary>Id of the board the next match uses. Unknown ids fall back to the first board.</summary>
+        public static string SelectedId
+        {
+            get => selectedId;
+            set => selectedId = Get(value) != null ? value : Maps[0].Id;
+        }
+
+        public static BoardMapInfo Selected => Get(selectedId) ?? Maps[0];
+
+        public static BoardMapInfo Get(string id)
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return null;
+            }
+
+            for (int index = 0; index < Maps.Length; index++)
+            {
+                if (string.Equals(Maps[index].Id, id, StringComparison.Ordinal))
+                {
+                    return Maps[index];
+                }
+            }
+
+            return null;
+        }
+
+        public static void Reset()
+        {
+            selectedId = ClassicId;
+        }
+    }
+}

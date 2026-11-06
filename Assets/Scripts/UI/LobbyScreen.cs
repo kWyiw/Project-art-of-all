@@ -1,0 +1,793 @@
+using System;
+using System.Collections.Generic;
+using ProjectArtOfAll.Board;
+using ProjectArtOfAll.Environment;
+using ProjectArtOfAll.Flow;
+using ProjectArtOfAll.Player;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+
+namespace ProjectArtOfAll.UI
+{
+    /// <summary>
+    /// 准备房间 + 选地图页。场景里没有挂这个组件——它由 <see cref="Bootstrap"/> 在
+    /// "ready room" 场景加载后自动创建，所以不需要改动场景文件。
+    /// 正常模式：四个座位（房主自己 + CPU / 未来的远程玩家），坐满且真人准备后房主开始。
+    /// 无 CPU 测试模式：跳过座位，直接显示选地图页。
+    /// </summary>
+    [DisallowMultipleComponent]
+    public sealed class LobbyScreen : MonoBehaviour
+    {
+        private enum Page
+        {
+            Lobby = 0,
+            MapSelect = 1
+        }
+
+        private const float ReferenceWidth = 1920f;
+        private const float CardWidth = 404f;
+        private const float CardHeight = 372f;
+        private const float CardGap = 22f;
+        private const float MapCardWidth = 520f;
+        private const float MapCardHeight = 470f;
+        private const float MapCardGap = 40f;
+
+        private static readonly Color Scrim = new Color(0.018f, 0.028f, 0.032f, 0.90f);
+        private static readonly Color Panel = new Color(0.05f, 0.08f, 0.09f, 0.98f);
+        private static readonly Color CardColor = new Color(0.075f, 0.115f, 0.125f, 0.98f);
+        private static readonly Color ButtonColor = new Color(0.15f, 0.21f, 0.23f, 1f);
+        private static readonly Color ButtonHover = new Color(0.22f, 0.30f, 0.32f, 1f);
+        private static readonly Color Brass = new Color(0.92f, 0.69f, 0.27f, 1f);
+        private static readonly Color TextColor = new Color(0.94f, 0.93f, 0.88f, 1f);
+        private static readonly Color MutedText = new Color(0.62f, 0.65f, 0.62f, 1f);
+        private static readonly Color Accent = new Color(0.36f, 0.72f, 0.79f, 1f);
+        private static readonly Color ReadyGreen = new Color(0.36f, 0.66f, 0.40f, 1f);
+        private static readonly Color Danger = new Color(0.52f, 0.22f, 0.20f, 1f);
+
+        private readonly List<GameObject> pageObjects = new List<GameObject>();
+
+        private Font font;
+        private RectTransform root;
+        private RectTransform screenScrim;
+        private Page page = Page.Lobby;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void Bootstrap()
+        {
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+            SceneManager.sceneLoaded += OnSceneLoaded;
+            TryCreate(SceneManager.GetActiveScene());
+        }
+
+        private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            TryCreate(scene);
+        }
+
+        private static void TryCreate(Scene scene)
+        {
+            if (!scene.IsValid() || scene.name != GameSession.LobbySceneName)
+            {
+                return;
+            }
+
+            if (FindObjectOfType<LobbyScreen>() != null)
+            {
+                return;
+            }
+
+            GameObject holder = new GameObject("LobbyScreen");
+            holder.AddComponent<LobbyScreen>();
+        }
+
+        private void Awake()
+        {
+            font = BoardHudOverlayFactory.CreateFont();
+            PrepareScene();
+            EnsureEventSystem();
+            BuildCanvas();
+
+            page = GameSession.Mode == GameMode.NoCpuTest ? Page.MapSelect : Page.Lobby;
+            LobbyState.Changed += OnLobbyChanged;
+            Rebuild();
+        }
+
+        private void OnDestroy()
+        {
+            LobbyState.Changed -= OnLobbyChanged;
+        }
+
+        private void Update()
+        {
+            if (!Input.GetKeyDown(KeyCode.Escape))
+            {
+                return;
+            }
+
+            if (page == Page.MapSelect && GameSession.Mode == GameMode.Normal)
+            {
+                page = Page.Lobby;
+                Rebuild();
+                return;
+            }
+
+            GameSession.BackToMenu();
+        }
+
+        private void OnLobbyChanged()
+        {
+            if (page == Page.Lobby)
+            {
+                Rebuild();
+            }
+        }
+
+        /// <summary>准备房间是 3D 房间场景：停掉第一人称控制、解锁鼠标、关掉门的传送触发。</summary>
+        private void PrepareScene()
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+
+            ReadyRoomPlayerController walker = FindObjectOfType<ReadyRoomPlayerController>();
+            if (walker != null)
+            {
+                walker.enabled = false;
+            }
+
+            RingDoorPortal[] portals = FindObjectsOfType<RingDoorPortal>();
+            for (int index = 0; index < portals.Length; index++)
+            {
+                if (portals[index] != null)
+                {
+                    portals[index].enabled = false;
+                }
+            }
+        }
+
+        private static void EnsureEventSystem()
+        {
+            if (FindObjectOfType<EventSystem>() != null)
+            {
+                return;
+            }
+
+            GameObject holder = new GameObject(
+                "LobbyEventSystem",
+                typeof(EventSystem),
+                typeof(StandaloneInputModule));
+            holder.transform.SetParent(null);
+        }
+
+        private void BuildCanvas()
+        {
+            GameObject canvasObject = new GameObject(
+                "LobbyCanvas",
+                typeof(RectTransform),
+                typeof(Canvas),
+                typeof(CanvasScaler),
+                typeof(GraphicRaycaster));
+            canvasObject.transform.SetParent(transform, false);
+
+            Canvas canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = 40;
+
+            CanvasScaler scaler = canvasObject.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(ReferenceWidth, 1080f);
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+            scaler.matchWidthOrHeight = 0.5f;
+
+            root = canvasObject.GetComponent<RectTransform>();
+            root.anchorMin = Vector2.zero;
+            root.anchorMax = Vector2.one;
+            root.offsetMin = Vector2.zero;
+            root.offsetMax = Vector2.zero;
+
+            GameObject scrimObject = BoardHudOverlayFactory.CreateBar(
+                root,
+                "Scrim",
+                Vector2.zero,
+                Vector2.one,
+                Vector2.zero,
+                Vector2.zero,
+                Scrim);
+            scrimObject.GetComponent<Image>().raycastTarget = true;
+            screenScrim = scrimObject.GetComponent<RectTransform>();
+        }
+
+        private void Rebuild()
+        {
+            for (int index = 0; index < pageObjects.Count; index++)
+            {
+                if (pageObjects[index] != null)
+                {
+                    pageObjects[index].SetActive(false);
+                    Destroy(pageObjects[index]);
+                }
+            }
+
+            pageObjects.Clear();
+
+            if (page == Page.Lobby)
+            {
+                BuildLobbyPage();
+            }
+            else
+            {
+                BuildMapPage();
+            }
+        }
+
+        // ------------------------------------------------------------------ lobby
+
+        private void BuildLobbyPage()
+        {
+            RectTransform holder = CreatePage("LobbyPage");
+
+            Label(holder, "Title", "准备房间", 0f, 40f, ReferenceWidth, 52f,
+                40, FontStyle.Bold, TextAnchor.MiddleCenter, Brass);
+
+            Label(holder, "Subtitle",
+                GameSession.CurrentModeLabel + " · 四席坐满、真人准备后房主开始对局",
+                0f, 98f, ReferenceWidth, 26f,
+                18, FontStyle.Normal, TextAnchor.MiddleCenter, MutedText);
+
+            float rowWidth = 4f * CardWidth + 3f * CardGap;
+            float startX = (ReferenceWidth - rowWidth) * 0.5f;
+            for (int seat = 0; seat < LobbyState.SeatCount; seat++)
+            {
+                BuildSeatCard(holder, seat, startX + seat * (CardWidth + CardGap), 150f);
+            }
+
+            string footer;
+            if (!LobbyState.AllSeatsFilled)
+            {
+                footer = "还有空席位：给每个空位加一个 CPU，或等待远程玩家加入（联机功能开发中）";
+            }
+            else if (!LobbyState.AllHumansReady)
+            {
+                footer = "所有座位都坐满了，等真人玩家点「准备」后房主就能开始";
+            }
+            else
+            {
+                footer = "四席就绪 —— 房主可以开始，接下来选择这一局的地图";
+            }
+
+            Label(holder, "Footer", footer, 0f, 548f, ReferenceWidth, 26f,
+                17, FontStyle.Normal, TextAnchor.MiddleCenter, MutedText);
+
+            Button start = MakeButton(
+                holder,
+                "StartButton",
+                "开始游戏",
+                (ReferenceWidth - 420f) * 0.5f,
+                600f,
+                420f,
+                76f,
+                StartMatch,
+                LobbyState.CanStart ? new Color(0.86f, 0.64f, 0.22f, 1f) : new Color(0.16f, 0.19f, 0.20f, 1f),
+                26);
+            start.interactable = LobbyState.CanStart;
+
+            MakeButton(holder, "BackButton", "返回主页面", 120f, 612f, 240f, 52f, GameSession.BackToMenu,
+                ButtonColor, 18);
+
+            Label(holder, "Hint",
+                "CPU 席位的风格与难度可以逐个调整；把四个空位都留给 CPU 也能直接开始（未来联机时客机玩家会占据这些席位）",
+                0f, 706f, ReferenceWidth, 24f,
+                15, FontStyle.Normal, TextAnchor.MiddleCenter, new Color(0.5f, 0.53f, 0.51f, 1f));
+        }
+
+        private void BuildSeatCard(RectTransform parent, int seatIndex, float x, float y)
+        {
+            LobbySeat seat = LobbyState.Get(seatIndex);
+            Color accent = seat.Kind == LobbySeatKind.LocalHuman
+                ? Brass
+                : seat.Kind == LobbySeatKind.Cpu
+                    ? Accent
+                    : seat.Kind == LobbySeatKind.RemoteHuman
+                        ? new Color(0.62f, 0.52f, 0.86f, 1f)
+                        : new Color(0.30f, 0.33f, 0.34f, 1f);
+
+            GameObject cardObject = BoardHudOverlayFactory.CreateBar(
+                parent,
+                "Seat" + seatIndex,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(x, -(y + CardHeight)),
+                new Vector2(x + CardWidth, -y),
+                CardColor);
+            RectTransform card = cardObject.GetComponent<RectTransform>();
+
+            BoardHudOverlayFactory.CreateBar(
+                card,
+                "Accent",
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0f, -4f),
+                Vector2.zero,
+                accent);
+
+            Label(card, "SeatIndex", seat.Title.ToUpperInvariant(), 22f, 18f, 200f, 22f,
+                15, FontStyle.Bold, TextAnchor.MiddleLeft, accent);
+
+            Label(card, "Occupant", seat.OccupantLabel, 22f, 44f, CardWidth - 44f, 34f,
+                26, FontStyle.Bold, TextAnchor.MiddleLeft, TextColor);
+
+            string detail;
+            switch (seat.Kind)
+            {
+                case LobbySeatKind.LocalHuman:
+                    detail = seatIndex == LobbyState.HostSeat
+                        ? "本机玩家 · 房主（可以开始对局）"
+                        : "本机玩家";
+                    break;
+                case LobbySeatKind.RemoteHuman:
+                    detail = "等待远程玩家准备（联机功能开发中）";
+                    break;
+                case LobbySeatKind.Cpu:
+                    detail = "由电脑操作 · 只能使用公开信息决策";
+                    break;
+                default:
+                    detail = "空着——加一个 CPU 或等远程玩家";
+                    break;
+            }
+
+            Label(card, "Detail", detail, 22f, 86f, CardWidth - 44f, 44f,
+                15, FontStyle.Normal, TextAnchor.UpperLeft, MutedText);
+
+            BoardHudOverlayFactory.CreateBar(
+                card,
+                "Divider",
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(18f, -142f),
+                new Vector2(-18f, -140f),
+                new Color(1f, 1f, 1f, 0.06f));
+
+            float buttonX = 22f;
+            float buttonWidth = CardWidth - 44f;
+
+            switch (seat.Kind)
+            {
+                case LobbySeatKind.LocalHuman:
+                {
+                    Button ready = MakeButton(
+                        card,
+                        "ReadyButton",
+                        seat.Ready ? "已准备（点击取消）" : "准备（点击准备）",
+                        buttonX,
+                        156f,
+                        buttonWidth,
+                        52f,
+                        () => LobbyState.ToggleReady(seatIndex),
+                        seat.Ready ? ReadyGreen : ButtonColor,
+                        19);
+                    ready.interactable = true;
+
+                    Label(card, "HostNote",
+                        seatIndex == LobbyState.HostSeat ? "你是房主：开始游戏由你决定" : "等待房主开始",
+                        buttonX,
+                        222f,
+                        buttonWidth,
+                        46f,
+                        15,
+                        FontStyle.Normal,
+                        TextAnchor.UpperLeft,
+                        MutedText);
+                    break;
+                }
+
+                case LobbySeatKind.Cpu:
+                {
+                    MakeButton(
+                        card,
+                        "ArchetypeButton",
+                        "风格：" + LobbyState.ArchetypeLabel(seat.Archetype) + "    ▸",
+                        buttonX,
+                        156f,
+                        buttonWidth,
+                        48f,
+                        () => LobbyState.CycleArchetype(seatIndex, 1),
+                        ButtonColor,
+                        18);
+
+                    MakeButton(
+                        card,
+                        "DifficultyButton",
+                        "难度：" + LobbyState.DifficultyLabel(seat.Difficulty) + "    ▸",
+                        buttonX,
+                        212f,
+                        buttonWidth,
+                        48f,
+                        () => LobbyState.CycleDifficulty(seatIndex, 1),
+                        ButtonColor,
+                        18);
+
+                    MakeButton(
+                        card,
+                        "RemoveButton",
+                        "移除 CPU",
+                        buttonX,
+                        268f,
+                        buttonWidth,
+                        44f,
+                        () => LobbyState.Remove(seatIndex),
+                        Danger,
+                        17);
+                    break;
+                }
+
+                case LobbySeatKind.RemoteHuman:
+                {
+                    MakeButton(
+                        card,
+                        "RemoveButton",
+                        "移出房间",
+                        buttonX,
+                        156f,
+                        buttonWidth,
+                        48f,
+                        () => LobbyState.Remove(seatIndex),
+                        ButtonColor,
+                        18);
+                    break;
+                }
+
+                default:
+                {
+                    Button add = MakeButton(
+                        card,
+                        "AddCpuButton",
+                        "添加 CPU",
+                        buttonX,
+                        156f,
+                        buttonWidth,
+                        52f,
+                        () => LobbyState.AddCpu(seatIndex),
+                        new Color(0.24f, 0.34f, 0.36f, 1f),
+                        19);
+                    add.interactable = true;
+
+                    Button invite = MakeButton(
+                        card,
+                        "InviteButton",
+                        "邀请好友（联机开发中）",
+                        buttonX,
+                        216f,
+                        buttonWidth,
+                        44f,
+                        null,
+                        new Color(0.13f, 0.16f, 0.17f, 1f),
+                        16);
+                    invite.interactable = false;
+                    break;
+                }
+            }
+
+            string status;
+            switch (seat.Kind)
+            {
+                case LobbySeatKind.LocalHuman:
+                    status = seat.Ready ? "● 已准备" : "○ 未准备";
+                    break;
+                case LobbySeatKind.Cpu:
+                    status = "● 准备完毕（CPU 无需手动准备）";
+                    break;
+                case LobbySeatKind.RemoteHuman:
+                    status = seat.Ready ? "● 远程玩家已准备" : "○ 等待远程玩家准备";
+                    break;
+                default:
+                    status = "○ 空席位";
+                    break;
+            }
+
+            Label(card, "Status", status, 22f, 326f, CardWidth - 44f, 24f,
+                15, FontStyle.Normal, TextAnchor.MiddleLeft,
+                seat.Kind == LobbySeatKind.Empty ? MutedText : accent);
+        }
+
+        // -------------------------------------------------------------- map page
+
+        private void BuildMapPage()
+        {
+            RectTransform holder = CreatePage("MapPage");
+
+            Label(holder, "Title", "选择地图", 0f, 48f, ReferenceWidth, 52f,
+                40, FontStyle.Bold, TextAnchor.MiddleCenter, Brass);
+
+            Label(holder, "Subtitle",
+                "两套棋盘规则完全一致，只有布局不同；选好后点「开始对局」。",
+                0f, 108f, ReferenceWidth, 26f,
+                18, FontStyle.Normal, TextAnchor.MiddleCenter, MutedText);
+
+            IReadOnlyList<BoardMapInfo> maps = MapCatalog.All;
+            float rowWidth = maps.Count * MapCardWidth + Mathf.Max(0, maps.Count - 1) * MapCardGap;
+            float startX = (ReferenceWidth - rowWidth) * 0.5f;
+            for (int index = 0; index < maps.Count; index++)
+            {
+                BuildMapCard(
+                    holder,
+                    maps[index],
+                    startX + index * (MapCardWidth + MapCardGap),
+                    170f);
+            }
+
+            MakeButton(holder, "StartMatchButton", "开始对局",
+                (ReferenceWidth - 420f) * 0.5f, 700f, 420f, 76f,
+                StartMatch,
+                new Color(0.86f, 0.64f, 0.22f, 1f),
+                26);
+
+            string backLabel = GameSession.Mode == GameMode.Normal ? "返回房间" : "返回主页面";
+            MakeButton(holder, "BackButton", backLabel, 120f, 712f, 240f, 52f, () =>
+            {
+                if (GameSession.Mode == GameMode.Normal)
+                {
+                    page = Page.Lobby;
+                    Rebuild();
+                }
+                else
+                {
+                    GameSession.BackToMenu();
+                }
+            }, ButtonColor, 18);
+
+            Label(holder, "MapHint",
+                "当前选择：" + MapCatalog.Selected.DisplayName
+                + "（" + MapCatalog.Selected.TileCount + " 格）",
+                0f, 792f, ReferenceWidth, 26f,
+                16, FontStyle.Normal, TextAnchor.MiddleCenter, Accent);
+        }
+
+        private void BuildMapCard(RectTransform parent, BoardMapInfo map, float x, float y)
+        {
+            bool selected = MapCatalog.Get(map.Id) != null
+                            && string.Equals(MapCatalog.SelectedId, map.Id, StringComparison.Ordinal);
+
+            GameObject cardObject = BoardHudOverlayFactory.CreateBar(
+                parent,
+                "Map_" + map.Id,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(x, -(y + MapCardHeight)),
+                new Vector2(x + MapCardWidth, -y),
+                selected ? new Color(0.11f, 0.16f, 0.15f, 1f) : CardColor);
+            RectTransform card = cardObject.GetComponent<RectTransform>();
+
+            Button button = cardObject.AddComponent<Button>();
+            button.targetGraphic = cardObject.GetComponent<Image>();
+            button.transition = Selectable.Transition.None;
+            button.onClick.AddListener(() =>
+            {
+                MapCatalog.SelectedId = map.Id;
+                Rebuild();
+            });
+
+            BoardHudOverlayFactory.CreateBar(
+                card,
+                "Accent",
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0f, -4f),
+                Vector2.zero,
+                selected ? Brass : new Color(0.30f, 0.33f, 0.34f, 1f));
+
+            Label(card, "Name", map.DisplayName, 26f, 22f, MapCardWidth - 52f, 40f,
+                30, FontStyle.Bold, TextAnchor.MiddleLeft, selected ? Brass : TextColor);
+
+            Label(card, "Subtitle", map.Subtitle, 26f, 66f, MapCardWidth - 52f, 26f,
+                17, FontStyle.Normal, TextAnchor.MiddleLeft, Accent);
+
+            Label(card, "Description", map.Description, 26f, 108f, MapCardWidth - 52f, 150f,
+                18, FontStyle.Normal, TextAnchor.UpperLeft, TextColor).horizontalOverflow =
+                HorizontalWrapMode.Wrap;
+
+            Label(card, "TileCount", map.TileCount + " 格 · " + TileMixLabel(map.Kind),
+                26f, 274f, MapCardWidth - 52f, 26f,
+                16, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
+
+            BuildMapPreview(card, map.Kind, 26f, 314f, MapCardWidth - 52f, 96f);
+
+            Label(card, "State", selected ? "● 已选择" : "○ 点击选择",
+                26f, MapCardHeight - 42f, MapCardWidth - 52f, 24f,
+                16, FontStyle.Bold, TextAnchor.MiddleLeft, selected ? Brass : MutedText);
+        }
+
+        private void BuildMapPreview(Transform parent, BoardMapKind kind, float x, float y, float width, float height)
+        {
+            GameObject preview = BoardHudOverlayFactory.CreateBar(
+                parent,
+                "Preview",
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(x, -(y + height)),
+                new Vector2(x + width, -y),
+                new Color(0.03f, 0.05f, 0.055f, 1f));
+            RectTransform rect = preview.GetComponent<RectTransform>();
+
+            List<Vector2> points = kind == BoardMapKind.SweetRing
+                ? new List<Vector2>
+                {
+                    new Vector2(0.5f, 0.80f),
+                    new Vector2(0.86f, 0.50f),
+                    new Vector2(0.5f, 0.20f),
+                    new Vector2(0.14f, 0.50f),
+                    new Vector2(0.5f, 0.80f)
+                }
+                : new List<Vector2>
+                {
+                    new Vector2(0.14f, 0.60f),
+                    new Vector2(0.50f, 0.84f),
+                    new Vector2(0.86f, 0.60f),
+                    new Vector2(0.86f, 0.28f),
+                    new Vector2(0.50f, 0.16f),
+                    new Vector2(0.14f, 0.28f),
+                    new Vector2(0.14f, 0.60f)
+                };
+
+            for (int index = 0; index < points.Count - 1; index++)
+            {
+                Vector2 a = points[index];
+                Vector2 b = points[index + 1];
+                Vector2 mid = (a + b) * 0.5f;
+                float length = Vector2.Distance(a, b) * width;
+                float angle = Mathf.Atan2(b.y - a.y, b.x - a.x) * Mathf.Rad2Deg;
+                GameObject segment = BoardHudOverlayFactory.CreateBar(
+                    rect,
+                    "Segment" + index,
+                    new Vector2(0f, 0f),
+                    new Vector2(0f, 0f),
+                    Vector2.zero,
+                    new Vector2(length, 3f),
+                    new Color(0.92f, 0.69f, 0.27f, 0.55f));
+                RectTransform segmentRect = segment.GetComponent<RectTransform>();
+                segmentRect.anchorMin = mid;
+                segmentRect.anchorMax = mid;
+                segmentRect.pivot = new Vector2(0f, 0.5f);
+                segmentRect.anchoredPosition = Vector2.zero;
+                segmentRect.localRotation = Quaternion.Euler(0f, 0f, angle);
+            }
+        }
+
+        private static string TileMixLabel(BoardMapKind kind)
+        {
+            return kind == BoardMapKind.SweetRing
+                ? "奖励 9 · 怪物 8 · 商店 7 · 事件 4 · 传送 4 · 家 4"
+                : "奖励 10 · 怪物 12 · 商店 4 · 事件 14 · 传送 4 · 家 4 · 空地 20";
+        }
+
+        private void StartMatch()
+        {
+            if (GameSession.Mode == GameMode.Normal && !LobbyState.CanStart)
+            {
+                return;
+            }
+
+            GameSession.StartMatch();
+        }
+
+        // --------------------------------------------------------------- helpers
+
+        private RectTransform CreatePage(string name)
+        {
+            GameObject pageObject = new GameObject(name, typeof(RectTransform));
+            RectTransform rect = pageObject.GetComponent<RectTransform>();
+            rect.SetParent(root, false);
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+            pageObjects.Add(pageObject);
+            return rect;
+        }
+
+        private static GameObject Bar(
+            Transform parent,
+            string name,
+            float x,
+            float y,
+            float width,
+            float height,
+            Color color)
+        {
+            return BoardHudOverlayFactory.CreateBar(
+                parent,
+                name,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(x, -(y + height)),
+                new Vector2(x + width, -y),
+                color);
+        }
+
+        private Text Label(
+            Transform parent,
+            string name,
+            string content,
+            float x,
+            float y,
+            float width,
+            float height,
+            int size,
+            FontStyle style,
+            TextAnchor anchor,
+            Color color)
+        {
+            GameObject labelObject = new GameObject(name, typeof(RectTransform), typeof(Text));
+            RectTransform rect = labelObject.GetComponent<RectTransform>();
+            rect.SetParent(parent, false);
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = new Vector2(x, -y);
+            rect.sizeDelta = new Vector2(width, height);
+
+            Text text = labelObject.GetComponent<Text>();
+            text.font = font;
+            text.fontSize = size;
+            text.fontStyle = style;
+            text.alignment = anchor;
+            text.color = color;
+            text.text = content;
+            text.raycastTarget = false;
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            return text;
+        }
+
+        private Button MakeButton(
+            Transform parent,
+            string name,
+            string content,
+            float x,
+            float y,
+            float width,
+            float height,
+            Action onClick,
+            Color color,
+            int fontSize)
+        {
+            GameObject buttonObject = Bar(parent, name, x, y, width, height, color);
+            Image image = buttonObject.GetComponent<Image>();
+            image.raycastTarget = true;
+
+            Button button = buttonObject.AddComponent<Button>();
+            button.targetGraphic = image;
+            button.transition = Selectable.Transition.ColorTint;
+            ColorBlock colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1.22f, 1.22f, 1.22f, 1f);
+            colors.pressedColor = new Color(0.82f, 0.82f, 0.82f, 1f);
+            colors.disabledColor = new Color(0.70f, 0.70f, 0.70f, 0.6f);
+            button.colors = colors;
+
+            if (onClick != null)
+            {
+                button.onClick.AddListener(() => onClick());
+            }
+
+            GameObject labelObject = new GameObject("Label", typeof(RectTransform), typeof(Text));
+            RectTransform rect = labelObject.GetComponent<RectTransform>();
+            rect.SetParent(buttonObject.transform, false);
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+
+            Text text = labelObject.GetComponent<Text>();
+            text.font = font;
+            text.fontSize = fontSize;
+            text.fontStyle = FontStyle.Bold;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = new Color(0.97f, 0.95f, 0.90f, 1f);
+            text.text = content;
+            text.raycastTarget = false;
+
+            return button;
+        }
+    }
+}

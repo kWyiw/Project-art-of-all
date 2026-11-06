@@ -250,7 +250,7 @@ namespace ProjectArtOfAll.UI
                 "1 名真人 + 3 名 CPU。正式玩法的形态，卡槽始终是你的 P1。",
                 "推荐",
                 128f,
-                () => GameSession.StartNewGame(GameMode.Normal));
+                () => GameSession.ChooseMode(GameMode.Normal));
 
             BuildModeOption(
                 panel,
@@ -258,7 +258,7 @@ namespace ProjectArtOfAll.UI
                 "四个座位都由你一个人操作，用来验证规则、复现问题、排查 AI。",
                 "测试",
                 268f,
-                () => GameSession.StartNewGame(GameMode.NoCpuTest));
+                () => GameSession.ChooseMode(GameMode.NoCpuTest));
 
             CreatePanelButton(panel, "返回", (panelWidth - 220f) * 0.5f, panelHeight - 76f, 220f, 48f,
                 () => modePanel.SetActive(false));

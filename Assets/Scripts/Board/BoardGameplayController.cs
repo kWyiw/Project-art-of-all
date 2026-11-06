@@ -77,6 +77,14 @@ namespace ProjectArtOfAll.Board
 
         private void Start()
         {
+            // 选地图页选中的是生成棋盘时，先把场景里的地块换成新布局，
+            // 再建 tile 索引与图——这样后面的所有逻辑（渲染、寻路、AI）都不用区分地图。
+            BoardMapDefinition generatedMap = BoardMapLibrary.For(GameSession.SelectedMapId);
+            if (generatedMap != null)
+            {
+                BoardMapBuilder.Build(this, generatedMap);
+            }
+
             BuildSceneLookup();
             graph = UnityMapGraphFactory.Build(tilesByNode.Values);
             pathLines = BoardPathLines.Build(transform, graph, tilesByNode);
@@ -1039,7 +1047,6 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
-            CpuDifficulty difficulty = GameSettings.CpuDifficultyTier;
             foreach (MatchPlayerState player in match.State.Players)
             {
                 if (player.Id == humanSeat)
@@ -1047,16 +1054,18 @@ namespace ProjectArtOfAll.Board
                     continue;
                 }
 
-                CpuPersonality personality = CpuPersonality.ForSeat(
-                    player.Id,
-                    difficulty,
-                    match.State.Players.Count);
+                // 准备房间里每个座位都可以单独挑风格与难度；没有房间信息时
+                // （例如直接在编辑器里开对局场景）回退到按座位号确定性分配。
+                CpuPersonality personality = LobbyState.PersonalityFor(player.Id);
                 cpuBrains[player.Id] = new CpuBrain(player.Id, personality, matchSeed);
+                Debug.Log(string.Concat(
+                    "[Board] cpu seat ", player.Id.ToString(),
+                    " personality=", personality.Label));
             }
 
             Debug.Log(string.Concat(
                 "[Board] cpu brains ", cpuBrains.Count.ToString(),
-                " difficulty=", difficulty.ToString()));
+                " map=", GameSession.SelectedMapId));
         }
 
         /// <summary>状态行里显示的 CPU 人格标签。</summary>
