@@ -44,6 +44,7 @@ namespace ProjectArtOfAll.Board
         private static readonly Color ChipFlash = new Color(0.94f, 0.77f, 0.42f, 1f);
         private static readonly Color ChipDead = new Color(0.09f, 0.09f, 0.09f, 0.6f);
         private static readonly Color DamageColor = new Color(0.97f, 0.58f, 0.50f, 1f);
+        private static readonly Color HealColor = new Color(0.46f, 0.84f, 0.53f, 1f);
 
         private sealed class SideRuntime
         {
@@ -93,6 +94,8 @@ namespace ProjectArtOfAll.Board
         private float speed = 2f;
         private bool skipped;
         private bool finished;
+        private bool selfIsLeft = true;
+        private CombatResult appliedResult;
         private Action onComplete;
 
         public static CombatPlaybackView Create(Transform parent, Font font)
@@ -135,6 +138,7 @@ namespace ProjectArtOfAll.Board
 
             CombatResult result = combat.Result;
             BattleSnapshot battle = result.Battle;
+            appliedResult = result;
             onComplete = onDone;
             if (startSpeed > 0f)
             {
@@ -303,6 +307,7 @@ namespace ProjectArtOfAll.Board
             int rightId = battle != null ? battle.Right.PlayerId : -1;
             CombatantSnapshot leftSnapshot = battle?.Left;
             CombatantSnapshot rightSnapshot = battle?.Right;
+            selfIsLeft = leftIsHuman;
             CombatantSnapshot selfSnapshot = leftIsHuman ? leftSnapshot : rightSnapshot;
             CombatantSnapshot foeSnapshot = leftIsHuman ? rightSnapshot : leftSnapshot;
             int selfId = leftIsHuman ? leftId : rightId;
@@ -662,6 +667,7 @@ namespace ProjectArtOfAll.Board
                 yield return null;
             }
 
+            ApplyFinalSnapshot();
             RefreshMeters();
             RefreshClock();
             RefreshChips();
@@ -671,6 +677,40 @@ namespace ProjectArtOfAll.Board
             Action callback = onComplete;
             onComplete = null;
             callback?.Invoke();
+        }
+
+        /// <summary>
+        /// 用内核给出的最终数值收口血条与盾条。时间轴是"尽量复现"，但结算面板上的胜负
+        /// 与血量是权威值——两者必须一致，否则会出现血条先空、结算却判胜的错觉。
+        /// </summary>
+        private void ApplyFinalSnapshot()
+        {
+            if (appliedResult == null)
+            {
+                return;
+            }
+
+            if (selfSide != null)
+            {
+                selfSide.Health = Mathf.Clamp(
+                    selfIsLeft ? appliedResult.LeftHealth : appliedResult.RightHealth,
+                    0,
+                    selfSide.MaxHealth);
+                selfSide.Shield = Mathf.Max(
+                    0,
+                    selfIsLeft ? appliedResult.LeftShield : appliedResult.RightShield);
+            }
+
+            if (foeSide != null)
+            {
+                foeSide.Health = Mathf.Clamp(
+                    selfIsLeft ? appliedResult.RightHealth : appliedResult.LeftHealth,
+                    0,
+                    foeSide.MaxHealth);
+                foeSide.Shield = Mathf.Max(
+                    0,
+                    selfIsLeft ? appliedResult.RightShield : appliedResult.LeftShield);
+            }
         }
 
         private void Update()
@@ -721,6 +761,27 @@ namespace ProjectArtOfAll.Board
                         ? string.Concat("（护盾吸 ", damage.ShieldAbsorbed.ToString(), "）")
                         : string.Empty,
                     damage.IgnoresShield ? "（无视护盾）" : string.Empty);
+                RefreshMeters();
+                return;
+            }
+
+            if (gameEvent is HealthRestoredEvent restored)
+            {
+                SideRuntime side = SideOf(restored.PlayerId);
+                if (side == null)
+                {
+                    return;
+                }
+
+                int healed = Mathf.Max(0, restored.ActualAmount);
+                side.Health = Mathf.Min(side.MaxHealth, side.Health + healed);
+                SpawnPopup(side, string.Concat("+", healed.ToString()), HealColor);
+                logLabel.text = string.Concat(
+                    SidePrefix(side),
+                    " 恢复 ",
+                    healed.ToString(),
+                    " 点生命",
+                    healed < restored.Amount ? "（已满）" : string.Empty);
                 RefreshMeters();
                 return;
             }

@@ -990,8 +990,116 @@ namespace ProjectArtOfAll.Core.Checks
                     "CardCastEvent must reference a card that is in that side's loadout.");
             }
 
+            AssertReplayMatchesResult(result, "standalone");
+
+            // 怪物战同样要能对上：玩家在左、怪物在右（怪物 id = 1000 + 地块 id）。
+            CombatResult monster = FindMonsterCombat();
+            if (monster != null)
+            {
+                AssertReplayMatchesResult(monster, "monster");
+            }
+
+            // 带治疗的对局必须能对上：回放层曾经漏掉 HealthRestoredEvent，
+            // 血条只减不加，于是出现"血条空了却判你赢"的自相矛盾画面。
+            CombatResult healing = new CombatSimulation(
+                CombatOf(new[] { "snow_purifier", "car_door" }, new[] { "crowbar", "nuclear_water" }),
+                909UL).RunToCompletion();
+            Assert(
+                healing.Timeline.Any(entry => entry is HealthRestoredEvent),
+                "A healing deck must publish HealthRestoredEvent so the replay can show it.");
+            AssertReplayMatchesResult(healing, "healing");
+
             Console.WriteLine(
                 $"[timeline] events={result.Timeline.Count} end={result.EndTick}");
+        }
+
+        /// <summary>
+        /// 用回放层那套算术（伤害扣血、治疗加血、护盾吸收）重演一遍时间轴，
+        /// 结果必须与内核给出的最终血量一致——否则战斗画面会与结算面板自相矛盾
+        /// （典型表现：玩家血条先归零，结算却判胜利）。
+        /// </summary>
+        private static void AssertReplayMatchesResult(CombatResult result, string label)
+        {
+            BattleSnapshot battle = result.Battle;
+            Assert(battle != null, "Playback reconciliation needs the battle snapshot.");
+
+            int leftHealth = battle.Left.MaxHealth;
+            int rightHealth = battle.Right.MaxHealth;
+            int leftShield = 0;
+            int rightShield = 0;
+
+            foreach (GameEvent gameEvent in result.Timeline
+                         .OrderBy(entry => entry.Tick)
+                         .ThenBy(entry => entry.Sequence))
+            {
+                if (gameEvent is DamageDealtEvent damage)
+                {
+                    bool onLeft = damage.TargetPlayerId == battle.Left.PlayerId;
+                    int healthDamage = Math.Max(0, damage.Amount - damage.ShieldAbsorbed);
+                    if (onLeft)
+                    {
+                        leftShield = Math.Max(0, leftShield - damage.ShieldAbsorbed);
+                        leftHealth = Math.Max(0, leftHealth - healthDamage);
+                    }
+                    else
+                    {
+                        rightShield = Math.Max(0, rightShield - damage.ShieldAbsorbed);
+                        rightHealth = Math.Max(0, rightHealth - healthDamage);
+                    }
+
+                    continue;
+                }
+
+                if (gameEvent is HealthRestoredEvent restored)
+                {
+                    bool onLeft = restored.PlayerId == battle.Left.PlayerId;
+                    int healed = Math.Max(0, restored.ActualAmount);
+                    if (onLeft)
+                    {
+                        leftHealth = Math.Min(battle.Left.MaxHealth, leftHealth + healed);
+                    }
+                    else
+                    {
+                        rightHealth = Math.Min(battle.Right.MaxHealth, rightHealth + healed);
+                    }
+
+                    continue;
+                }
+
+                if (gameEvent is ShieldGainedEvent gained)
+                {
+                    if (gained.PlayerId == battle.Left.PlayerId)
+                    {
+                        leftShield += gained.Amount;
+                    }
+                    else
+                    {
+                        rightShield += gained.Amount;
+                    }
+                }
+            }
+
+            Assert(
+                leftHealth == result.LeftHealth && rightHealth == result.RightHealth,
+                "Replayed health (" + leftHealth + "/" + rightHealth + ") must match the "
+                + "kernel result (" + result.LeftHealth + "/" + result.RightHealth + ") in "
+                + label + " combat.");
+        }
+
+        private static CombatResult FindMonsterCombat()
+        {
+            MatchController controller = new MatchController(CreateM3Graph(), 24680UL);
+            new CpuMatchRunner(controller).Run(20000);
+            foreach (CombatResolvedEvent combat in controller.Events.History
+                         .OfType<CombatResolvedEvent>())
+            {
+                if (combat.DefenderId >= 1000 && combat.Result != null)
+                {
+                    return combat.Result;
+                }
+            }
+
+            return null;
         }
 
         /// <summary>模拟模式：双方的初始生命值由玩家自己填，内核必须照这个数开局。</summary>
