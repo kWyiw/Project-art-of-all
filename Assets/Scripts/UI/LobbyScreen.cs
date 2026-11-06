@@ -272,7 +272,7 @@ namespace ProjectArtOfAll.UI
                 26);
             start.interactable = LobbyState.CanStart;
 
-            MakeButton(holder, "BackButton", "返回主页面", 120f, 612f, 240f, 52f, GameSession.BackToMenu,
+            MakeButton(holder, "BackButton", "返回主页面", ReferenceWidth - 300f, 612f, 240f, 52f, GameSession.BackToMenu,
                 ButtonColor, 18);
 
             Label(holder, "Hint",
@@ -523,7 +523,7 @@ namespace ProjectArtOfAll.UI
                 26);
 
             string backLabel = GameSession.Mode == GameMode.Normal ? "返回房间" : "返回主页面";
-            MakeButton(holder, "BackButton", backLabel, 120f, 712f, 240f, 52f, () =>
+            MakeButton(holder, "BackButton", backLabel, ReferenceWidth - 300f, 712f, 240f, 52f, () =>
             {
                 if (GameSession.Mode == GameMode.Normal)
                 {
