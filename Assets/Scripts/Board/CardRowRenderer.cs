@@ -138,7 +138,9 @@ namespace ProjectArtOfAll.Board
             rect.pivot = new Vector2(0f, 1f);
             rect.sizeDelta = new Vector2(width, CardHeight);
             rect.anchoredPosition = new Vector2(x, 0f);
-            widget.GetComponent<Image>().color = InBattle ? BattleColor : BagColor;
+            Color plateColor = InBattle ? BattleColor : BagColor;
+            widget.GetComponent<Image>().color = plateColor;
+            CardArtLibrary.Attach(widget.transform, card.Definition.SlotSize, plateColor);
 
             float thickness = Mathf.Max(2f, 2.2f * Scale);
             AddFramedBorder(widget.transform, FrameColor(card.Definition.SlotSize), thickness, 13f * Scale);

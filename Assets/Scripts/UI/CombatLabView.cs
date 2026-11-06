@@ -439,7 +439,9 @@ namespace ProjectArtOfAll.UI
                 x += width + ChipGap;
 
                 Image chipImage = chip.gameObject.AddComponent<Image>();
-                chipImage.color = isLeft ? LeftTint : RightTint;
+                Color chipColor = isLeft ? LeftTint : RightTint;
+                chipImage.color = chipColor;
+                ProjectArtOfAll.Board.CardArtLibrary.Attach(chip, card.SlotSize, chipColor);
 
                 LabDragHandler drag = chip.gameObject.AddComponent<LabDragHandler>();
                 drag.View = this;
