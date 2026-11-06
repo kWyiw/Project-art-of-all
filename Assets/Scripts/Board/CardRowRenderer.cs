@@ -137,7 +137,9 @@ namespace ProjectArtOfAll.Board
             rect.anchorMax = new Vector2(0f, 1f);
             rect.pivot = new Vector2(0f, 1f);
             rect.sizeDelta = new Vector2(width, CardHeight);
-            rect.anchoredPosition = new Vector2(x, 0f);
+            // 和空槽位对齐：槽位画在 -TopInset，卡也画在 -TopInset，
+            // 否则卡片会高出卡牌栏位一截。
+            rect.anchoredPosition = new Vector2(x, -TopInset);
             Color plateColor = InBattle ? BattleColor : BagColor;
             widget.GetComponent<Image>().color = plateColor;
             CardArtLibrary.Attach(widget.transform, card.Definition.SlotSize, plateColor);

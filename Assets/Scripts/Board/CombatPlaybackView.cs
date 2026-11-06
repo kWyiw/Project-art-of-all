@@ -633,7 +633,19 @@ namespace ProjectArtOfAll.Board
                     Vector2.zero,
                     Vector2.zero,
                     CooldownShade);
-                shade.transform.SetAsFirstSibling();
+                // 卡面的占位图是子物体 "Art" / "ArtScrim"，遮罩必须叠在它们上面才看得见，
+                // 但仍要留在边框与文字下面，这样只有卡面被压暗、字仍然清楚。
+                int artTop = 0;
+                for (int child = 0; child < widget.transform.childCount; child++)
+                {
+                    string childName = widget.transform.GetChild(child).name;
+                    if (childName == "Art" || childName == "ArtScrim")
+                    {
+                        artTop = Mathf.Max(artTop, child + 1);
+                    }
+                }
+
+                shade.transform.SetSiblingIndex(artTop);
                 RectTransform shadeRect = (RectTransform)shade.transform;
                 shadeRect.anchorMin = Vector2.zero;
                 shadeRect.anchorMax = Vector2.one;
