@@ -90,8 +90,10 @@ namespace ProjectArtOfAll.Core.Board
         /// <summary>
         /// Where a player may go after arriving at <paramref name="nodeId"/> from
         /// <paramref name="previousNodeId"/>.
-        /// R-MAP-002：走廊（只有前后两格）只有一个前进方向，优先逆时针；岔路口（三岔及以上）
-        /// 由玩家选，除原路返回外皆可。
+        /// R-MAP-002：走廊（只有前后两格）只有一个前进方向；岔路口（三岔及以上）只能
+        /// **直行或右拐**，两者都在时由玩家选（R-MOVE-004）；没有直行时直接右拐，不询问；
+        /// 连右拐都没有（地图上出现只能左拐的形状）时退回唯一可行的方向，保证不会卡死。
+        /// R-MOVE-001：原路折返永远不是选项。
         /// </summary>
         public IReadOnlyList<int> LegalNextNodes(int nodeId, int previousNodeId)
         {
@@ -101,27 +103,81 @@ namespace ProjectArtOfAll.Core.Board
                 return node.OutEdges;
             }
 
-            if (node.OutEdges.Count >= 3)
+            if (previousNodeId < 0)
             {
-                if (previousNodeId < 0)
+                return node.OutEdges;
+            }
+
+            MapNode previous = GetNode(previousNodeId);
+            if (!node.HasGridPosition || !previous.HasGridPosition)
+            {
+                return WithoutPrevious(node, previousNodeId);
+            }
+
+            int forwardRow = node.GridRow - previous.GridRow;
+            int forwardColumn = node.GridColumn - previous.GridColumn;
+
+            List<int> straight = new List<int>(2);
+            List<int> rightTurn = new List<int>(2);
+            List<int> others = new List<int>(2);
+
+            foreach (int edge in node.OutEdges)
+            {
+                if (edge == previousNodeId)
                 {
-                    return node.OutEdges;
+                    continue;
                 }
 
-                // 岔路口：除原路返回外都可以走（R-MAP-002）。
-                List<int> choices = node.OutEdges
-                    .Where(edge => edge != previousNodeId)
-                    .ToList();
+                MapNode target = GetNode(edge);
+                if (!target.HasGridPosition)
+                {
+                    others.Add(edge);
+                    continue;
+                }
 
-                return choices.Count == 0 ? node.OutEdges : choices.AsReadOnly();
+                int stepRow = target.GridRow - node.GridRow;
+                int stepColumn = target.GridColumn - node.GridColumn;
+
+                if (stepRow == forwardRow && stepColumn == forwardColumn)
+                {
+                    straight.Add(edge);
+                }
+                else if (stepRow == forwardColumn && stepColumn == -forwardRow)
+                {
+                    rightTurn.Add(edge);
+                }
+                else
+                {
+                    others.Add(edge);
+                }
             }
 
-            int counterClockwise = FindCounterClockwiseNeighbour(node);
-            if (counterClockwise >= 0)
+            if (straight.Count > 0 && rightTurn.Count > 0)
             {
-                return new[] { counterClockwise };
+                straight.AddRange(rightTurn);
+                return straight.AsReadOnly();
             }
 
+            if (straight.Count > 0)
+            {
+                return straight.AsReadOnly();
+            }
+
+            if (rightTurn.Count > 0)
+            {
+                return rightTurn.AsReadOnly();
+            }
+
+            if (others.Count > 0)
+            {
+                return others.AsReadOnly();
+            }
+
+            return node.OutEdges;
+        }
+
+        private IReadOnlyList<int> WithoutPrevious(MapNode node, int previousNodeId)
+        {
             List<int> legal = node.OutEdges
                 .Where(edge => edge != previousNodeId)
                 .ToList();

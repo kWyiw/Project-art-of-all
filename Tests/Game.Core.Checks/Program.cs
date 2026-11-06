@@ -1403,24 +1403,28 @@ namespace ProjectArtOfAll.Core.Checks
                 "The scene map needs three-way junctions for the fork UI, found "
                     + junctions.ToString() + ".");
 
-            // R-MAP-002：走廊只能逆时针走（唯一方向）；岔路口除来路外任选。
+            // R-MAP-002：走廊（只有前后两格）只有一个前进方向，且永远不是原路。
             foreach (MapNode node in graph.Nodes.Where(n => n.OutEdges.Count == 2))
             {
-                IReadOnlyList<int> fromFirst = graph.LegalNextNodes(node.Id, node.OutEdges[0]);
-                IReadOnlyList<int> fromSecond = graph.LegalNextNodes(node.Id, node.OutEdges[1]);
-                Assert(
-                    fromFirst.Count == 1,
-                    "A corridor tile must have exactly one legal way forward.");
-                Assert(
-                    fromFirst[0] == fromSecond[0],
-                    "A corridor tile always leads the same way (counter-clockwise), "
-                        + "no matter which side the player came from.");
+                foreach (int entry in node.OutEdges)
+                {
+                    IReadOnlyList<int> forward = graph.LegalNextNodes(node.Id, entry);
+                    Assert(
+                        forward.Count == 1,
+                        "A corridor tile must have exactly one legal way forward.");
+                    Assert(
+                        forward[0] != entry,
+                        "A corridor tile must not offer the way back.");
+                }
             }
 
             foreach (MapNode junction in graph.Nodes.Where(n => n.OutEdges.Count >= 3))
             {
                 foreach (int entry in junction.OutEdges)
                 {
+                    MapNode from = graph.GetNode(entry);
+                    int dr = junction.GridRow - from.GridRow;
+                    int dc = junction.GridColumn - from.GridColumn;
                     IReadOnlyList<int> legal = graph.LegalNextNodes(junction.Id, entry);
                     Assert(
                         legal.Count >= 1,
@@ -1430,8 +1434,19 @@ namespace ProjectArtOfAll.Core.Checks
                         "A junction must not offer the way back.");
 
                     Assert(
-                        legal.Count == junction.OutEdges.Count - 1,
-                        "A junction offers every edge except the way back.");
+                        legal.Count >= 1,
+                        "A junction must always leave at least one legal way forward.");
+                    foreach (int next in legal)
+                    {
+                        MapNode target = graph.GetNode(next);
+                        int stepRow = target.GridRow - junction.GridRow;
+                        int stepColumn = target.GridColumn - junction.GridColumn;
+                        bool straight = stepRow == dr && stepColumn == dc;
+                        bool right = stepRow == dc && stepColumn == -dr;
+                        Assert(
+                            straight || right,
+                            "A junction only allows going straight or turning right.");
+                    }
                 }
             }
 
