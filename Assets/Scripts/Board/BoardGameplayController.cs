@@ -99,7 +99,9 @@ namespace ProjectArtOfAll.Board
             }
 
             BuildSceneLookup();
-            graph = UnityMapGraphFactory.Build(tilesByNode.Values);
+            graph = UnityMapGraphFactory.Build(
+                tilesByNode.Values,
+                BuildTeleportGroups(generatedMap));
             pathLines = BoardPathLines.Build(transform, graph, tilesByNode);
             // 正常模式让真人先手（从主页面进来的第一回合就能操作）；
             // 无CPU测试模式没有固定真人，沿用准备室选的门。
@@ -299,6 +301,30 @@ namespace ProjectArtOfAll.Board
             {
                 tokensByPlayer[token.PlayerId] = token;
             }
+        }
+
+        /// <summary>
+        /// 生成棋盘自带传送配对（每组两个门互相通到对方）；null 表示沿用场景棋盘的口径
+        /// ——所有传送门通到同一处。
+        /// </summary>
+        private static IEnumerable<IEnumerable<int>> BuildTeleportGroups(BoardMapDefinition definition)
+        {
+            if (definition == null || definition.Teleports.Count == 0)
+            {
+                return null;
+            }
+
+            List<int[]> groups = new List<int[]>(definition.Teleports.Count);
+            foreach (BoardMapTeleport teleport in definition.Teleports)
+            {
+                groups.Add(new[]
+                {
+                    UnityMapGraphFactory.NodeId(teleport.RowA, teleport.ColumnA),
+                    UnityMapGraphFactory.NodeId(teleport.RowB, teleport.ColumnB)
+                });
+            }
+
+            return groups;
         }
 
         private void BindHud()

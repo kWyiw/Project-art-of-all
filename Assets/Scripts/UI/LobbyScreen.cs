@@ -727,9 +727,52 @@ namespace ProjectArtOfAll.UI
 
         private static string TileMixLabel(BoardMapKind kind)
         {
-            return kind == BoardMapKind.SweetRing
-                ? "奖励 9 · 怪物 8 · 商店 7 · 事件 4 · 传送 4 · 家 4"
-                : "奖励 10 · 怪物 12 · 商店 4 · 事件 14 · 传送 4 · 家 4 · 空地 20";
+            if (kind != BoardMapKind.SweetRing)
+            {
+                return "奖励 10 · 怪物 12 · 商店 4 · 事件 14 · 传送 4 · 家 4 · 空地 20";
+            }
+
+            // 直接数生成棋盘的数据，改布局不用回来改文案。
+            int rewards = 0;
+            int monsters = 0;
+            int shops = 0;
+            int events = 0;
+            int warps = 0;
+            int homes = 0;
+            IReadOnlyList<BoardMapCell> cells = BoardMapLibrary.SweetRing.Cells;
+            for (int index = 0; index < cells.Count; index++)
+            {
+                switch (cells[index].Type)
+                {
+                    case TileType.Reward:
+                        rewards++;
+                        break;
+                    case TileType.Monster:
+                        monsters++;
+                        break;
+                    case TileType.Shop:
+                        shops++;
+                        break;
+                    case TileType.Event:
+                        events++;
+                        break;
+                    case TileType.Warp:
+                        warps++;
+                        break;
+                    case TileType.Home:
+                        homes++;
+                        break;
+                }
+            }
+
+            return string.Format(
+                "奖励 {0} · 怪物 {1} · 商店 {2} · 事件 {3} · 传送 {4} · 家 {5}",
+                rewards,
+                monsters,
+                shops,
+                events,
+                warps,
+                homes);
         }
 
         /// <summary>准备房间的「开始游戏」只是进入选地图页，真正开局在 <see cref="StartMatch"/>。</summary>

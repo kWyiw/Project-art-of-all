@@ -8,7 +8,7 @@ namespace ProjectArtOfAll.Flow
         /// <summary>The original 68-tile board baked into the match scene.</summary>
         Classic = 0,
 
-        /// <summary>Sweet-tooth ring: 36 tiles in a diamond loop, four warp gates.</summary>
+        /// <summary>Sweet-tooth board: a diamond ring with a small loop on every side, 68 tiles.</summary>
         SweetRing = 1
     }
 
@@ -65,10 +65,10 @@ namespace ProjectArtOfAll.Flow
             new BoardMapInfo(
                 SweetRingId,
                 "甜点回廊",
-                "菱形环线 · 36 格",
-                "一整圈不设分岔：沿着逆时针一路向前，四个角落各有一个家，紫色传送门两两相对。",
+                "菱形环线 · 四条侧环 · 68 格",
+                "外圈是一整圈菱形回廊，四条边各挂着一小圈回廊；四个角落各有一个家，紫色传送门两两相对。",
                 BoardMapKind.SweetRing,
-                36)
+                68)
         };
 
         private static string selectedId = ClassicId;

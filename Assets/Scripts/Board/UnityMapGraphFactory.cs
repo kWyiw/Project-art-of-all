@@ -11,7 +11,9 @@ namespace ProjectArtOfAll.Board
         private const float CenterCoordinate = 5.5f;
         private const float AngleEpsilon = 0.001f;
 
-        public static MapGraph Build(IEnumerable<BoardTileView> views)
+        public static MapGraph Build(
+            IEnumerable<BoardTileView> views,
+            IEnumerable<IEnumerable<int>> teleportGroups = null)
         {
             Dictionary<int, BoardTileView> byId =
                 new Dictionary<int, BoardTileView>();
@@ -45,10 +47,13 @@ namespace ProjectArtOfAll.Board
                 }
             }
 
-            IEnumerable<IEnumerable<int>> teleportGroups =
-                warpNodes.Count >= 2
+            if (teleportGroups == null)
+            {
+                // 默认：所有传送门通到同一处（场景棋盘就是这个口径）。
+                teleportGroups = warpNodes.Count >= 2
                     ? new[] { warpNodes.OrderBy(id => id).ToArray() }
                     : Enumerable.Empty<IEnumerable<int>>();
+            }
 
             return MapGraph.Create(
                 nodes,

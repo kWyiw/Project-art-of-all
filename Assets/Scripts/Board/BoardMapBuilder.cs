@@ -14,7 +14,6 @@ namespace ProjectArtOfAll.Board
     public static class BoardMapBuilder
     {
         private const float TileSpacing = 1.62f;
-        private const float GridExtent = 8.91f;
         private const float TileHeight = 0.1f;
         private const string GeneratedRootName = "GeneratedBoard";
 
@@ -73,6 +72,24 @@ namespace ProjectArtOfAll.Board
             float fit = definition.RotationYDegrees > 0.01f ? 0.86f : 1f;
             root.localScale = new Vector3(fit, 1f, fit);
 
+            // 生成的地图只占网格的一部分，按自身包围盒居中，才能落在镜头中央。
+            float centreRow = 0f;
+            float centreColumn = 0f;
+            int minRow = int.MaxValue;
+            int maxRow = int.MinValue;
+            int minColumn = int.MaxValue;
+            int maxColumn = int.MinValue;
+            foreach (BoardMapCell cell in definition.Cells)
+            {
+                minRow = Mathf.Min(minRow, cell.Row);
+                maxRow = Mathf.Max(maxRow, cell.Row);
+                minColumn = Mathf.Min(minColumn, cell.Column);
+                maxColumn = Mathf.Max(maxColumn, cell.Column);
+            }
+
+            centreRow = (minRow + maxRow) * 0.5f;
+            centreColumn = (minColumn + maxColumn) * 0.5f;
+
             int order = 0;
             foreach (BoardMapCell cell in definition.Cells
                          .OrderBy(cell => cell.Row)
@@ -86,7 +103,8 @@ namespace ProjectArtOfAll.Board
                     cell.Row,
                     cell.Column);
                 tileObject.transform.SetParent(root, false);
-                tileObject.transform.localPosition = CellPosition(cell.Row, cell.Column);
+                tileObject.transform.localPosition =
+                    CellPosition(cell.Row, cell.Column, centreRow, centreColumn);
                 tileObject.transform.localScale = tileScale;
 
                 MeshRenderer renderer = tileObject.GetComponent<MeshRenderer>();
@@ -112,12 +130,16 @@ namespace ProjectArtOfAll.Board
             return true;
         }
 
-        private static Vector3 CellPosition(int row, int column)
+        private static Vector3 CellPosition(
+            int row,
+            int column,
+            float centreRow,
+            float centreColumn)
         {
             return new Vector3(
-                -GridExtent + column * TileSpacing,
+                (column - centreColumn) * TileSpacing,
                 TileHeight,
-                GridExtent - row * TileSpacing);
+                (centreRow - row) * TileSpacing);
         }
 
         private static Dictionary<int, Material> CaptureMaterials(BoardTileView[] tiles)
