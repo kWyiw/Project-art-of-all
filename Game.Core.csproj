@@ -12,4 +12,11 @@
   <ItemGroup>
     <Compile Include="Assets/Game/Core/**/*.cs" />
   </ItemGroup>
+
+  <!-- 回归检查要读内核的 internal 诊断接口（例如怪物牌组生成）。 -->
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>Game.Core.Checks</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
 </Project>

@@ -30,7 +30,20 @@ namespace ProjectArtOfAll.Board
     public sealed class BoardGameplayController : MonoBehaviour
     {
         [Header("Match")]
-        [SerializeField] private ulong matchSeed = 20261031UL;
+        [Tooltip("打开后每局都用下面这个固定种子（调试、复现某一局时用）；关闭则每局随机种子。")]
+        [SerializeField] private bool useFixedSeed;
+
+        [Tooltip("固定种子的值，仅在 useFixedSeed 打开时生效。")]
+        [SerializeField] private ulong matchSeed;
+
+        /// <summary>本局实际使用的根种子（固定或随机，开局时决定一次）。</summary>
+        private ulong activeSeed;
+
+        /// <summary>本局实际使用的根种子（0 表示还没开局）。</summary>
+        public ulong ActiveSeed => activeSeed;
+
+        /// <summary>是否使用固定种子（调试/复现用）。</summary>
+        public bool UsesFixedSeed => useFixedSeed && matchSeed != 0UL;
 
         /// <summary>
         /// CPU 思考延迟区间（秒）。R-CPU-003 要求 0.8~1.5 秒的随机停顿，
@@ -93,9 +106,15 @@ namespace ProjectArtOfAll.Board
             int startingPlayer = GameSession.HumanSeat >= 0
                 ? GameSession.HumanSeat
                 : ResolveEntryPlayerId();
+            activeSeed = useFixedSeed && matchSeed != 0UL
+                ? matchSeed
+                : MatchSeed.Create();
+            Debug.Log(string.Concat(
+                "[Board] match seed ", MatchSeed.Describe(activeSeed),
+                useFixedSeed ? " (fixed)" : " (random)"));
             match = new MatchController(
                 graph,
-                matchSeed,
+                activeSeed,
                 startingPlayerId: startingPlayer);
 
             cameraController = Camera.main != null
@@ -1057,7 +1076,10 @@ namespace ProjectArtOfAll.Board
                 // 准备房间里每个座位都可以单独挑风格与难度；没有房间信息时
                 // （例如直接在编辑器里开对局场景）回退到按座位号确定性分配。
                 CpuPersonality personality = LobbyState.PersonalityFor(player.Id);
-                cpuBrains[player.Id] = new CpuBrain(player.Id, personality, matchSeed);
+                cpuBrains[player.Id] = new CpuBrain(
+                    player.Id,
+                    personality,
+                    MatchSeed.Derive(activeSeed, 0x43505500UL + (ulong)player.Id));
                 Debug.Log(string.Concat(
                     "[Board] cpu seat ", player.Id.ToString(),
                     " personality=", personality.Label));

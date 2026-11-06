@@ -32,6 +32,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckCustomMaxHealth();
                 CheckCardMechanics();
                 CheckM1MatchDurability();
+                CheckRandomness();
                 CheckHomeProgression();
                 CheckRewardChoice();
                 CheckWarpTeleport();
@@ -473,6 +474,111 @@ namespace ProjectArtOfAll.Core.Checks
                 "Equal cardless combatants should fall to timeout penalties together.");
             Assert(timeoutResult.IsDraw,
                 "Equal effective health and no actions must end in a draw.");
+        }
+
+        /// <summary>
+        /// 随机数机制的回归检查：
+        /// ① 每局的根种子必须每次都不同、且不为 0；
+        /// ② 子流派生是确定性的，不同编号互不相同；
+        /// ③ 同一颗种子必然复现同一串骰子，换种子必换骰子序列；
+        /// ④ 怪物牌组按（种子, 地块）生成，同种子同格一致、换格即换牌，且不超容量。
+        /// </summary>
+        private static void CheckRandomness()
+        {
+            HashSet<ulong> seeds = new HashSet<ulong>();
+            for (int index = 0; index < 512; index++)
+            {
+                ulong created = MatchSeed.Create();
+                Assert(created != 0UL, "A root seed must never be zero.");
+                Assert(seeds.Add(created),
+                    "MatchSeed.Create must not hand out the same seed twice.");
+            }
+
+            ulong root = seeds.First();
+            Assert(MatchSeed.Derive(root, 1UL) == MatchSeed.Derive(root, 1UL),
+                "Deriving the same stream twice must be deterministic.");
+            Assert(MatchSeed.Derive(root, 1UL) != MatchSeed.Derive(root, 2UL),
+                "Different stream ids must produce different streams.");
+
+            List<int> rollsA = RollSequence(11UL, 40);
+            List<int> rollsC = RollSequence(11UL, 40);
+            List<int> rollsB = RollSequence(12UL, 40);
+            Assert(rollsA.Count >= 20,
+                "The probe match must roll at least 20 times.");
+            Assert(rollsA.SequenceEqual(rollsC),
+                "The same seed must reproduce the same dice sequence.");
+            Assert(!rollsA.SequenceEqual(rollsB),
+                "Two different seeds must not roll the same dice sequence.");
+
+            MapGraph graph = CreateM3Graph();
+            MatchController deckA = new MatchController(graph, 11UL);
+            MatchController deckB = new MatchController(graph, 12UL);
+
+            // 怪物牌组是固定的：随机化实测把 1 级怪物战胜率从 92% 打到 26%、
+            // 中位圈数从 10 拉到 12，属于数值改动，按约定不擅自调整。
+            // 因此这里断言它「跨种子稳定、按等级逐级加强、永远装得下」。
+            Assert(
+                DeckFingerprint(deckA.CreateEnemyDeck(3, 5000)) ==
+                DeckFingerprint(deckB.CreateEnemyDeck(3, 5000)),
+                "Monster decks must stay stable across seeds.");
+            Assert(
+                DeckFingerprint(deckA.CreateEnemyDeck(3, 5000)) !=
+                DeckFingerprint(deckA.CreateEnemyDeck(1, 5000)),
+                "Higher level monsters must field a bigger deck.");
+
+            for (int level = 1; level <= 5; level++)
+            {
+                int width = deckA
+                    .CreateEnemyDeck(level, 9000)
+                    .Sum(card => card.Definition.SlotSize);
+                Assert(width <= LoadoutRules.GetBattleCapacity(level),
+                    "A generated monster deck must fit the battle row capacity.");
+            }
+
+            Console.WriteLine(
+                $"[rng] seeds={seeds.Count} rolls={rollsA.Count} " +
+                $"sample={DeckFingerprint(deckA.CreateEnemyDeck(3, 5000))}");
+        }
+
+        /// <summary>用一颗种子跑一串掷骰，返回骰值顺序（其余阶段用最省事的命令推进）。</summary>
+        private static List<int> RollSequence(ulong seed, int count)
+        {
+            MatchController controller = new MatchController(CreateM3Graph(), seed);
+            List<int> rolls = new List<int>();
+            int guard = 0;
+            while (rolls.Count < count && guard++ < 4000 && !controller.IsFinished)
+            {
+                MatchPlayerState player = controller.State.CurrentPlayer;
+                switch (controller.State.Phase)
+                {
+                    case MatchPhase.AwaitRoll:
+                        controller.Submit(new RollCommand(player.Id));
+                        rolls.Add(controller.State.LastRoll);
+                        break;
+                    case MatchPhase.AwaitMove:
+                        controller.Submit(new MoveCommand(player.Id));
+                        break;
+                    case MatchPhase.AwaitNorma:
+                        controller.Submit(new SetNormaCommand(player.Id, NormaType.Shard));
+                        break;
+                    case MatchPhase.AwaitReward:
+                        controller.Submit(new ChooseRewardCommand(player.Id, 0));
+                        break;
+                    case MatchPhase.AwaitShop:
+                        controller.Submit(
+                            new ShopActionCommand(player.Id, ShopActionType.Leave));
+                        break;
+                    default:
+                        return rolls;
+                }
+            }
+
+            return rolls;
+        }
+
+        private static string DeckFingerprint(IEnumerable<CardInstance> cards)
+        {
+            return string.Join(",", cards.Select(card => card.Definition.Id));
         }
 
         private static void CheckM1MatchDurability()

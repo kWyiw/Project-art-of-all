@@ -7,6 +7,7 @@ using ProjectArtOfAll.Core.Combat;
 using ProjectArtOfAll.Core.Commands;
 using ProjectArtOfAll.Core.Events;
 using ProjectArtOfAll.Core.Rng;
+using ProjectArtOfAll.Core.Util;
 
 namespace ProjectArtOfAll.Core.Match
 {
@@ -23,7 +24,28 @@ namespace ProjectArtOfAll.Core.Match
         private const int GlobalGrantRoundInterval = 3;
 
         private readonly MapGraph graph;
+        private readonly ulong seed;
+
+        /// <summary>本局的根种子（同一种子 + 同一串命令 = 完全一样的一局）。</summary>
+        public ulong Seed => seed;
+
+        /// <summary>掷骰与传送落点。</summary>
         private readonly Pcg32 random;
+
+        /// <summary>商店货与重掷。</summary>
+        private readonly Pcg32 shopRandom;
+
+        /// <summary>奖励格的两个候选。</summary>
+        private readonly Pcg32 rewardRandom;
+
+        /// <summary>每场战斗的种子。</summary>
+        private readonly Pcg32 combatRandom;
+
+        // 同一个 seed 配不同的 sequence 就是 PCG 的独立子流（sequence 决定 increment）。
+        private const ulong DiceStream = 0x4D41544348UL;
+        private const ulong ShopStream = DiceStream + 1UL;
+        private const ulong RewardStream = DiceStream + 2UL;
+        private const ulong CombatStream = DiceStream + 3UL;
         private readonly GameEventBus eventBus = new GameEventBus();
         private readonly ICardCatalog cardCatalog = CardDatabase.Instance;
         private readonly List<MovementCandidate> currentCandidates =
@@ -42,7 +64,11 @@ namespace ProjectArtOfAll.Core.Match
                     nameof(graph));
             }
 
-            random = new Pcg32(seed, 0x4D41544348UL);
+            this.seed = seed;
+            random = new Pcg32(seed, DiceStream);
+            shopRandom = new Pcg32(seed, ShopStream);
+            rewardRandom = new Pcg32(seed, RewardStream);
+            combatRandom = new Pcg32(seed, CombatStream);
             State = new MatchState(graph, seed);
             State.CurrentPlayerIndex = ((startingPlayerId % 4) + 4) % 4;
             CreatePlayers();
@@ -111,7 +137,14 @@ namespace ProjectArtOfAll.Core.Match
 
         public ulong ComputeStateHash()
         {
-            ulong hash = State.ComputeHash(random.State);
+            // 四种子流的状态都参与哈希：只哈希骰子流时，
+            // 商店/奖励/战斗流被意外改成共享会查不出来。
+            ulong randomState = StableHash.Begin();
+            randomState = StableHash.Add(randomState, random.State);
+            randomState = StableHash.Add(randomState, shopRandom.State);
+            randomState = StableHash.Add(randomState, rewardRandom.State);
+            randomState = StableHash.Add(randomState, combatRandom.State);
+            ulong hash = State.ComputeHash(randomState);
 
             foreach (CardDefinition definition in currentRewardChoices)
             {
@@ -533,7 +566,7 @@ namespace ProjectArtOfAll.Core.Match
         {
             currentRewardChoices.Clear();
             currentRewardChoices.AddRange(
-                CreateRandomDefinitions(RewardChoiceCount));
+                CreateRandomDefinitions(RewardChoiceCount, rewardRandom));
 
             bool canTakeAtLeastOne = currentRewardChoices.Any(
                 definition =>
@@ -613,26 +646,32 @@ namespace ProjectArtOfAll.Core.Match
 
         private IReadOnlyList<ShopOffer> CreateShopOffers()
         {
-            return CreateRandomDefinitions(ShopOfferCount)
+            return CreateRandomDefinitions(ShopOfferCount, shopRandom)
                 .Select(definition => new ShopOffer(
                     definition,
                     GetShopPrice(definition.SlotSize)))
                 .ToArray();
         }
 
-        private IReadOnlyList<CardDefinition> CreateRandomDefinitions(int count)
+        private IReadOnlyList<CardDefinition> CreateRandomDefinitions(
+            int count,
+            Pcg32 source)
         {
             List<CardDefinition> pool = cardCatalog.All.ToList();
-
-            for (int index = pool.Count - 1; index > 0; index--)
-            {
-                int swapIndex = random.NextInt(index + 1);
-                CardDefinition temporary = pool[index];
-                pool[index] = pool[swapIndex];
-                pool[swapIndex] = temporary;
-            }
-
+            Shuffle(pool, source);
             return pool.Take(Math.Min(count, pool.Count)).ToArray();
+        }
+
+        /// <summary>Fisher-Yates，随机源由调用方给，互不干扰。</summary>
+        private static void Shuffle<T>(IList<T> items, Pcg32 source)
+        {
+            for (int index = items.Count - 1; index > 0; index--)
+            {
+                int swapIndex = source.NextInt(index + 1);
+                T temporary = items[index];
+                items[index] = items[swapIndex];
+                items[swapIndex] = temporary;
+            }
         }
 
         private static int GetShopPrice(int slotSize)
@@ -767,8 +806,8 @@ namespace ProjectArtOfAll.Core.Match
 
         private ulong NextCombatSeed()
         {
-            ulong high = random.NextUInt32();
-            ulong low = random.NextUInt32();
+            ulong high = combatRandom.NextUInt32();
+            ulong low = combatRandom.NextUInt32();
             return (high << 32) | low;
         }
 
@@ -928,7 +967,7 @@ namespace ProjectArtOfAll.Core.Match
             };
         }
 
-        private List<CardInstance> CreateEnemyDeck(int level, int uidStart)
+        internal List<CardInstance> CreateEnemyDeck(int level, int uidStart)
         {
             List<CardInstance> cards = new List<CardInstance>
             {

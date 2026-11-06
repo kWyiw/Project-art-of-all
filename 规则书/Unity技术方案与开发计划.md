@@ -69,6 +69,19 @@
 | CI | GitHub Actions + GameCI + `dotnet test` | 每次提交跑内核单测 + 确定性回归 |
 | 版本 | Git + Git LFS（美术资源） | Unity 项目必须配 `.gitattributes` 锁资产合并 |
 
+### 2.1 随机数：一颗根种子 + 四条独立子流（已实现）
+
+一局游戏里需要随机的地方不止骰子，还有商店货、奖励选项和战斗内的每一颗骰子。之前这些全从同一条 `Pcg32` 流里取，而且 `BoardGameplayController` 的 `matchSeed` 是个固定常量 `20261031` —— 结果就是**每局完全一样**：同样的骰子序列、同样的三件商店货、同样的奖励三选一。现在改成：
+
+- **根种子每局现取**：`Assets/Game/Core/Match/MatchSeed.cs` 的 `MatchSeed.Create()` 把 `Guid.NewGuid()`、`DateTime.UtcNow.Ticks`、`System.Environment.TickCount`（注意不能只写 `Environment`，Unity 里有 `ProjectArtOfAll.Environment` 命名空间会抢解析）和一个 `Interlocked` 计数器一起过 SplitMix64 收尾，保证非 0 且不重复；取不到熵时回退 `0x2545F4914F6CDD1D`。
+- **子流派生**：`MatchSeed.Derive(root, streamId)` = `Mix(root + GoldenGamma * (streamId + 1))`。
+- **四条互不干扰的流**（`MatchController`）：`DiceStream = 0x4D41544348`（掷骰、传送落点）、`ShopStream`、`RewardStream`、`CombatStream`（`NextCombatSeed()`）。PCG32 用不同的 `sequence` 参数即得到独立流，所以「这次商店多刷一次」不会再挪动下一次掷骰的结果。
+- **状态哈希包含四条流**：`MatchController.ComputeHash()` 把四个 `Pcg32.State` 一起折进 `StableHash`，回放/联机校验能发现随机流走偏。
+- **可复现开关**：`BoardGameplayController` 的 `useFixedSeed` + `matchSeed`（默认关闭、默认 0）；打开后用固定种子，暂停菜单底部会显示「本局种子 XXXX（固定）」，否则显示「重开本局会换种子」。日志 `[Board] match seed 0123456789ABCDEF (random)`。
+- **CPU 也有自己的种子**：`CpuBrain` 用 `MatchSeed.Derive(activeSeed, 0x43505500 + 玩家号)`，不再与对局随机纠缠。
+- **怪物牌组保持确定**：实测把怪物牌组也随机化（同一档位内随机抽牌）会把 1 级怪物战胜率从 92% 打到 26%，中位圈数从 10 拉到 12~14，属于数值改动，按「数值不擅自调整」的口径没有采纳，仍然按等级固定为 `crowbar` / `lighter` / `hardtack`（等级 ≥ 2 加 `car_door`）。要改需要先做一轮平衡验证。
+- **回归**：`Tests/Game.Core.Checks` 的 `CheckRandomness()` 断言 512 个根种子互不相同、子流派生确定性且互不相同、同种子复现同一串骰子、换种子必换骰子序列、怪物牌组跨种子稳定且装得下；`Tools/MatchSim --brains` 500 局 `finished 500/500 stalls 0`、`median 10` 圈。
+
 ### 关于"用不用 Steamworks / 联机后端"
 
 - **第一版：Steam 好友局即可**。用 Steam Lobby 做房间列表 + Steam P2P（FishNet 的 Steam transport 或 Facepunch.Steamworks）。零服务器成本，4 人回合制对延迟极宽容。

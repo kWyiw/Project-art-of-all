@@ -474,6 +474,7 @@ namespace ProjectArtOfAll.Board
 
         private Font font;
         private Button resumeButton;
+        private Text seedText;
         private ProjectArtOfAll.UI.GameSettingsPanel settingsPanel;
 
         public bool IsOpen => gameObject.activeSelf;
@@ -543,6 +544,25 @@ namespace ProjectArtOfAll.Board
                 panelObject.transform, "Footer", "数值与规则不受设置影响", 24f, 380f, 472f, 22f,
                 12, FontStyle.Normal, TextAnchor.MiddleCenter);
             footer.color = MutedText;
+
+            seedText = Label(
+                panelObject.transform, "Seed", string.Empty, 24f, 404f, 472f, 22f,
+                11, FontStyle.Normal, TextAnchor.MiddleCenter);
+            seedText.color = new Color(0.52f, 0.56f, 0.54f, 1f);
+        }
+
+        /// <summary>把本局种子写在暂停菜单底部：同一种子能完全复现这一局。</summary>
+        public void SetSeed(ulong seed, bool fixedSeed)
+        {
+            if (seedText == null)
+            {
+                return;
+            }
+
+            seedText.text = seed == 0UL
+                ? string.Empty
+                : $"本局种子 {ProjectArtOfAll.Core.Match.MatchSeed.Describe(seed)}" +
+                  (fixedSeed ? "（固定）" : " · 重开本局会换种子");
         }
 
         /// <summary>打开共用设置面板（与主菜单里的是同一个类、同一份 GameSettings）。</summary>

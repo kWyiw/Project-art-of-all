@@ -1006,6 +1006,11 @@ namespace ProjectArtOfAll.Board
             }
 
             pauseOverlay.transform.SetAsLastSibling();
+            if (boardGameplay != null)
+            {
+                pauseOverlay.SetSeed(boardGameplay.ActiveSeed, boardGameplay.UsesFixedSeed);
+            }
+
             pauseOverlay.Show();
         }
 
