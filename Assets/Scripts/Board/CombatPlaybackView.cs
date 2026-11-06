@@ -45,6 +45,14 @@ namespace ProjectArtOfAll.Board
         private static readonly Color ChipDead = new Color(0.09f, 0.09f, 0.09f, 0.6f);
         private static readonly Color DamageColor = new Color(0.97f, 0.58f, 0.50f, 1f);
         private static readonly Color HealColor = new Color(0.46f, 0.84f, 0.53f, 1f);
+        private static readonly Color PoisonColor = new Color(0.56f, 0.84f, 0.46f, 1f);
+        private static readonly Color BurnColor = new Color(0.95f, 0.58f, 0.32f, 1f);
+        private static readonly Color RegenerationColor = new Color(0.46f, 0.82f, 0.82f, 1f);
+        private static readonly Color IdleStatusColor = new Color(0.52f, 0.56f, 0.53f, 1f);
+
+        // 冷却未走完的部分压暗，走完的部分保持正常亮度（从下往上逐渐点亮）。
+        private static readonly Color CooldownShade = new Color(0.02f, 0.03f, 0.05f, 0.62f);
+        private const int BurnDecayTicks = 30;
 
         private sealed class SideRuntime
         {
@@ -65,6 +73,7 @@ namespace ProjectArtOfAll.Board
             public Text HealthLabel;
             public Text ShieldLabel;
             public Text StatusLabel;
+            public int NextBurnDecayTick = BurnDecayTicks;
             public readonly List<Chip> Chips = new List<Chip>();
             public readonly List<GameObject> Cells = new List<GameObject>();
         }
@@ -74,6 +83,9 @@ namespace ProjectArtOfAll.Board
             public int CardUid;
             public Image Background;
             public CanvasGroup Group;
+            public RectTransform Shade;
+            public int CooldownTicks;
+            public int AnchorTick;
             public string CardName;
             public bool Destroyed;
             public float FlashUntil;
@@ -612,11 +624,30 @@ namespace ProjectArtOfAll.Board
                     CardRowRenderer.BonusBadge(cards, index));
                 startX += width + renderer.SlotGap;
 
+                // 冷却遮罩：只盖住"还没走完"的上半部分，插在卡面与文字之间。
+                GameObject shade = BoardHudOverlayFactory.CreateBar(
+                    widget.transform,
+                    "CooldownShade",
+                    new Vector2(0f, 0f),
+                    new Vector2(1f, 1f),
+                    Vector2.zero,
+                    Vector2.zero,
+                    CooldownShade);
+                shade.transform.SetAsFirstSibling();
+                RectTransform shadeRect = (RectTransform)shade.transform;
+                shadeRect.anchorMin = Vector2.zero;
+                shadeRect.anchorMax = Vector2.one;
+                shadeRect.offsetMin = Vector2.zero;
+                shadeRect.offsetMax = Vector2.zero;
+
                 side.Chips.Add(new Chip
                 {
                     CardUid = card.Uid,
                     Background = widget.GetComponent<Image>(),
                     Group = widget.GetComponent<CanvasGroup>(),
+                    Shade = shadeRect,
+                    CooldownTicks = card.Definition.IsActive ? card.Definition.CooldownTicks : 0,
+                    AnchorTick = 0,
                     CardName = card.Definition.DisplayName
                 });
             }
@@ -652,6 +683,7 @@ namespace ProjectArtOfAll.Board
                         Apply(timeline[cursor++]);
                     }
 
+                    AdvanceStatusClocks();
                     finished = true;
                     break;
                 }
@@ -661,6 +693,7 @@ namespace ProjectArtOfAll.Board
                     Apply(timeline[cursor++]);
                 }
 
+                AdvanceStatusClocks();
                 RefreshMeters();
                 RefreshClock();
                 RefreshChips();
@@ -729,6 +762,7 @@ namespace ProjectArtOfAll.Board
                 if (side != null)
                 {
                     Flash(side, cast.CardUid);
+                    ResetCooldownAnchor(side, cast.CardUid, (int)cast.Tick);
                     logLabel.text = string.Concat(
                         SidePrefix(side),
                         " 施放 ",
@@ -813,16 +847,17 @@ namespace ProjectArtOfAll.Board
                     return;
                 }
 
+                // StatusAppliedEvent.Layers 是"本次新增层数"，不是最终层数。
                 switch (status.Status)
                 {
                     case StatusKind.Poison:
-                        side.Poison = status.Layers;
+                        side.Poison += status.Layers;
                         break;
                     case StatusKind.Burn:
-                        side.Burn = status.Layers;
+                        side.Burn += status.Layers;
                         break;
                     case StatusKind.Regeneration:
-                        side.Regeneration = status.Layers;
+                        side.Regeneration += status.Layers;
                         break;
                 }
 
@@ -875,6 +910,7 @@ namespace ProjectArtOfAll.Board
                 }
 
                 Flash(side, charge.CardUid);
+                AdvanceCooldownBy(side, charge.CardUid, charge.Ticks);
                 logLabel.text = string.Concat(
                     SidePrefix(side),
                     " 的 ",
@@ -953,25 +989,16 @@ namespace ProjectArtOfAll.Board
                 side.Shield / (float)Mathf.Max(1, side.MaxHealth));
             side.ShieldFill.sizeDelta = new Vector2(side.HealthWidth * shieldFraction, 0f);
 
-            List<string> statuses = new List<string>();
+            List<string> statuses = new List<string>
+            {
+                StatusText("中毒", side.Poison, PoisonColor),
+                StatusText("灼烧", side.Burn, BurnColor),
+                StatusText("再生", side.Regeneration, RegenerationColor)
+            };
+
             if (side.Shield > 0)
             {
                 statuses.Add(string.Concat("护盾 ", side.Shield.ToString()));
-            }
-
-            if (side.Poison > 0)
-            {
-                statuses.Add(string.Concat("中毒 ", side.Poison.ToString()));
-            }
-
-            if (side.Burn > 0)
-            {
-                statuses.Add(string.Concat("灼烧 ", side.Burn.ToString()));
-            }
-
-            if (side.Regeneration > 0)
-            {
-                statuses.Add(string.Concat("再生 ", side.Regeneration.ToString()));
             }
 
             side.StatusLabel.text = string.Join("   ", statuses);
@@ -981,6 +1008,107 @@ namespace ProjectArtOfAll.Board
                     ? string.Concat("护盾 ", side.Shield.ToString())
                     : string.Empty;
             }
+        }
+
+        private static string StatusText(string label, int layers, Color color)
+        {
+            Color tint = layers > 0 ? color : IdleStatusColor;
+            return string.Concat(
+                "<color=#",
+                ColorUtility.ToHtmlStringRGB(tint),
+                ">",
+                label,
+                " ",
+                layers.ToString(),
+                "</color>");
+        }
+
+        private static void ResetCooldownAnchor(SideRuntime side, int cardUid, int tick)
+        {
+            foreach (Chip chip in side.Chips)
+            {
+                if (chip.CardUid == cardUid)
+                {
+                    chip.AnchorTick = tick;
+                    return;
+                }
+            }
+        }
+
+        private static void AdvanceCooldownBy(SideRuntime side, int cardUid, int ticks)
+        {
+            if (ticks <= 0)
+            {
+                return;
+            }
+
+            foreach (Chip chip in side.Chips)
+            {
+                if (chip.CardUid == cardUid)
+                {
+                    chip.AnchorTick -= ticks;
+                    return;
+                }
+            }
+        }
+
+        private int CurrentTick()
+        {
+            return Mathf.FloorToInt(Mathf.Min(clock, duration) * TicksPerSecond);
+        }
+
+        /// <summary>灼烧每 30 tick 掉一层，播放时必须自己推这个衰减，否则数字只增不减。</summary>
+        private void AdvanceStatusClocks()
+        {
+            int tickNow = CurrentTick();
+            DecayBurn(selfSide, tickNow);
+            DecayBurn(foeSide, tickNow);
+        }
+
+        private static void DecayBurn(SideRuntime side, int tickNow)
+        {
+            if (side == null)
+            {
+                return;
+            }
+
+            while (side.NextBurnDecayTick <= tickNow)
+            {
+                if (side.Burn > 0)
+                {
+                    side.Burn = Mathf.Max(0, side.Burn - 1);
+                }
+
+                side.NextBurnDecayTick += BurnDecayTicks;
+            }
+        }
+
+        private void RefreshCooldownShade(Chip chip)
+        {
+            if (chip.Shade == null)
+            {
+                return;
+            }
+
+            if (chip.Destroyed || chip.CooldownTicks <= 0)
+            {
+                chip.Shade.gameObject.SetActive(false);
+                return;
+            }
+
+            float ratio = Mathf.Clamp01(
+                (CurrentTick() - chip.AnchorTick) / (float)chip.CooldownTicks);
+            bool dim = ratio < 0.999f;
+            chip.Shade.gameObject.SetActive(dim);
+            if (!dim)
+            {
+                return;
+            }
+
+            chip.Shade.anchorMin = new Vector2(0f, ratio);
+            chip.Shade.anchorMax = new Vector2(1f, 1f);
+            chip.Shade.offsetMin = Vector2.zero;
+            chip.Shade.offsetMax = Vector2.zero;
         }
 
         private void RefreshClock()
@@ -1033,6 +1161,7 @@ namespace ProjectArtOfAll.Board
                 chip.Background.color = now < chip.FlashUntil
                     ? ChipFlash
                     : CardRowRenderer.BattleColor;
+                RefreshCooldownShade(chip);
             }
         }
 
