@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ProjectArtOfAll.Board;
+using ProjectArtOfAll.Core.Board;
 using ProjectArtOfAll.Environment;
 using ProjectArtOfAll.Flow;
 using ProjectArtOfAll.Player;
@@ -562,8 +563,12 @@ namespace ProjectArtOfAll.UI
                 selected ? new Color(0.11f, 0.16f, 0.15f, 1f) : CardColor);
             RectTransform card = cardObject.GetComponent<RectTransform>();
 
+            // CreateBar 默认把 raycastTarget 关掉了，地图卡本身要点选，必须打开。
+            Image cardImage = cardObject.GetComponent<Image>();
+            cardImage.raycastTarget = true;
+
             Button button = cardObject.AddComponent<Button>();
-            button.targetGraphic = cardObject.GetComponent<Image>();
+            button.targetGraphic = cardImage;
             button.transition = Selectable.Transition.None;
             button.onClick.AddListener(() =>
             {
@@ -601,7 +606,17 @@ namespace ProjectArtOfAll.UI
                 16, FontStyle.Bold, TextAnchor.MiddleLeft, selected ? Brass : MutedText);
         }
 
-        private void BuildMapPreview(Transform parent, BoardMapKind kind, float x, float y, float width, float height)
+        /// <summary>
+        /// 卡片下部的棋盘缩略图。用点阵直接画，不用旋转的细条：
+        /// 细条一旦锚点/枢轴算错就会压到卡片外面，看着像画面中间莫名其妙的多余线条。
+        /// </summary>
+        private void BuildMapPreview(
+            Transform parent,
+            BoardMapKind kind,
+            float x,
+            float y,
+            float width,
+            float height)
         {
             GameObject preview = BoardHudOverlayFactory.CreateBar(
                 parent,
@@ -613,47 +628,100 @@ namespace ProjectArtOfAll.UI
                 new Color(0.03f, 0.05f, 0.055f, 1f));
             RectTransform rect = preview.GetComponent<RectTransform>();
 
-            List<Vector2> points = kind == BoardMapKind.SweetRing
-                ? new List<Vector2>
-                {
-                    new Vector2(0.5f, 0.80f),
-                    new Vector2(0.86f, 0.50f),
-                    new Vector2(0.5f, 0.20f),
-                    new Vector2(0.14f, 0.50f),
-                    new Vector2(0.5f, 0.80f)
-                }
-                : new List<Vector2>
-                {
-                    new Vector2(0.14f, 0.60f),
-                    new Vector2(0.50f, 0.84f),
-                    new Vector2(0.86f, 0.60f),
-                    new Vector2(0.86f, 0.28f),
-                    new Vector2(0.50f, 0.16f),
-                    new Vector2(0.14f, 0.28f),
-                    new Vector2(0.14f, 0.60f)
-                };
-
-            for (int index = 0; index < points.Count - 1; index++)
+            const float pad = 10f;
+            if (kind == BoardMapKind.SweetRing)
             {
-                Vector2 a = points[index];
-                Vector2 b = points[index + 1];
-                Vector2 mid = (a + b) * 0.5f;
-                float length = Vector2.Distance(a, b) * width;
-                float angle = Mathf.Atan2(b.y - a.y, b.x - a.x) * Mathf.Rad2Deg;
-                GameObject segment = BoardHudOverlayFactory.CreateBar(
+                DrawRingPreview(rect, width, height, pad);
+            }
+            else
+            {
+                DrawClassicPreview(rect, width, height, pad);
+            }
+        }
+
+        /// <summary>甜点回廊：按真实地块坐标画一圈彩色点阵（菱形环）。</summary>
+        private static void DrawRingPreview(RectTransform rect, float width, float height, float pad)
+        {
+            IReadOnlyList<BoardMapCell> cells = BoardMapLibrary.SweetRing.Cells;
+            int min = int.MaxValue;
+            int max = int.MinValue;
+            for (int index = 0; index < cells.Count; index++)
+            {
+                BoardMapCell cell = cells[index];
+                min = Mathf.Min(min, Mathf.Min(cell.Row, cell.Column));
+                max = Mathf.Max(max, Mathf.Max(cell.Row, cell.Column));
+            }
+
+            float span = Mathf.Max(1, max - min);
+            float dot = Mathf.Clamp(Mathf.Min(width, height) / (span + 1.6f), 5f, 13f);
+            for (int index = 0; index < cells.Count; index++)
+            {
+                BoardMapCell cell = cells[index];
+                float u = (cell.Column - min) / span;
+                float v = (cell.Row - min) / span;
+                AddTileDot(
                     rect,
-                    "Segment" + index,
-                    new Vector2(0f, 0f),
-                    new Vector2(0f, 0f),
-                    Vector2.zero,
-                    new Vector2(length, 3f),
-                    new Color(0.92f, 0.69f, 0.27f, 0.55f));
-                RectTransform segmentRect = segment.GetComponent<RectTransform>();
-                segmentRect.anchorMin = mid;
-                segmentRect.anchorMax = mid;
-                segmentRect.pivot = new Vector2(0f, 0.5f);
-                segmentRect.anchoredPosition = Vector2.zero;
-                segmentRect.localRotation = Quaternion.Euler(0f, 0f, angle);
+                    pad + u * (width - pad * 2f),
+                    pad + v * (height - pad * 2f),
+                    dot,
+                    TileDotColor(cell.Type));
+            }
+        }
+
+        /// <summary>经典广场：12 × 12 的淡色格网（现场地块太多，缩略图只示意密度）。</summary>
+        private static void DrawClassicPreview(RectTransform rect, float width, float height, float pad)
+        {
+            const int lattice = 12;
+            float dot = Mathf.Clamp(Mathf.Min(width, height) / (lattice + 3f), 3f, 6f);
+            float stepX = (width - pad * 2f) / (lattice - 1);
+            float stepY = (height - pad * 2f) / (lattice - 1);
+            Color faint = new Color(0.42f, 0.47f, 0.44f, 0.45f);
+            Color edge = new Color(0.62f, 0.56f, 0.36f, 0.85f);
+            for (int row = 0; row < lattice; row++)
+            {
+                for (int column = 0; column < lattice; column++)
+                {
+                    bool onEdge = row == 0 || column == 0 || row == lattice - 1 || column == lattice - 1;
+                    AddTileDot(
+                        rect,
+                        pad + column * stepX,
+                        pad + row * stepY,
+                        dot,
+                        onEdge ? edge : faint);
+                }
+            }
+        }
+
+        private static void AddTileDot(RectTransform parent, float x, float y, float size, Color color)
+        {
+            BoardHudOverlayFactory.CreateBar(
+                parent,
+                "Dot",
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(x - size * 0.5f, -(y + size * 0.5f)),
+                new Vector2(x + size * 0.5f, -(y - size * 0.5f)),
+                color);
+        }
+
+        private static Color TileDotColor(TileType type)
+        {
+            switch (type)
+            {
+                case TileType.Home:
+                    return new Color(0.97f, 0.95f, 0.86f, 1f);
+                case TileType.Reward:
+                    return new Color(0.96f, 0.83f, 0.35f, 1f);
+                case TileType.Monster:
+                    return new Color(0.88f, 0.36f, 0.32f, 1f);
+                case TileType.Shop:
+                    return new Color(0.42f, 0.80f, 0.53f, 1f);
+                case TileType.Warp:
+                    return new Color(0.70f, 0.44f, 0.92f, 1f);
+                case TileType.Event:
+                    return new Color(0.42f, 0.68f, 0.94f, 1f);
+                default:
+                    return new Color(0.55f, 0.58f, 0.55f, 0.9f);
             }
         }
 
