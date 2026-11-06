@@ -133,6 +133,10 @@ namespace ProjectArtOfAll.UI
                     + BattleCapacity + "c）；各自设定最大生命值，开打后可用 1x / 2x / 4x 调速。",
                 48f, 74f, 1700f, 28f, 16, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
 
+            // 右上角常驻「返回主页面」：不管从哪进来都能一步退回主菜单。
+            CreateButton(root, "BackHome", "返回主页面", -48f, 26f, 200f, 48f,
+                new Color(0.32f, 0.16f, 0.11f, 0.95f), BackToMainMenu);
+
             BuildCardLibrary();
             BuildDeckPanel(true);
             BuildDeckPanel(false);
@@ -278,7 +282,7 @@ namespace ProjectArtOfAll.UI
             CreateButton(bar, "Fight", "开始战斗", 20f, 70f, 300f, 48f,
                 new Color(0.62f, 0.44f, 0.14f, 0.98f), StartBattle);
             CreateButton(bar, "Copy", "把左边复制到右边", 336f, 70f, 220f, 48f, RowColor, CopyLeftToRight);
-            CreateButton(bar, "Back", "返回主菜单", -20f, 70f, 220f, 48f, RowColor, Close);
+            CreateButton(bar, "Back", "返回主页面", -20f, 70f, 220f, 48f, RowColor, BackToMainMenu);
 
             statusLabel = AddText(bar, "Status", "左方 / 右方各自最多 " + BattleCapacity + "c。",
                 580f, 82f, 560f, 30f, 14, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
@@ -807,6 +811,26 @@ namespace ProjectArtOfAll.UI
             }
 
             return new CombatantSnapshot(playerId, LabLevel, cards, health);
+        }
+
+        /// <summary>退回主页面：收掉回放层与模拟面板，必要时直接载入主页面场景。</summary>
+        private void BackToMainMenu()
+        {
+            if (playback != null)
+            {
+                Destroy(playback.gameObject);
+                playback = null;
+            }
+
+            bool inMenu = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name
+                == ProjectArtOfAll.Flow.GameSession.MenuSceneName;
+
+            Close();
+
+            if (!inMenu)
+            {
+                ProjectArtOfAll.Flow.GameSession.BackToMenu();
+            }
         }
 
         private void Close()
