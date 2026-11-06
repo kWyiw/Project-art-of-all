@@ -92,6 +92,10 @@ namespace ProjectArtOfAll.UI
             page = GameSession.Mode == GameMode.NoCpuTest ? Page.MapSelect : Page.Lobby;
             LobbyState.Changed += OnLobbyChanged;
             Rebuild();
+            Debug.Log(string.Concat(
+                "[Lobby] screen ready mode=", GameSession.Mode.ToString(),
+                " page=", page.ToString(),
+                " map=", MapCatalog.SelectedId));
         }
 
         private void OnDestroy()
@@ -267,7 +271,7 @@ namespace ProjectArtOfAll.UI
                 600f,
                 420f,
                 76f,
-                StartMatch,
+                OpenMapSelect,
                 LobbyState.CanStart ? new Color(0.86f, 0.64f, 0.22f, 1f) : new Color(0.16f, 0.19f, 0.20f, 1f),
                 26);
             start.interactable = LobbyState.CanStart;
@@ -660,6 +664,18 @@ namespace ProjectArtOfAll.UI
                 : "奖励 10 · 怪物 12 · 商店 4 · 事件 14 · 传送 4 · 家 4 · 空地 20";
         }
 
+        /// <summary>准备房间的「开始游戏」只是进入选地图页，真正开局在 <see cref="StartMatch"/>。</summary>
+        private void OpenMapSelect()
+        {
+            if (GameSession.Mode == GameMode.Normal && !LobbyState.CanStart)
+            {
+                return;
+            }
+
+            page = Page.MapSelect;
+            Rebuild();
+        }
+
         private void StartMatch()
         {
             if (GameSession.Mode == GameMode.Normal && !LobbyState.CanStart)
@@ -667,6 +683,7 @@ namespace ProjectArtOfAll.UI
                 return;
             }
 
+            Debug.Log(string.Concat("[Lobby] start match map=", MapCatalog.SelectedId));
             GameSession.StartMatch();
         }
 
