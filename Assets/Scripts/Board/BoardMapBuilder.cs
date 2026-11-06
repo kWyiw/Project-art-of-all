@@ -71,7 +71,7 @@ namespace ProjectArtOfAll.Board
             root.localRotation = Quaternion.Euler(0f, definition.RotationYDegrees, 0f);
             // 旋转 45° 的菱形环对角线比场景里那张方阵更长，整体缩一点才不会被
             // 固定机位的相机切掉顶点（两角正好是玩家的 home）。
-            float fit = definition.RotationYDegrees > 0.01f ? 0.86f : 1f;
+            float fit = FitScale(definition);
             root.localScale = new Vector3(fit, 1f, fit);
 
             // 生成的地图只占网格的一部分，按自身包围盒居中，才能落在镜头中央。
@@ -130,6 +130,45 @@ namespace ProjectArtOfAll.Board
                 order,
                 definition.RotationYDegrees));
             return true;
+        }
+
+        /// <summary>
+        /// Keeps a generated board inside the footprint of the baked board: the furthest tile
+        /// corner may reach 9 world units from the centre, which the fixed camera frames.
+        /// </summary>
+        private static float FitScale(BoardMapDefinition definition)
+        {
+            const float MaxRadius = 9.2f;
+            const float TileSpacing = 1.62f;
+
+            float minRow = float.MaxValue;
+            float maxRow = float.MinValue;
+            float minColumn = float.MaxValue;
+            float maxColumn = float.MinValue;
+            foreach (BoardMapCell cell in definition.Cells)
+            {
+                minRow = Mathf.Min(minRow, cell.Row);
+                maxRow = Mathf.Max(maxRow, cell.Row);
+                minColumn = Mathf.Min(minColumn, cell.Column);
+                maxColumn = Mathf.Max(maxColumn, cell.Column);
+            }
+
+            float centreRow = (minRow + maxRow) * 0.5f;
+            float centreColumn = (minColumn + maxColumn) * 0.5f;
+            float radius = 0f;
+            foreach (BoardMapCell cell in definition.Cells)
+            {
+                float x = (cell.Column - centreColumn) * TileSpacing;
+                float z = (centreRow - cell.Row) * TileSpacing;
+                radius = Mathf.Max(radius, Mathf.Sqrt(x * x + z * z));
+            }
+
+            if (radius <= 0.001f)
+            {
+                return 1f;
+            }
+
+            return Mathf.Min(1f, MaxRadius / radius);
         }
 
         private static Vector3 CellPosition(
