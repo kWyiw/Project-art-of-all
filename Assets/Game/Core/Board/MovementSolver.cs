@@ -17,7 +17,8 @@ namespace ProjectArtOfAll.Core.Board
             int startNodeId,
             int previousNodeId,
             int remainingSteps,
-            IReadOnlyDictionary<int, int> playerNodeIds)
+            IReadOnlyDictionary<int, int> playerNodeIds,
+            int forcedFirstNodeId = -1)
         {
             if (graph == null)
             {
@@ -41,6 +42,7 @@ namespace ProjectArtOfAll.Core.Board
                 previousNodeId,
                 remainingSteps,
                 occupants,
+                forcedFirstNodeId,
                 path,
                 candidates);
 
@@ -55,7 +57,8 @@ namespace ProjectArtOfAll.Core.Board
             MapGraph graph,
             int startNodeId,
             int previousNodeId,
-            int steps)
+            int steps,
+            int forcedFirstNodeId = -1)
         {
             if (graph == null)
             {
@@ -70,7 +73,14 @@ namespace ProjectArtOfAll.Core.Board
             graph.GetNode(startNodeId);
             List<IReadOnlyList<int>> paths = new List<IReadOnlyList<int>>();
             List<int> current = new List<int>();
-            WalkPaths(graph, startNodeId, previousNodeId, steps, current, paths);
+            WalkPaths(
+                graph,
+                startNodeId,
+                previousNodeId,
+                steps,
+                forcedFirstNodeId,
+                current,
+                paths);
 
             return paths
                 .OrderBy(path => string.Join(",", path))
@@ -127,6 +137,7 @@ namespace ProjectArtOfAll.Core.Board
             int previousNodeId,
             int stepsLeft,
             IReadOnlyDictionary<int, List<int>> occupants,
+            int forcedFirstNodeId,
             List<int> path,
             List<MovementCandidate> candidates)
         {
@@ -135,7 +146,12 @@ namespace ProjectArtOfAll.Core.Board
                 return;
             }
 
-            foreach (int next in graph.LegalNextNodes(currentNodeId, previousNodeId))
+            foreach (int next in LegalNextNodes(
+                         graph,
+                         currentNodeId,
+                         previousNodeId,
+                         forcedFirstNodeId,
+                         path.Count))
             {
                 path.Add(next);
 
@@ -151,6 +167,7 @@ namespace ProjectArtOfAll.Core.Board
                     currentNodeId,
                     stepsLeft - 1,
                     occupants,
+                    forcedFirstNodeId,
                     path,
                     candidates);
 
@@ -163,6 +180,7 @@ namespace ProjectArtOfAll.Core.Board
             int currentNodeId,
             int previousNodeId,
             int stepsLeft,
+            int forcedFirstNodeId,
             List<int> currentPath,
             List<IReadOnlyList<int>> paths)
         {
@@ -172,12 +190,47 @@ namespace ProjectArtOfAll.Core.Board
                 return;
             }
 
-            foreach (int next in graph.LegalNextNodes(currentNodeId, previousNodeId))
+            foreach (int next in LegalNextNodes(
+                         graph,
+                         currentNodeId,
+                         previousNodeId,
+                         forcedFirstNodeId,
+                         currentPath.Count))
             {
                 currentPath.Add(next);
-                WalkPaths(graph, next, currentNodeId, stepsLeft - 1, currentPath, paths);
+                WalkPaths(
+                    graph,
+                    next,
+                    currentNodeId,
+                    stepsLeft - 1,
+                    forcedFirstNodeId,
+                    currentPath,
+                    paths);
                 currentPath.RemoveAt(currentPath.Count - 1);
             }
+        }
+
+        /// <summary>
+        /// The edges available for one step. On the first step of a move the forced Home
+        /// departure (counter-clockwise) is the only choice, so the walk never branches there.
+        /// </summary>
+        private static IReadOnlyList<int> LegalNextNodes(
+            MapGraph graph,
+            int currentNodeId,
+            int previousNodeId,
+            int forcedFirstNodeId,
+            int stepIndex)
+        {
+            if (stepIndex == 0 && forcedFirstNodeId >= 0)
+            {
+                MapNode origin = graph.GetNode(currentNodeId);
+                if (origin.OutEdges.Contains(forcedFirstNodeId))
+                {
+                    return new[] { forcedFirstNodeId };
+                }
+            }
+
+            return graph.LegalNextNodes(currentNodeId, previousNodeId);
         }
 
         private static bool IsStoppable(

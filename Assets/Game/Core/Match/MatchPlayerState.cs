@@ -38,6 +38,12 @@ namespace ProjectArtOfAll.Core.Match
         /// (spawn, teleport). Used so a fork at the start of a move never offers the way back.
         /// </summary>
         public int LastArrivalNode { get; internal set; } = -1;
+
+        /// <summary>
+        /// True once the player has taken a voluntary move, so the forced counter-clockwise
+        /// first step away from Home only applies to the opening move (R-MAP-002).
+        /// </summary>
+        public bool HasMoved { get; internal set; }
         public int Level { get; internal set; }
         public int Shards { get; internal set; }
         public int Wins { get; internal set; }

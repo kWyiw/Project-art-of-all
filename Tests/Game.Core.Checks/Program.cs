@@ -38,6 +38,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckWarpTeleport();
                 CheckCardBandCommands();
                 CheckSceneMapTeleport();
+                CheckFirstMoveFromHome();
                 CheckShopTile();
                 CheckCpuAi();
                 CheckM3FullMatch();
@@ -1385,6 +1386,51 @@ namespace ProjectArtOfAll.Core.Checks
             public int Column { get; }
             public TileType TileType { get; }
             public int OwnerPlayerId { get; }
+        }
+
+        /// <summary>
+        /// R-MAP-002：开局离开 Home 的第一步不给选择，强制走逆时针方向。
+        /// </summary>
+        private static void CheckFirstMoveFromHome()
+        {
+            MapGraph graph = CreateSceneMapGraph();
+            MatchController controller = new MatchController(graph, 86420UL);
+            MatchPlayerState player = controller.State.CurrentPlayer;
+            int home = player.HomeNode;
+            int expected = graph.CounterClockwiseNeighbour(home);
+
+            Assert(player.CurrentNode == home, "A match starts with the player on Home.");
+            Assert(expected >= 0, "Home must have a counter-clockwise neighbour.");
+            Assert(!player.HasMoved, "A fresh player has not moved yet.");
+
+            IReadOnlyList<int> legal = controller.LegalNextNodes(home, -1);
+            Assert(
+                legal.Count == 1 && legal[0] == expected,
+                "Leaving Home on the opening move must force the counter-clockwise edge.");
+
+            controller.Submit(new RollCommand(player.Id));
+            foreach (MovementCandidate candidate in controller.CurrentCandidates)
+            {
+                Assert(
+                    candidate.Path[0] == expected,
+                    "Every opening candidate must start counter-clockwise from Home.");
+            }
+
+            controller.Submit(new MoveCommand(player.Id, null, 0));
+            PlayerMovedEvent firstStep = controller.Events.History
+                .OfType<PlayerMovedEvent>()
+                .FirstOrDefault(moved => moved.PlayerId == player.Id && moved.StepIndex == 0);
+
+            Assert(firstStep != null, "The opening move must publish its first step.");
+            Assert(
+                firstStep.FromNodeId == home && firstStep.ToNodeId == expected,
+                "The opening move must leave Home towards the counter-clockwise edge.");
+            Assert(player.HasMoved, "Moving must remember that the player left Home.");
+
+            Console.WriteLine(
+                "[firstmove] home=" + home.ToString()
+                + " forced=" + expected.ToString()
+                + " stops=" + controller.CurrentCandidates.Count.ToString());
         }
 
         private static void CheckSceneMapTeleport()

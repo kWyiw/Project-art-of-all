@@ -334,7 +334,7 @@ namespace ProjectArtOfAll.Board
             for (int step = 0; step < steps; step++)
             {
                 MapNode node = graph.GetNode(current);
-                IReadOnlyList<int> legalEdges = graph.LegalNextNodes(current, previous);
+                IReadOnlyList<int> legalEdges = match.LegalNextNodes(current, previous);
                 if (legalEdges.Count == 0)
                 {
                     break;

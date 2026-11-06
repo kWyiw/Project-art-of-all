@@ -185,7 +185,8 @@ namespace ProjectArtOfAll.Core.Match
                     State.CurrentPlayer.CurrentNode,
                     State.CurrentPlayer.LastArrivalNode,
                     State.LastRoll,
-                    State.GetPlayerNodeIds()));
+                    State.GetPlayerNodeIds(),
+                    ForcedFirstStepNodeId()));
 
             State.Phase = MatchPhase.AwaitMove;
         }
@@ -201,6 +202,7 @@ namespace ProjectArtOfAll.Core.Match
 
             MatchPlayerState player = State.CurrentPlayer;
             IReadOnlyList<int> path = SelectPath(command);
+            player.HasMoved = true;
             int fromNode = player.CurrentNode;
 
             for (int stepIndex = 0; stepIndex < path.Count; stepIndex++)
@@ -408,6 +410,37 @@ namespace ProjectArtOfAll.Core.Match
             Publish(new CardEquippedEvent(State.CurrentPlayer.Id, command.CardUid, false));
         }
 
+        /// <summary>
+        /// The node the current player must step to when leaving Home on the opening move,
+        /// or -1 when the forced counter-clockwise rule does not apply (R-MAP-002).
+        /// </summary>
+        public int ForcedFirstStepNodeId()
+        {
+            MatchPlayerState player = State.CurrentPlayer;
+            if (player == null || player.HasMoved || player.CurrentNode != player.HomeNode)
+            {
+                return -1;
+            }
+
+            return graph.CounterClockwiseNeighbour(player.CurrentNode);
+        }
+
+        /// <summary>
+        /// Exits the current player may take from <paramref name="nodeId"/>, honouring the
+        /// forced counter-clockwise first step away from Home.
+        /// </summary>
+        public IReadOnlyList<int> LegalNextNodes(int nodeId, int previousNodeId)
+        {
+            int forced = ForcedFirstStepNodeId();
+            if (forced >= 0 && State.CurrentPlayer != null &&
+                nodeId == State.CurrentPlayer.CurrentNode)
+            {
+                return new[] { forced };
+            }
+
+            return graph.LegalNextNodes(nodeId, previousNodeId);
+        }
+
         private IReadOnlyList<int> SelectPath(MoveCommand command)
         {
             IReadOnlyList<IReadOnlyList<int>> paths;
@@ -425,7 +458,8 @@ namespace ProjectArtOfAll.Core.Match
                     graph,
                     State.CurrentPlayer.CurrentNode,
                     State.CurrentPlayer.LastArrivalNode,
-                    State.LastRoll);
+                    State.LastRoll,
+                    ForcedFirstStepNodeId());
             }
 
             if (command.ForkDirections.Count > 0)
@@ -463,7 +497,7 @@ namespace ProjectArtOfAll.Core.Match
 
             foreach (int next in path)
             {
-                IReadOnlyList<int> legal = graph.LegalNextNodes(current, previous);
+                IReadOnlyList<int> legal = LegalNextNodes(current, previous);
                 if (legal.Count >= 2)
                 {
                     if (choiceIndex >= forkDirections.Count)
@@ -504,7 +538,7 @@ namespace ProjectArtOfAll.Core.Match
             int previous = State.CurrentPlayer.LastArrivalNode;
             foreach (int next in path)
             {
-                IReadOnlyList<int> legal = graph.LegalNextNodes(current, previous);
+                IReadOnlyList<int> legal = LegalNextNodes(current, previous);
                 if (legal.Count >= 2)
                 {
                     for (int edgeIndex = 0; edgeIndex < legal.Count; edgeIndex++)

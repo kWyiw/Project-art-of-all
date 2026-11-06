@@ -436,7 +436,8 @@ namespace ProjectArtOfAll.Core.Match
                              graph,
                              self.CurrentNode,
                              self.LastArrivalNode,
-                             state.LastRoll))
+                             state.LastRoll,
+                             controller.ForcedFirstStepNodeId()))
                 {
                     if (path.Count == 0)
                     {
@@ -470,7 +471,7 @@ namespace ProjectArtOfAll.Core.Match
 
                 foreach (int next in path)
                 {
-                    IReadOnlyList<int> legal = graph.LegalNextNodes(current, previous);
+                    IReadOnlyList<int> legal = controller.LegalNextNodes(current, previous);
                     if (legal.Count >= 2)
                     {
                         int index = 0;

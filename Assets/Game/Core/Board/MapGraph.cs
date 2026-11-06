@@ -186,6 +186,17 @@ namespace ProjectArtOfAll.Core.Board
         }
 
         /// <summary>
+        /// The edge a player takes when leaving Home on their very first move: the
+        /// neighbour that turns counter-clockwise around the board centre. The choice is
+        /// forced there, so no fork prompt is shown (R-MAP-002). -1 when the node has no
+        /// grid position or no neighbour.
+        /// </summary>
+        public int CounterClockwiseNeighbour(int nodeId)
+        {
+            return FindCounterClockwiseNeighbour(GetNode(nodeId));
+        }
+
+        /// <summary>
         /// The neighbour that lies counter-clockwise from <paramref name="node"/> around
         /// the board centre (smallest positive angle step). -1 when nodes carry no grid
         /// position or there is no such neighbour.
