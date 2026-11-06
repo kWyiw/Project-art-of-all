@@ -639,30 +639,36 @@ namespace ProjectArtOfAll.UI
             }
         }
 
-        /// <summary>甜点回廊：按真实地块坐标画一圈彩色点阵（菱形环）。</summary>
+        /// <summary>甜点回廊：按真实地块坐标画一圈彩色点阵（方格环带，不做旋转）。</summary>
         private static void DrawRingPreview(RectTransform rect, float width, float height, float pad)
         {
             IReadOnlyList<BoardMapCell> cells = BoardMapLibrary.SweetRing.Cells;
-            int min = int.MaxValue;
-            int max = int.MinValue;
+            int minRow = int.MaxValue;
+            int maxRow = int.MinValue;
+            int minColumn = int.MaxValue;
+            int maxColumn = int.MinValue;
             for (int index = 0; index < cells.Count; index++)
             {
                 BoardMapCell cell = cells[index];
-                min = Mathf.Min(min, Mathf.Min(cell.Row, cell.Column));
-                max = Mathf.Max(max, Mathf.Max(cell.Row, cell.Column));
+                minRow = Mathf.Min(minRow, cell.Row);
+                maxRow = Mathf.Max(maxRow, cell.Row);
+                minColumn = Mathf.Min(minColumn, cell.Column);
+                maxColumn = Mathf.Max(maxColumn, cell.Column);
             }
 
-            float span = Mathf.Max(1, max - min);
-            // 棋盘在场景里整体旋转 45°，缩略图也转成菱形才对得上实际形状。
-            float dot = Mathf.Clamp(Mathf.Min(width, height) / (span * 1.45f + 1.2f), 4f, 11f);
-            float half = (width - pad * 2f) * 0.5f;
+            float spanRow = Mathf.Max(1, maxRow - minRow);
+            float spanColumn = Mathf.Max(1, maxColumn - minColumn);
+            float dot = Mathf.Clamp(
+                Mathf.Min((width - pad * 2f) / (spanColumn + 1.6f),
+                    (height - pad * 2f) / (spanRow + 1.6f)),
+                4f,
+                11f);
+
             for (int index = 0; index < cells.Count; index++)
             {
                 BoardMapCell cell = cells[index];
-                float u = (cell.Column - min) / span - 0.5f;
-                float v = (cell.Row - min) / span - 0.5f;
-                float x = pad + (width - pad * 2f) * 0.5f + (u - v) * half;
-                float y = pad + (height - pad * 2f) * 0.5f + (u + v) * half;
+                float x = pad + (cell.Column - minColumn) / spanColumn * (width - pad * 2f);
+                float y = pad + (cell.Row - minRow) / spanRow * (height - pad * 2f);
                 AddTileDot(rect, x, y, dot, TileDotColor(cell.Type));
             }
         }

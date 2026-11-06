@@ -90,7 +90,7 @@ namespace ProjectArtOfAll.Core.Board
         /// <summary>
         /// Where a player may go after arriving at <paramref name="nodeId"/> from
         /// <paramref name="previousNodeId"/>.
-        /// R-MAP-002：走廊（只有前后两格）只能**逆时针**走；岔路口（三岔及以上）
+        /// R-MAP-002：走廊（只有前后两格）只有一个前进方向，优先逆时针；岔路口（三岔及以上）
         /// 由玩家选，除原路返回外皆可。
         /// </summary>
         public IReadOnlyList<int> LegalNextNodes(int nodeId, int previousNodeId)
@@ -108,36 +108,12 @@ namespace ProjectArtOfAll.Core.Board
                     return node.OutEdges;
                 }
 
-                // 岔路口：只能直行或逆时针拐弯（顺时针不在选项里）。
-                if (TryDirection(previousNodeId, nodeId, out int dr, out int dc))
-                {
-                    List<int> choices = new List<int>(node.OutEdges.Count);
-                    foreach (int next in node.OutEdges)
-                    {
-                        if (!TryDirection(nodeId, next, out int ndr, out int ndc))
-                        {
-                            continue;
-                        }
-
-                        bool straight = ndr == dr && ndc == dc;
-                        bool turnsCounterClockwise = ndr == -dc && ndc == dr;
-                        if (straight || turnsCounterClockwise)
-                        {
-                            choices.Add(next);
-                        }
-                    }
-
-                    if (choices.Count > 0)
-                    {
-                        return choices.AsReadOnly();
-                    }
-                }
-
-                List<int> fallback = node.OutEdges
+                // 岔路口：除原路返回外都可以走（R-MAP-002）。
+                List<int> choices = node.OutEdges
                     .Where(edge => edge != previousNodeId)
                     .ToList();
 
-                return fallback.Count == 0 ? node.OutEdges : fallback.AsReadOnly();
+                return choices.Count == 0 ? node.OutEdges : choices.AsReadOnly();
             }
 
             int counterClockwise = FindCounterClockwiseNeighbour(node);

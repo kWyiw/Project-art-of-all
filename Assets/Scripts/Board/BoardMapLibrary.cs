@@ -128,117 +128,106 @@ namespace ProjectArtOfAll.Board
         }
 
         /// <summary>
-        /// The board of the reference picture: a diamond band two tiles deep. The outer ring has
-        /// 24 tiles, the inner ring 20, and the two rings are joined by one link in each corner so
-        /// every side carries a loop. The four home tiles sit at the cardinal tips of the inner
-        /// ring, the four warp tiles sit in opposite pairs, and the rest is a mix of rewards,
-        /// shops, monsters and events (44 tiles in total).
+        /// The second board, transcribed cell by cell from the drawn sketch: 11 × 9 squares.
+        /// H = home, Y = reward, G = shop, R = monster, B = event, P = warp, '.' = empty.
         /// </summary>
+        private static readonly string[] SketchRows =
+        {
+            "....GBY....",
+            "....Y.P....",
+            "...HRYGH...",
+            ".YPG...RYG.",
+            ".B.Y...Y.B.",
+            ".GYR...GPY.",
+            "...HGYRH...",
+            "....P.Y....",
+            "....YBG....",
+        };
+
         private static BoardMapDefinition CreateSweetRing()
         {
-            // Clockwise from the top tile, six tiles per quadrant.
-            string outer = "GYBGPR" + "GYBGPR" + "GYBGPR" + "GYBGPR";
-            // Clockwise from the top home, five tiles per quadrant.
-            string inner = "HGYGY" + "HGYGY" + "HGYGY" + "HGYGY";
-
-            List<BoardMapCell> cells = new List<BoardMapCell>(44);
-            List<Pair> outerRing = BuildDiamondRing(6);
-            List<Pair> innerRing = BuildDiamondRing(5);
-
-            for (int index = 0; index < outerRing.Count; index++)
+            List<BoardMapCell> cells = new List<BoardMapCell>(36);
+            for (int row = 0; row < SketchRows.Length; row++)
             {
-                char code = outer[index % outer.Length];
-                cells.Add(new BoardMapCell(
-                    outerRing[index].Row,
-                    outerRing[index].Column,
-                    Parse(code),
-                    -1));
-            }
-
-            // The four homes sit on the inner ring, one per quadrant, in seat order.
-            int homeOwner = 0;
-            for (int index = 0; index < innerRing.Count; index++)
-            {
-                char code = inner[index % inner.Length];
-                int owner = -1;
-                if (code == 'H')
+                string line = SketchRows[row];
+                for (int column = 0; column < line.Length; column++)
                 {
-                    owner = homeOwner;
-                    homeOwner = (homeOwner + 1) % LobbyState.SeatCount;
-                }
+                    char code = line[column];
+                    if (code == '.')
+                    {
+                        continue;
+                    }
 
-                cells.Add(new BoardMapCell(
-                    innerRing[index].Row,
-                    innerRing[index].Column,
-                    Parse(code),
-                    owner));
+                    cells.Add(new BoardMapCell(
+                        row,
+                        column,
+                        Parse(code),
+                        code == 'H' ? HomeOwnerFor(row, column) : -1));
+                }
             }
 
-            List<BoardMapEdge> edges = new List<BoardMapEdge>(48);
-            AddRingEdges(edges, outerRing);
-            AddRingEdges(edges, innerRing);
+            // Every pair of neighbouring squares is linked; the loops they form keep the board
+            // walkable under the corridor rule.
+            List<BoardMapEdge> edges = new List<BoardMapEdge>(40);
+            for (int row = 0; row < SketchRows.Length; row++)
+            {
+                string line = SketchRows[row];
+                for (int column = 0; column < line.Length; column++)
+                {
+                    if (line[column] == '.')
+                    {
+                        continue;
+                    }
 
-            // One link per corner joins the outer ring to the inner ring.
-            edges.Add(new BoardMapEdge(2, 8, 3, 8));
-            edges.Add(new BoardMapEdge(8, 10, 8, 9));
-            edges.Add(new BoardMapEdge(10, 4, 9, 4));
-            edges.Add(new BoardMapEdge(4, 2, 4, 3));
+                    if (column + 1 < line.Length && line[column + 1] != '.')
+                    {
+                        edges.Add(new BoardMapEdge(row, column, row, column + 1));
+                    }
+
+                    if (row + 1 < SketchRows.Length &&
+                        column < SketchRows[row + 1].Length &&
+                        SketchRows[row + 1][column] != '.')
+                    {
+                        edges.Add(new BoardMapEdge(row, column, row + 1, column));
+                    }
+                }
+            }
 
             List<BoardMapTeleport> teleports = new List<BoardMapTeleport>
             {
-                new BoardMapTeleport(2, 4, 10, 8),
-                new BoardMapTeleport(4, 10, 8, 2)
+                new BoardMapTeleport(1, 6, 7, 4),
+                new BoardMapTeleport(3, 2, 5, 8)
             };
 
             return new BoardMapDefinition(
                 MapCatalog.SweetRingId,
                 "甜点回廊",
                 cells,
-                45f,
+                0f,
                 teleports,
                 edges,
-                1.25f);
+                1f);
         }
 
-        /// <summary>Cells that sit exactly <paramref name="radius"/> steps away from the centre.</summary>
-        private static List<Pair> BuildDiamondRing(int radius)
+        /// <summary>The four home squares own one seat each, in the order the sketch numbers them.</summary>
+        private static int HomeOwnerFor(int row, int column)
         {
-            List<Pair> ring = new List<Pair>(radius * 4);
-            int centre = 6;
-            for (int row = 0; row < centre * 2 + 1; row++)
+            if (row == 2 && column == 3)
             {
-                for (int column = 0; column < centre * 2 + 1; column++)
-                {
-                    int distance = System.Math.Abs(row - centre) + System.Math.Abs(column - centre);
-                    if (distance != radius)
-                    {
-                        continue;
-                    }
-
-                    ring.Add(new Pair(row, column));
-                }
+                return 0;
             }
 
-            // Clockwise from the top: sort by the angle around the centre (screen space, +Y is up).
-            ring.Sort((a, b) => AngleOf(a).CompareTo(AngleOf(b)));
-            return ring;
-        }
-
-        private static double AngleOf(Pair cell)
-        {
-            const int centre = 6;
-            double angle = System.Math.Atan2(cell.Column - centre, centre - cell.Row);
-            return angle < 0 ? angle + System.Math.PI * 2.0 : angle;
-        }
-
-        private static void AddRingEdges(List<BoardMapEdge> edges, List<Pair> ring)
-        {
-            for (int index = 0; index < ring.Count; index++)
+            if (row == 6 && column == 3)
             {
-                Pair a = ring[index];
-                Pair b = ring[(index + 1) % ring.Count];
-                edges.Add(new BoardMapEdge(a.Row, a.Column, b.Row, b.Column));
+                return 1;
             }
+
+            if (row == 6 && column == 7)
+            {
+                return 2;
+            }
+
+            return 3;
         }
 
         private static TileType Parse(char code)
@@ -260,17 +249,5 @@ namespace ProjectArtOfAll.Board
             }
         }
 
-        private readonly struct Pair
-        {
-            public Pair(int row, int column)
-            {
-                Row = row;
-                Column = column;
-            }
-
-            public int Row { get; }
-
-            public int Column { get; }
-        }
     }
 }

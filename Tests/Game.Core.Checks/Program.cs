@@ -1421,9 +1421,6 @@ namespace ProjectArtOfAll.Core.Checks
             {
                 foreach (int entry in junction.OutEdges)
                 {
-                    MapNode from = graph.GetNode(entry);
-                    int dr = junction.GridRow - from.GridRow;
-                    int dc = junction.GridColumn - from.GridColumn;
                     IReadOnlyList<int> legal = graph.LegalNextNodes(junction.Id, entry);
                     Assert(
                         legal.Count >= 1,
@@ -1432,17 +1429,9 @@ namespace ProjectArtOfAll.Core.Checks
                         legal.All(edge => edge != entry),
                         "A junction must not offer the way back.");
 
-                    foreach (int next in legal)
-                    {
-                        MapNode target = graph.GetNode(next);
-                        int ndr = target.GridRow - junction.GridRow;
-                        int ndc = target.GridColumn - junction.GridColumn;
-                        bool straight = ndr == dr && ndc == dc;
-                        bool ccw = ndr == -dc && ndc == dr;
-                        Assert(
-                            straight || ccw,
-                            "A junction only allows going straight or turning counter-clockwise.");
-                    }
+                    Assert(
+                        legal.Count == junction.OutEdges.Count - 1,
+                        "A junction offers every edge except the way back.");
                 }
             }
 
