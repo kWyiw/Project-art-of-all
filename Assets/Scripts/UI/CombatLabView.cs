@@ -30,13 +30,23 @@ namespace ProjectArtOfAll.UI
         private const int MaximumHealth = 999;
 
         /// <summary>战斗栏里一张牌格子的尺寸，拖拽换位时用同一套格子换算落点。</summary>
-        private const float ChipWidth = 148f;
-        private const float ChipHeight = 62f;
+        /// <summary>战斗栏整行的宽度（面板 1260 减去左右各 20 的内边距）。</summary>
+        private const float DeckRowWidth = 1220f;
         private const float ChipGap = 8f;
-        private const float DeckRowWidth = 1240f;
+        private const float CardHeight = 132f;
 
-        private static int ChipsPerRow =>
-            Mathf.Max(1, Mathf.FloorToInt((DeckRowWidth + ChipGap) / (ChipWidth + ChipGap)));
+        /// <summary>
+        /// 一格 = 1c：10c 的战斗栏正好铺满整行，与对局里卡槽带的刻度一致，
+        /// 所以 1c 牌占一格宽、2c 占两格宽、3c 占三格宽。
+        /// </summary>
+        private static float SlotWidth =>
+            Mathf.Max(52f, (DeckRowWidth - ChipGap * (BattleCapacity - 1)) / BattleCapacity);
+
+        private static float WidthOf(CardDefinition card)
+        {
+            int slots = Mathf.Max(1, card.SlotSize);
+            return slots * SlotWidth + (slots - 1) * ChipGap;
+        }
 
         private static readonly Color BackgroundColor = new Color(0.028f, 0.038f, 0.048f, 1f);
         private static readonly Color PanelColor = new Color(0.055f, 0.075f, 0.088f, 0.97f);
@@ -409,22 +419,20 @@ namespace ProjectArtOfAll.UI
                 label.color = used > BattleCapacity ? Brass : MutedText;
             }
 
-            int perRow = ChipsPerRow;
+            float x = 0f;
 
             for (int index = 0; index < deck.Count; index++)
             {
                 CardDefinition card = deck[index];
-                int column = index % perRow;
-                int rowIndex = index / perRow;
+                float width = WidthOf(card);
 
                 RectTransform chip = CreateRect("Chip_" + index, row);
                 chip.anchorMin = new Vector2(0f, 1f);
                 chip.anchorMax = new Vector2(0f, 1f);
                 chip.pivot = new Vector2(0f, 1f);
-                chip.anchoredPosition = new Vector2(
-                    column * (ChipWidth + ChipGap),
-                    -rowIndex * (ChipHeight + ChipGap));
-                chip.sizeDelta = new Vector2(ChipWidth, ChipHeight);
+                chip.anchoredPosition = new Vector2(x, 0f);
+                chip.sizeDelta = new Vector2(width, CardHeight);
+                x += width + ChipGap;
 
                 Image chipImage = chip.gameObject.AddComponent<Image>();
                 chipImage.color = isLeft ? LeftTint : RightTint;
@@ -444,12 +452,14 @@ namespace ProjectArtOfAll.UI
                 CardRowRenderer.AddFramedBorder(chip, CardRowRenderer.FrameColor(card.SlotSize),
                     2f, 9f);
 
-                AddText(chip, "Name", card.DisplayName, 8f, 6f, ChipWidth - 16f, 22f,
-                    15, FontStyle.Bold, TextAnchor.MiddleLeft, TextColor);
-                AddText(chip, "Meta", CardText.Meta(card), 8f, 28f, ChipWidth - 16f, 18f,
+                AddText(chip, "Name", card.DisplayName, 10f, 8f, width - 20f, 30f,
+                    17, FontStyle.Bold, TextAnchor.MiddleLeft, TextColor);
+                AddText(chip, "Meta", CardText.Meta(card), 10f, 42f, width - 20f, 22f,
                     12, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
-                AddText(chip, "Value", card.Value + "g", ChipWidth - 40f, 42f, 34f, 16f,
-                    11, FontStyle.Normal, TextAnchor.MiddleRight, Brass);
+                AddText(chip, "Slots", card.SlotSize + "c", 10f, 102f, 40f, 20f,
+                    13, FontStyle.Bold, TextAnchor.MiddleLeft, CardRowRenderer.FrameColor(card.SlotSize));
+                AddText(chip, "Value", card.Value + "g", width - 46f, 102f, 36f, 20f,
+                    12, FontStyle.Normal, TextAnchor.MiddleRight, Brass);
 
                 chips.Add(chip.gameObject);
             }
@@ -543,7 +553,7 @@ namespace ProjectArtOfAll.UI
                 && RectTransformUtility.RectangleContainsScreenPoint(leftDeckRow, eventData.position, camera))
             {
                 toLeft = true;
-                index = IndexAt(leftDeckRow, leftDeck.Count, eventData);
+                index = IndexAt(leftDeckRow, leftDeck, eventData);
                 return true;
             }
 
@@ -551,28 +561,38 @@ namespace ProjectArtOfAll.UI
                 && RectTransformUtility.RectangleContainsScreenPoint(rightDeckRow, eventData.position, camera))
             {
                 toLeft = false;
-                index = IndexAt(rightDeckRow, rightDeck.Count, eventData);
+                index = IndexAt(rightDeckRow, rightDeck, eventData);
                 return true;
             }
 
             return false;
         }
 
-        private int IndexAt(RectTransform row, int count, PointerEventData eventData)
+        /// <summary>落点索引：按每张牌实际占的格数累加宽度，指针落在哪张牌前半段就插在它前面。</summary>
+        private int IndexAt(
+            RectTransform row,
+            IReadOnlyList<CardDefinition> deck,
+            PointerEventData eventData)
         {
             if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
                     row, eventData.position, eventData.pressEventCamera, out Vector2 local))
             {
-                return count;
+                return deck.Count;
             }
 
-            // row 的 pivot 在左上角：x 向右为正、y 向上为正，所以屏幕下方是负 y。
-            int perRow = ChipsPerRow;
-            int column = Mathf.Clamp(
-                Mathf.FloorToInt(local.x / (ChipWidth + ChipGap)), 0, perRow - 1);
-            int line = Mathf.Clamp(
-                Mathf.FloorToInt(-local.y / (ChipHeight + ChipGap)), 0, 8);
-            return Mathf.Clamp(line * perRow + column, 0, count);
+            float x = 0f;
+            for (int index = 0; index < deck.Count; index++)
+            {
+                float width = WidthOf(deck[index]);
+                if (local.x < x + width * 0.5f)
+                {
+                    return index;
+                }
+
+                x += width + ChipGap;
+            }
+
+            return deck.Count;
         }
 
         private void BeginDrag(
@@ -646,7 +666,7 @@ namespace ProjectArtOfAll.UI
             ghost.anchorMin = new Vector2(0.5f, 0.5f);
             ghost.anchorMax = new Vector2(0.5f, 0.5f);
             ghost.pivot = new Vector2(0.5f, 0.5f);
-            ghost.sizeDelta = new Vector2(ChipWidth, ChipHeight);
+            ghost.sizeDelta = new Vector2(WidthOf(card), CardHeight);
 
             Image image = ghost.gameObject.AddComponent<Image>();
             image.color = leftTint ? LeftTint : RightTint;
@@ -659,10 +679,12 @@ namespace ProjectArtOfAll.UI
 
             CardRowRenderer.AddFramedBorder(
                 ghost, CardRowRenderer.FrameColor(card.SlotSize), 2f, 9f);
-            AddText(ghost, "Name", card.DisplayName, 8f, 6f, ChipWidth - 16f, 22f,
-                15, FontStyle.Bold, TextAnchor.MiddleLeft, TextColor);
-            AddText(ghost, "Meta", CardText.Meta(card), 8f, 28f, ChipWidth - 16f, 18f,
+            AddText(ghost, "Name", card.DisplayName, 10f, 8f, WidthOf(card) - 20f, 30f,
+                17, FontStyle.Bold, TextAnchor.MiddleLeft, TextColor);
+            AddText(ghost, "Meta", CardText.Meta(card), 10f, 42f, WidthOf(card) - 20f, 22f,
                 12, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
+            AddText(ghost, "Slots", card.SlotSize + "c", 10f, 102f, 40f, 20f,
+                13, FontStyle.Bold, TextAnchor.MiddleLeft, CardRowRenderer.FrameColor(card.SlotSize));
 
             ghost.SetAsLastSibling();
             ghostObject = ghost.gameObject;
