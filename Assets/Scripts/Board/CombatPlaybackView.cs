@@ -248,6 +248,7 @@ namespace ProjectArtOfAll.Board
 
         private void ClearContent()
         {
+            CardTooltipHost.Hide();
             if (content == null)
             {
                 return;
@@ -623,6 +624,10 @@ namespace ProjectArtOfAll.Board
                     width,
                     CardRowRenderer.BonusBadge(cards, index));
                 startX += width + renderer.SlotGap;
+
+                // 悬停看牌：战斗打到一半也能停下来读这张牌到底在做什么。
+                CardHoverTarget hover = widget.AddComponent<CardHoverTarget>();
+                hover.Bind(card.Definition, root != null ? root.parent as RectTransform : null, font);
 
                 // 冷却遮罩：只盖住"还没走完"的上半部分，插在卡面与文字之间。
                 GameObject shade = BoardHudOverlayFactory.CreateBar(

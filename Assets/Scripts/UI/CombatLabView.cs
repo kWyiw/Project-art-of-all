@@ -29,23 +29,26 @@ namespace ProjectArtOfAll.UI
         private const int MinimumHealth = 25;
         private const int MaximumHealth = 999;
 
-        /// <summary>战斗栏里一张牌格子的尺寸，拖拽换位时用同一套格子换算落点。</summary>
         /// <summary>战斗栏整行的宽度（面板 1260 减去左右各 20 的内边距）。</summary>
         private const float DeckRowWidth = 1220f;
-        private const float ChipGap = 8f;
-        private const float CardHeight = 132f;
+
+        /// <summary>战斗栏行高上限；实际格子高度由 <see cref="lane"/> 的缩放决定。</summary>
+        private const float LaneHeight = 132f;
 
         /// <summary>
-        /// 一格 = 1c：10c 的战斗栏正好铺满整行，与对局里卡槽带的刻度一致，
-        /// 所以 1c 牌占一格宽、2c 占两格宽、3c 占三格宽。
+        /// 战斗栏与常驻卡槽带共用同一份绘制（格子、尺寸边框、价值角标、文字），
+        /// 所以这里只要把宽度和缩放交给它，两边看上去就是同一条栏位。
         /// </summary>
-        private static float SlotWidth =>
-            Mathf.Max(52f, (DeckRowWidth - ChipGap * (BattleCapacity - 1)) / BattleCapacity);
+        private CardRowRenderer lane;
 
-        private static float WidthOf(CardDefinition card)
+        private float SlotWidth => lane.SlotWidth;
+
+        private float CardHeight => lane.CardHeight;
+
+        private float WidthOf(CardDefinition card)
         {
             int slots = Mathf.Max(1, card.SlotSize);
-            return slots * SlotWidth + (slots - 1) * ChipGap;
+            return slots * SlotWidth + (slots - 1) * lane.SlotGap;
         }
 
         private static readonly Color BackgroundColor = new Color(0.028f, 0.038f, 0.048f, 1f);
@@ -61,6 +64,8 @@ namespace ProjectArtOfAll.UI
         private readonly List<CardDefinition> rightDeck = new List<CardDefinition>();
         private readonly List<GameObject> leftChips = new List<GameObject>();
         private readonly List<GameObject> rightChips = new List<GameObject>();
+        private readonly List<GameObject> leftCells = new List<GameObject>();
+        private readonly List<GameObject> rightCells = new List<GameObject>();
 
         private Font font;
         private RectTransform root;
@@ -118,6 +123,14 @@ namespace ProjectArtOfAll.UI
 
         private void Build()
         {
+            lane = new CardRowRenderer(font)
+            {
+                RowWidth = DeckRowWidth,
+                InBattle = true,
+                TopInset = 0f
+            };
+            lane.Scale = lane.FitScale(LaneHeight);
+
             Image background = gameObject.AddComponent<Image>();
             background.color = BackgroundColor;
             background.raycastTarget = true;
@@ -200,6 +213,9 @@ namespace ProjectArtOfAll.UI
                 drag.FromLibrary = true;
                 drag.FromLeft = true;
                 drag.Index = index;
+
+                CardHoverTarget hover = rowRect.gameObject.AddComponent<CardHoverTarget>();
+                hover.Bind(card, root, font);
             }
         }
 
@@ -389,6 +405,7 @@ namespace ProjectArtOfAll.UI
 
         private void RebuildDecks()
         {
+            CardTooltipHost.Hide();
             RebuildDeck(true);
             RebuildDeck(false);
         }
@@ -423,51 +440,37 @@ namespace ProjectArtOfAll.UI
                 label.color = used > BattleCapacity ? Brass : MutedText;
             }
 
-            float x = 0f;
+            // 先画空槽位，再把卡摆上去：和常驻卡槽带是同一套格子。
+            lane.BuildCells(row, isLeft ? leftCells : rightCells, BattleCapacity);
+            CardTooltipHost.Hide();
+
+            float x = CardRowRenderer.RowInset;
 
             for (int index = 0; index < deck.Count; index++)
             {
                 CardDefinition card = deck[index];
                 float width = WidthOf(card);
 
-                RectTransform chip = CreateRect("Chip_" + index, row);
-                chip.anchorMin = new Vector2(0f, 1f);
-                chip.anchorMax = new Vector2(0f, 1f);
-                chip.pivot = new Vector2(0f, 1f);
-                chip.anchoredPosition = new Vector2(x, 0f);
-                chip.sizeDelta = new Vector2(width, CardHeight);
-                x += width + ChipGap;
+                GameObject chip = lane.AddCard(row, new CardInstance(index, card), x, width, null);
+                chip.name = "Chip_" + index;
+                x += width + lane.SlotGap;
 
-                Image chipImage = chip.gameObject.AddComponent<Image>();
-                Color chipColor = isLeft ? LeftTint : RightTint;
-                chipImage.color = chipColor;
-                ProjectArtOfAll.Board.CardArtLibrary.Attach(chip, card.SlotSize, chipColor);
-
-                LabDragHandler drag = chip.gameObject.AddComponent<LabDragHandler>();
+                LabDragHandler drag = chip.AddComponent<LabDragHandler>();
                 drag.View = this;
                 drag.Card = card;
                 drag.FromLibrary = false;
                 drag.FromLeft = isLeft;
                 drag.Index = index;
 
-                Button button = chip.gameObject.AddComponent<Button>();
-                button.targetGraphic = chipImage;
+                Button button = chip.AddComponent<Button>();
+                button.targetGraphic = chip.GetComponent<Image>();
                 int captured = index;
                 button.onClick.AddListener(() => RemoveCard(isLeft, captured));
 
-                CardRowRenderer.AddFramedBorder(chip, CardRowRenderer.FrameColor(card.SlotSize),
-                    2f, 9f);
+                CardHoverTarget hover = chip.AddComponent<CardHoverTarget>();
+                hover.Bind(card, root, font);
 
-                AddText(chip, "Name", card.DisplayName, 10f, 8f, width - 20f, 30f,
-                    17, FontStyle.Bold, TextAnchor.MiddleLeft, TextColor);
-                AddText(chip, "Meta", CardText.Meta(card), 10f, 42f, width - 20f, 22f,
-                    12, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
-                AddText(chip, "Slots", card.SlotSize + "c", 10f, 102f, 40f, 20f,
-                    13, FontStyle.Bold, TextAnchor.MiddleLeft, CardRowRenderer.FrameColor(card.SlotSize));
-                AddText(chip, "Value", card.Value + "g", width - 46f, 102f, 36f, 20f,
-                    12, FontStyle.Normal, TextAnchor.MiddleRight, Brass);
-
-                chips.Add(chip.gameObject);
+                chips.Add(chip);
             }
 
             if (deck.Count == 0)
@@ -586,7 +589,7 @@ namespace ProjectArtOfAll.UI
                 return deck.Count;
             }
 
-            float x = 0f;
+            float x = CardRowRenderer.RowInset;
             for (int index = 0; index < deck.Count; index++)
             {
                 float width = WidthOf(deck[index]);
@@ -595,7 +598,7 @@ namespace ProjectArtOfAll.UI
                     return index;
                 }
 
-                x += width + ChipGap;
+                x += width + lane.SlotGap;
             }
 
             return deck.Count;
@@ -612,6 +615,7 @@ namespace ProjectArtOfAll.UI
                 return;
             }
 
+            CardTooltipHost.Hide();
             dragging = true;
             ShowGhost(card, fromLeft || fromLibrary);
             MoveGhostTo(eventData);
