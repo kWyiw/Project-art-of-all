@@ -81,6 +81,10 @@ namespace ProjectArtOfAll.Board
         private OpponentDossierView dossier;
         private PauseOverlayView pauseOverlay;
         private BoardEventFeed eventFeed;
+        private BoardFieldInfoPanel fieldInfo;
+        private BoardTileTooltip tileTooltip;
+        private BoardRoundBanner roundBanner;
+        private int bannerRound = -1;
         private int eventCursor = -1;
         private int qualityFrames;
         private float qualityElapsed;
@@ -894,6 +898,21 @@ namespace ProjectArtOfAll.Board
                 eventFeed = BoardEventFeed.Create((RectTransform)transform, font);
             }
 
+            if (fieldInfo == null)
+            {
+                fieldInfo = BoardFieldInfoPanel.Create((RectTransform)transform, font);
+            }
+
+            if (tileTooltip == null)
+            {
+                tileTooltip = BoardTileTooltip.Create((RectTransform)transform, font);
+            }
+
+            if (roundBanner == null)
+            {
+                roundBanner = BoardRoundBanner.Create((RectTransform)transform, font);
+            }
+
             if (pauseOverlay == null)
             {
                 pauseOverlay = PauseOverlayView.Create(
@@ -1045,6 +1064,42 @@ namespace ProjectArtOfAll.Board
             }
 
             eventCursor = history.Count;
+        }
+
+        /// <summary>
+        /// 场地信息卡 + 轮次横幅（§2.1）：每帧刷新状态时推进来，
+        /// 轮次变化时弹一次横幅，其余时间只更新文本。
+        /// </summary>
+        public void RefreshFieldInfo(MatchState state, string mapName)
+        {
+            if (state == null)
+            {
+                return;
+            }
+
+            if (fieldInfo != null)
+            {
+                fieldInfo.Refresh(state, mapName, humanPlayerId);
+            }
+
+            if (tileTooltip != null)
+            {
+                if (boardGameplay == null)
+                {
+                    boardGameplay = FindObjectOfType<BoardGameplayController>();
+                }
+
+                tileTooltip.Bind(boardGameplay);
+            }
+
+            if (roundBanner != null && state.RoundNumber != bannerRound)
+            {
+                bannerRound = state.RoundNumber;
+                roundBanner.Show(
+                    state.RoundNumber,
+                    "每 " + MatchController.GlobalGrantInterval + " 轮：全员 +" +
+                    MatchController.GlobalShardGrant + " 碎片");
+            }
         }
 
         /// <summary>四角玩家栏：显示所有座位的等级、碎片、胜场与占用。</summary>

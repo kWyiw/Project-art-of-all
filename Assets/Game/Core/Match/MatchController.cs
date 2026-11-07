@@ -20,8 +20,9 @@ namespace ProjectArtOfAll.Core.Match
         private const int RewardChoiceCount = 2;
         /// <summary>每次停留只能重掷一次，重掷花费 2 碎片（规则书 §2.5）。</summary>
         public const int ShopRerollCost = 2;
-        private const int GlobalShardGrant = 5;
-        private const int GlobalGrantRoundInterval = 3;
+        /// <summary>每 <see cref="GlobalGrantInterval"/> 轮全场发一次碎片，每人 <see cref="GlobalShardGrant"/> 点。</summary>
+        public const int GlobalShardGrant = 5;
+        public const int GlobalGrantInterval = 3;
 
         private readonly MapGraph graph;
         private readonly ulong seed;
@@ -900,7 +901,7 @@ namespace ProjectArtOfAll.Core.Match
             if (State.CurrentPlayerIndex == 0)
             {
                 State.RoundNumber++;
-                if ((State.RoundNumber - 1) % GlobalGrantRoundInterval == 0)
+                if ((State.RoundNumber - 1) % GlobalGrantInterval == 0)
                 {
                     Publish(new GlobalShardsGrantedEvent(GlobalShardGrant));
                     foreach (MatchPlayerState player in State.Players)

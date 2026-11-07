@@ -58,6 +58,7 @@ namespace ProjectArtOfAll.Board
 
         private readonly Dictionary<int, BoardTileView> tilesByNode =
             new Dictionary<int, BoardTileView>();
+        private string mapDisplayName = "经典广场";
         private readonly Dictionary<int, BoardPlayerToken> tokensByPlayer =
             new Dictionary<int, BoardPlayerToken>();
         private readonly List<int> pendingForkEdges = new List<int>();
@@ -97,6 +98,10 @@ namespace ProjectArtOfAll.Board
             {
                 BoardMapBuilder.Build(this, generatedMap);
             }
+
+            mapDisplayName = generatedMap != null
+                ? generatedMap.DisplayName
+                : MapCatalog.Selected.DisplayName;
 
             BuildSceneLookup();
             // 生成棋盘自带连线（菱形环带不是方阵邻接），场景棋盘则用网格邻接。
@@ -179,6 +184,9 @@ namespace ProjectArtOfAll.Board
         public MatchPlayerState HumanPlayer => match == null
             ? null
             : match.State.Players[humanPlayerId];
+
+        /// <summary>棋盘上的全部地块（悬停说明用；运行时生成的板也能取到）。</summary>
+        public IReadOnlyCollection<BoardTileView> Tiles => tilesByNode.Values;
 
         /// <summary>跨区移动 / 同排重排（R-TURN-002 免费动作）。</summary>
         public void SubmitCardMove(int cardUid, bool toBattle, int column)
@@ -1235,6 +1243,7 @@ namespace ProjectArtOfAll.Board
                 hud.SetMatchStatus(
                     $"对局结束  ·  玩家 {match.State.WinnerPlayerId + 1} 获胜");
                 hud.PumpEvents(match);
+                hud.RefreshFieldInfo(match.State, mapDisplayName);
                 return;
             }
 
@@ -1260,6 +1269,7 @@ namespace ProjectArtOfAll.Board
             hud.SetAssemblyLevel(player.Level);
             hud.RefreshPlayerPanels(match.State);
             hud.PumpEvents(match);
+            hud.RefreshFieldInfo(match.State, mapDisplayName);
         }
 
         private int ResolveEntryPlayerId()
