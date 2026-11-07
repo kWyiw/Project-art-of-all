@@ -366,90 +366,10 @@ namespace ProjectArtOfAll.Board
     /// </summary>
     internal static class CardTooltipText
     {
-        private const string DamageColor = "#E8705F";
-        private const string ShieldColor = "#E7C05C";
-        private const string PoisonColor = "#83CF6B";
-        private const string BurnColor = "#EF9152";
-        private const string HealColor = "#8FDC9F";
-        private const string RegenerationColor = "#6FE3B4";
-        private const string CooldownColor = "#6EC6E6";
-        private const string SlowColor = "#7EA7EC";
-        private const string MultiplyColor = "#BE8CEB";
-        private const string DiceColor = "#7FCBBA";
-        private const string ValueColor = "#E7C05C";
-
-        private static readonly string[] KeywordOrder =
-        {
-            "生命再生", "再生", "多重释放", "额外施放", "骰值", "骰数", "剧毒", "中毒", "灼烧", "燃烧",
-            "护盾", "格挡", "治疗", "充能", "加速", "缓速", "摧毁", "销毁", "价值", "修正"
-        };
-
-        private static readonly Dictionary<string, string> KeywordColors =
-            new Dictionary<string, string>
-            {
-                { "生命再生", HealColor },
-                { "多重释放", MultiplyColor },
-                { "额外施放", MultiplyColor },
-                { "骰值", DiceColor },
-                { "骰数", DiceColor },
-                { "修正", DiceColor },
-                { "再生", RegenerationColor },
-                { "剧毒", PoisonColor },
-                { "中毒", PoisonColor },
-                { "灼烧", BurnColor },
-                { "燃烧", BurnColor },
-                { "护盾", ShieldColor },
-                { "格挡", ShieldColor },
-                { "治疗", HealColor },
-                { "充能", CooldownColor },
-                { "加速", CooldownColor },
-                { "缓速", SlowColor },
-                { "摧毁", "#9C9A92" },
-                { "销毁", "#9C9A92" },
-                { "价值", ValueColor },
-                { "伤害", DamageColor }
-            };
-
-        /// <summary>把关键字包上颜色与粗体；单次扫描，避免把已插入的富文本再替换一遍。</summary>
+        /// <summary>把关键字包上颜色与粗体；配色与匹配顺序都在内核 <see cref="CardKeywords"/> 里。</summary>
         public static string Colorize(string text)
         {
-            if (string.IsNullOrEmpty(text))
-            {
-                return string.Empty;
-            }
-
-            StringBuilder builder = new StringBuilder(text.Length + 32);
-            int index = 0;
-            while (index < text.Length)
-            {
-                string matched = MatchAt(text, index);
-                if (matched != null)
-                {
-                    builder.Append("<color=").Append(KeywordColors[matched]).Append("><b>")
-                        .Append(matched).Append("</b></color>");
-                    index += matched.Length;
-                    continue;
-                }
-
-                builder.Append(text[index]);
-                index++;
-            }
-
-            return builder.ToString();
-        }
-
-        private static string MatchAt(string text, int index)
-        {
-            for (int order = 0; order < KeywordOrder.Length; order++)
-            {
-                string keyword = KeywordOrder[order];
-                if (string.CompareOrdinal(text, index, keyword, 0, keyword.Length) == 0)
-                {
-                    return keyword;
-                }
-            }
-
-            return null;
+            return CardKeywords.Colorize(text);
         }
 
         /// <summary>`nuclear_water` → `Nuclear Water`。</summary>

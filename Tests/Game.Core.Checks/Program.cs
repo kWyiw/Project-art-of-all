@@ -25,6 +25,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckCombatClocks();
                 CheckEventBus();
                 CheckCardDatabase();
+                CheckCardKeywords();
                 CheckCardText();
                 CheckLoadoutPreview();
                 CheckCombatSimulation();
@@ -383,6 +384,90 @@ namespace ProjectArtOfAll.Core.Checks
 
             Assert(catalog.Get("recycler").Scope == CardScope.BagAndBattle,
                 "The recycler keeps working while it sits in the bag.");
+        }
+
+        private static void CheckCardKeywords()
+        {
+            // 每个词都必须能被匹配到，并且配色是合法的 #RRGGBB。
+            foreach (string keyword in CardKeywords.All)
+            {
+                string color = CardKeywords.ColorOf(keyword);
+                Assert(color != null && color.Length == 7 && color[0] == '#',
+                    string.Concat("Keyword ", keyword, " must have a #RRGGBB colour."));
+                Assert(CardKeywords.Colorize(keyword).Contains("<b>" + keyword + "</b>"),
+                    string.Concat("Keyword ", keyword, " must colour itself."));
+            }
+
+            // 长词优先：生命再生不能被拆成「生命」+「再生」。
+            Assert(CardKeywords.Colorize("生命再生量提高 15").Contains("<b>生命再生</b>"),
+                "Life regeneration must match as one keyword.");
+
+            // 伤害必须上色——这条是回归断言（之前它就漏在匹配表外）。
+            string damage = CardKeywords.Colorize("1d6 伤害");
+            Assert(damage.Contains("<b>伤害</b>") && damage.Contains(CardKeywords.DamageColor),
+                "Damage text must be coloured.");
+
+            // 每张牌的每段效果 / 光环 / 被动文案，只要提到状态词就必须至少着色一次。
+            string[] mustColour =
+            {
+                "伤害", "护盾", "中毒", "剧毒", "燃烧", "灼烧", "再生", "治疗",
+                "充能", "加速", "缓速", "额外施放", "摧毁", "骰数", "骰值"
+            };
+
+            foreach (CardDefinition card in CardDatabase.Instance.All)
+            {
+                List<string> lines = new List<string>();
+                if (card.ActiveEffects != null)
+                {
+                    foreach (CardEffect effect in card.ActiveEffects)
+                    {
+                        lines.Add(CardText.Effect(effect));
+                    }
+                }
+
+                if (card.Auras != null)
+                {
+                    foreach (AuraDefinition aura in card.Auras)
+                    {
+                        lines.Add(CardText.Aura(aura));
+                    }
+                }
+
+                if (card.Passives != null)
+                {
+                    foreach (PassiveDefinition passive in card.Passives)
+                    {
+                        lines.Add(CardText.Passive(passive));
+                    }
+                }
+
+                foreach (string line in lines)
+                {
+                    bool mentionsStatus = false;
+                    for (int index = 0; index < mustColour.Length; index++)
+                    {
+                        if (line.Contains(mustColour[index]))
+                        {
+                            mentionsStatus = true;
+                            break;
+                        }
+                    }
+
+                    if (!mentionsStatus)
+                    {
+                        continue;
+                    }
+
+                    Assert(CardKeywords.Colorize(line).Contains("<color="),
+                        string.Concat("Card ", card.Id, " line \"", line, "\" must be coloured."));
+                }
+            }
+
+            Console.WriteLine(string.Concat(
+                "[keywords] count=",
+                CardKeywords.All.Count.ToString(),
+                " damage=",
+                damage));
         }
 
         private static void CheckEventBus()
