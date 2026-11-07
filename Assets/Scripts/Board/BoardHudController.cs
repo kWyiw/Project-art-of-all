@@ -56,6 +56,8 @@ namespace ProjectArtOfAll.Board
         [SerializeField] private Text encounterStakes;
         [SerializeField] private Button encounterAcceptButton;
         [SerializeField] private Text encounterAcceptLabel;
+        [SerializeField] private Button encounterIgnoreButton;
+        [SerializeField] private Text encounterIgnoreLabel;
 
         private bool isOpen;
         private Vector2 animationVelocity;
@@ -66,6 +68,7 @@ namespace ProjectArtOfAll.Board
         private static readonly Color ForkArrowInkColor =
             new Color(0.10f, 0.10f, 0.11f);
         private Action encounterAcceptedHandler;
+        private Action encounterIgnoredHandler;
         private bool encounterVisible;
         private float encounterShownAt;
         private bool encounterButtonBound;
@@ -673,10 +676,15 @@ namespace ProjectArtOfAll.Board
             }
         }
 
+        /// <summary>
+        /// 弹出遭遇战面板。传 <paramref name="onIgnored"/> 时多出「无视，继续走」出口：
+        /// 用于"路过"别的玩家所在的格子（正好落在该格时不能无视）。
+        /// </summary>
         public bool ShowPlayerEncounter(
             MatchPlayerState attacker,
             MatchPlayerState defender,
-            Action onAccepted)
+            Action onAccepted,
+            Action onIgnored = null)
         {
             if (attacker == null)
             {
@@ -696,6 +704,7 @@ namespace ProjectArtOfAll.Board
 
             encounterVisible = true;
             encounterAcceptedHandler = onAccepted;
+            encounterIgnoredHandler = onIgnored;
             encounterShownAt = Time.unscaledTime;
             encounterOverlay.SetActive(true);
             encounterOverlay.transform.SetAsLastSibling();
@@ -709,10 +718,17 @@ namespace ProjectArtOfAll.Board
                 encounterTitle.text = "遭遇战";
             }
 
+            if (encounterIgnoreButton != null)
+            {
+                encounterIgnoreButton.gameObject.SetActive(onIgnored != null);
+                encounterIgnoreButton.interactable = onIgnored != null;
+            }
+
             if (encounterSubtitle != null)
             {
-                encounterSubtitle.text =
-                    $"玩家 {attacker.Id + 1} 与玩家 {defender.Id + 1} 进入同一地块。确认迎战后，战斗立即结算。";
+                encounterSubtitle.text = onIgnored != null
+                    ? $"玩家 {attacker.Id + 1} 经过玩家 {defender.Id + 1} 所在的地块。开战会停在这里结算；无视他就继续走完这一轮。"
+                    : $"玩家 {attacker.Id + 1} 与玩家 {defender.Id + 1} 进入同一地块。确认迎战后，战斗立即结算。";
             }
 
             if (encounterAttackerName != null)
@@ -774,6 +790,7 @@ namespace ProjectArtOfAll.Board
         {
             encounterVisible = false;
             encounterAcceptedHandler = null;
+            encounterIgnoredHandler = null;
             if (encounterOverlay != null)
             {
                 encounterOverlay.SetActive(false);
@@ -846,6 +863,36 @@ namespace ProjectArtOfAll.Board
             accepted?.Invoke();
         }
 
+        private void IgnoreEncounter()
+        {
+            if (!encounterVisible)
+            {
+                return;
+            }
+
+            Action ignored = encounterIgnoredHandler;
+            encounterVisible = false;
+            encounterAcceptedHandler = null;
+            encounterIgnoredHandler = null;
+
+            if (encounterAcceptButton != null)
+            {
+                encounterAcceptButton.interactable = false;
+            }
+
+            if (encounterIgnoreButton != null)
+            {
+                encounterIgnoreButton.interactable = false;
+            }
+
+            if (encounterOverlay != null)
+            {
+                encounterOverlay.SetActive(false);
+            }
+
+            ignored?.Invoke();
+        }
+
         private void RefreshDrawerScrim()
         {
             if (cardDrawerScrim == null)
@@ -896,6 +943,8 @@ namespace ProjectArtOfAll.Board
                 encounterStakes = views.Stakes;
                 encounterAcceptButton = views.AcceptButton;
                 encounterAcceptLabel = views.AcceptLabel;
+                encounterIgnoreButton = views.IgnoreButton;
+                encounterIgnoreLabel = views.IgnoreLabel;
             }
 
             if (homeStopView == null)
@@ -910,6 +959,12 @@ namespace ProjectArtOfAll.Board
                 encounterAcceptButton.onClick.RemoveListener(AcceptEncounter);
                 encounterAcceptButton.onClick.AddListener(AcceptEncounter);
                 encounterButtonBound = true;
+            }
+
+            if (encounterIgnoreButton != null)
+            {
+                encounterIgnoreButton.onClick.RemoveListener(IgnoreEncounter);
+                encounterIgnoreButton.onClick.AddListener(IgnoreEncounter);
             }
 
             if (cardView == null)

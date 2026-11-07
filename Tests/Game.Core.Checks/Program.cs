@@ -43,6 +43,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckSceneMapTeleport();
                 CheckFirstMoveFromHome();
                 CheckEarlyHomeStop();
+                CheckPassThroughOpponent();
                 CheckShopTile();
                 CheckCpuAi();
                 CheckM3FullMatch();
@@ -1759,6 +1760,72 @@ namespace ProjectArtOfAll.Core.Checks
                 "[homestop] roll=" + rollValue.ToString()
                 + " steps=" + steps.ToString()
                 + " home=" + player.HomeNode.ToString());
+        }
+
+        private static void CheckPassThroughOpponent()
+        {
+            // 8 格环：节点 0..3 是四个家（玩家 0..3 各占一个），4..7 是空地。
+            // 玩家 0 从家出发时，节点 1/2/3 上分别站着玩家 1/2/3。
+            MapNode[] nodes = new MapNode[8];
+            for (int index = 0; index < nodes.Length; index++)
+            {
+                bool isHome = index < 4;
+                nodes[index] = new MapNode(
+                    index,
+                    isHome ? TileType.Home : TileType.Neutral,
+                    isHome ? index : -1,
+                    (index + 1) % nodes.Length);
+            }
+
+            MapGraph graph = MapGraph.Create(nodes, playerCount: 4);
+
+            // 不带 TargetNodeId：走满 5 步，路过玩家 1/2/3 的地块也不开打。
+            MatchController walker = FindRollingController(graph, 5);
+            Assert(walker != null, "Some seed must roll a 5 for the pass-through probe.");
+
+            MatchPlayerState mover = walker.State.CurrentPlayer;
+            Assert(mover.Id == 0, "The free-walk probe expects player 1 to take the first turn.");
+            Assert(mover.CurrentNode == 0, "The free-walk probe expects player 1 to start on Home.");
+
+            walker.Submit(new MoveCommand(mover.Id, null));
+            Assert(
+                mover.CurrentNode == 5,
+                "Ignoring an opponent must keep walking to the rolled destination, landed at "
+                    + mover.CurrentNode.ToString() + ".");
+            Assert(
+                !walker.Events.History.OfType<CombatResolvedEvent>().Any(),
+                "Walking through an occupied tile must not resolve a fight.");
+
+            // 带 TargetNodeId：停在被别人占住的格子上才结算战斗。
+            MatchController brawl = FindRollingController(graph, 3);
+            Assert(brawl != null, "Some seed must roll a 3 for the landing probe.");
+
+            MatchPlayerState attacker = brawl.State.CurrentPlayer;
+            brawl.Submit(new MoveCommand(attacker.Id, 3));
+            CombatResolvedEvent fight = brawl.Events.History
+                .OfType<CombatResolvedEvent>()
+                .FirstOrDefault();
+            Assert(fight != null, "Stopping on an occupied tile must resolve a fight.");
+            Assert(
+                fight.AttackerId == attacker.Id && fight.DefenderId == 3,
+                "The landing fight must be against the player standing on that tile.");
+
+            Console.WriteLine("[passthrough] walk-through stays open, landing on 3 fights player 4");
+        }
+
+        private static MatchController FindRollingController(MapGraph graph, int roll)
+        {
+            for (ulong seed = 1; seed <= 400; seed++)
+            {
+                MatchController controller = new MatchController(graph, seed);
+                controller.Submit(new RollCommand(controller.State.CurrentPlayer.Id));
+                if (controller.State.LastRoll == roll)
+                {
+                    return controller;
+                }
+            }
+
+            return null;
         }
 
         private static void CheckSceneMapTeleport()

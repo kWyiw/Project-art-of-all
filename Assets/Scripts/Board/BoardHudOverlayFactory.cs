@@ -18,7 +18,9 @@ namespace ProjectArtOfAll.Board
             Text defenderLoadout,
             Text stakes,
             Button acceptButton,
-            Text acceptLabel)
+            Text acceptLabel,
+            Button ignoreButton,
+            Text ignoreLabel)
         {
             Overlay = overlay;
             Panel = panel;
@@ -33,6 +35,8 @@ namespace ProjectArtOfAll.Board
             Stakes = stakes;
             AcceptButton = acceptButton;
             AcceptLabel = acceptLabel;
+            IgnoreButton = ignoreButton;
+            IgnoreLabel = ignoreLabel;
         }
 
         public GameObject Overlay { get; }
@@ -48,6 +52,8 @@ namespace ProjectArtOfAll.Board
         public Text Stakes { get; }
         public Button AcceptButton { get; }
         public Text AcceptLabel { get; }
+        public Button IgnoreButton { get; }
+        public Text IgnoreLabel { get; }
     }
 
     public sealed class BoardHudCardDrawerView
@@ -403,6 +409,21 @@ namespace ProjectArtOfAll.Board
                 new Vector2(164f, 54f),
                 out Text acceptLabel);
 
+            Button ignoreButton = CreateButton(
+                panel,
+                "IgnoreButton",
+                "无视，继续走",
+                font,
+                new Vector2(556f, -398f),
+                new Vector2(164f, 54f),
+                out Text ignoreLabel);
+            Image ignoreImage = ignoreButton.GetComponent<Image>();
+            ignoreImage.color = new Color(0.22f, 0.24f, 0.25f, 1f);
+            Outline ignoreOutline = ignoreButton.GetComponent<Outline>();
+            ignoreOutline.effectColor = new Color(0.60f, 0.64f, 0.60f, 0.55f);
+            ignoreLabel.color = new Color(0.90f, 0.90f, 0.86f, 1f);
+            ignoreButton.gameObject.SetActive(false);
+
             overlay.SetActive(false);
             return new BoardHudEncounterViews(
                 overlay,
@@ -417,7 +438,9 @@ namespace ProjectArtOfAll.Board
                 defenderLoadout,
                 stakes,
                 acceptButton,
-                acceptLabel);
+                acceptLabel,
+                ignoreButton,
+                ignoreLabel);
         }
 
         public static BoardHudCardDrawerView CreateCardDrawerView(

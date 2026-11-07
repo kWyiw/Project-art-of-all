@@ -470,6 +470,43 @@ namespace ProjectArtOfAll.Board
                     continue;
                 }
 
+                // 只是路过（不是正好落在这一格）：给一次「开战 / 无视」的选择。
+                // 无视就继续走完这一轮，并且不给内核 TargetNodeId——
+                // 内核只在带 TargetNodeId 的 MoveCommand 上结算玩家战斗。
+                if (!automaticTurn && step + 1 < steps && hud != null)
+                {
+                    bool fight = true;
+                    bool answered = false;
+                    if (hud.ShowPlayerEncounter(
+                            movingPlayer,
+                            defender,
+                            () =>
+                            {
+                                fight = true;
+                                answered = true;
+                            },
+                            () =>
+                            {
+                                fight = false;
+                                answered = true;
+                            }))
+                    {
+                        while (!answered)
+                        {
+                            yield return null;
+                        }
+                    }
+
+                    if (!fight)
+                    {
+                        continue;
+                    }
+
+                    targetNodeId = current;
+                    UpdateHudStatus("停下开战  ·  玩家 " + (defender.Id + 1).ToString());
+                    break;
+                }
+
                 encounterNode = current;
                 if (!automaticTurn && hud != null)
                 {
