@@ -371,6 +371,7 @@ namespace ProjectArtOfAll.Board
         private const string PoisonColor = "#83CF6B";
         private const string BurnColor = "#EF9152";
         private const string HealColor = "#8FDC9F";
+        private const string RegenerationColor = "#6FE3B4";
         private const string CooldownColor = "#6EC6E6";
         private const string SlowColor = "#7EA7EC";
         private const string MultiplyColor = "#BE8CEB";
@@ -379,8 +380,8 @@ namespace ProjectArtOfAll.Board
 
         private static readonly string[] KeywordOrder =
         {
-            "生命再生", "多重释放", "额外施放", "骰值", "骰数", "剧毒", "中毒", "灼烧", "燃烧",
-            "护盾", "格挡", "治疗", "充能", "加速", "缓速", "摧毁", "价值", "修正"
+            "生命再生", "再生", "多重释放", "额外施放", "骰值", "骰数", "剧毒", "中毒", "灼烧", "燃烧",
+            "护盾", "格挡", "治疗", "充能", "加速", "缓速", "摧毁", "销毁", "价值", "修正"
         };
 
         private static readonly Dictionary<string, string> KeywordColors =
@@ -392,6 +393,7 @@ namespace ProjectArtOfAll.Board
                 { "骰值", DiceColor },
                 { "骰数", DiceColor },
                 { "修正", DiceColor },
+                { "再生", RegenerationColor },
                 { "剧毒", PoisonColor },
                 { "中毒", PoisonColor },
                 { "灼烧", BurnColor },
@@ -403,6 +405,7 @@ namespace ProjectArtOfAll.Board
                 { "加速", CooldownColor },
                 { "缓速", SlowColor },
                 { "摧毁", "#9C9A92" },
+                { "销毁", "#9C9A92" },
                 { "价值", ValueColor },
                 { "伤害", DamageColor }
             };
