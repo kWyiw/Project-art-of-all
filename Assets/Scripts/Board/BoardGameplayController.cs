@@ -357,6 +357,7 @@ namespace ProjectArtOfAll.Board
             int previous = movingPlayer.LastArrivalNode;
             List<int> forkDirections = new List<int>();
             int encounterNode = -1;
+            bool avoidEncounter = false;
             int[] plannedForks = plan != null ? plan.ForkDirections : null;
             int plannedForkCursor = 0;
             int targetNodeId = plan != null ? plan.NodeId : -1;
@@ -508,18 +509,42 @@ namespace ProjectArtOfAll.Board
                     break;
                 }
 
+                // 正好停在别人所在的格子上：应战之外还给一个「避开」——不结算战斗、两人同格（R-MOVE-009）。
                 encounterNode = current;
                 if (!automaticTurn && hud != null)
                 {
+                    bool avoid = false;
                     awaitingEncounterAcceptance = hud.ShowPlayerEncounter(
                         movingPlayer,
                         defender,
-                        () => awaitingEncounterAcceptance = false);
-                }
+                        () =>
+                        {
+                            avoid = false;
+                            awaitingEncounterAcceptance = false;
+                        },
+                        () =>
+                        {
+                            avoid = true;
+                            awaitingEncounterAcceptance = false;
+                        },
+                        "避开",
+                        string.Concat(
+                            "玩家 ",
+                            (movingPlayer.Id + 1).ToString(),
+                            " 停在玩家 ",
+                            (defender.Id + 1).ToString(),
+                            " 所在的地块。开战会立刻结算这场战斗；避开则两人同格，这一轮就结束。"));
+                    while (awaitingEncounterAcceptance)
+                    {
+                        yield return null;
+                    }
 
-                while (awaitingEncounterAcceptance)
-                {
-                    yield return null;
+                    avoidEncounter = avoid;
+                    if (avoid)
+                    {
+                        UpdateHudStatus(
+                            "避开  ·  玩家 " + (defender.Id + 1).ToString() + "  ·  两人同格");
+                    }
                 }
 
                 break;
@@ -534,7 +559,8 @@ namespace ProjectArtOfAll.Board
                     targetNodeId: targetNodeId >= 0
                         ? targetNodeId
                         : encounterNode >= 0 ? encounterNode : (int?)null,
-                    forkDirections: forkDirections));
+                    forkDirections: forkDirections,
+                    avoidEncounter: avoidEncounter));
 
             PlayerTeleportedEvent teleport = match.Events.History
                 .Skip(eventStart)

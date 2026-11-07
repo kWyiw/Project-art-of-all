@@ -680,14 +680,16 @@ namespace ProjectArtOfAll.Board
         }
 
         /// <summary>
-        /// 弹出遭遇战面板。传 <paramref name="onIgnored"/> 时多出「无视，继续走」出口：
-        /// 用于"路过"别的玩家所在的格子（正好落在该格时不能无视）。
+        /// 弹出遭遇战面板。传 <paramref name="onIgnored"/> 时多出第二个出口：
+        /// 「无视，继续走」用于路过别人所在的格子；「避开」用于正好停在该格（不结算战斗、两人同格）。
         /// </summary>
         public bool ShowPlayerEncounter(
             MatchPlayerState attacker,
             MatchPlayerState defender,
             Action onAccepted,
-            Action onIgnored = null)
+            Action onIgnored = null,
+            string ignoreLabel = null,
+            string subtitle = null)
         {
             if (attacker == null)
             {
@@ -727,11 +729,20 @@ namespace ProjectArtOfAll.Board
                 encounterIgnoreButton.interactable = onIgnored != null;
             }
 
+            if (encounterIgnoreLabel != null && onIgnored != null)
+            {
+                encounterIgnoreLabel.text = string.IsNullOrEmpty(ignoreLabel)
+                    ? "无视，继续走"
+                    : ignoreLabel;
+            }
+
             if (encounterSubtitle != null)
             {
-                encounterSubtitle.text = onIgnored != null
-                    ? $"玩家 {attacker.Id + 1} 经过玩家 {defender.Id + 1} 所在的地块。开战会停在这里结算；无视他就继续走完这一轮。"
-                    : $"玩家 {attacker.Id + 1} 与玩家 {defender.Id + 1} 进入同一地块。确认迎战后，战斗立即结算。";
+                encounterSubtitle.text = !string.IsNullOrEmpty(subtitle)
+                    ? subtitle
+                    : onIgnored != null
+                        ? $"玩家 {attacker.Id + 1} 经过玩家 {defender.Id + 1} 所在的地块。开战会停在这里结算；无视他就继续走完这一轮。"
+                        : $"玩家 {attacker.Id + 1} 与玩家 {defender.Id + 1} 进入同一地块。确认迎战后，战斗立即结算。";
             }
 
             if (encounterAttackerName != null)

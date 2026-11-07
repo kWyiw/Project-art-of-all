@@ -1813,7 +1813,28 @@ namespace ProjectArtOfAll.Core.Checks
                 fight.AttackerId == attacker.Id && fight.DefenderId == 3,
                 "The landing fight must be against the player standing on that tile.");
 
-            Console.WriteLine("[passthrough] walk-through stays open, landing on 3 fights player 4");
+            // 正好落在别人格子上时也能「避开」：不结算战斗，两人同格（R-MOVE-009）。
+            MatchController dodge = FindRollingController(graph, 3);
+            Assert(dodge != null, "Some seed must roll a 3 for the avoid probe.");
+
+            MatchPlayerState dodger = dodge.State.CurrentPlayer;
+            dodge.Submit(new MoveCommand(dodger.Id, 3, avoidEncounter: true));
+            Assert(
+                dodger.CurrentNode == 3,
+                "Avoiding must still finish the walk on the occupied tile, landed at "
+                    + dodger.CurrentNode.ToString() + ".");
+            Assert(
+                !dodge.Events.History.OfType<CombatResolvedEvent>().Any(),
+                "Avoiding an opponent must not resolve a fight.");
+            Assert(
+                dodge.State.Players.Count(other => other.CurrentNode == 3) == 2,
+                "Avoiding must leave both players on the same tile.");
+            Assert(
+                dodge.State.Phase == MatchPhase.AwaitRoll,
+                "Avoiding must end the turn instead of reopening the movement.");
+
+            Console.WriteLine(
+                "[passthrough] walk-through stays open, landing on 3 fights player 4, avoid sticks");
         }
 
         /// <summary>

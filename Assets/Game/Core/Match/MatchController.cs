@@ -243,7 +243,7 @@ namespace ProjectArtOfAll.Core.Match
                 fromNode = nextNode;
             }
 
-            if (command.TargetNodeId.HasValue)
+            if (command.TargetNodeId.HasValue && !command.AvoidEncounter)
             {
                 ResolvePlayerEncounter(player, player.CurrentNode);
             }

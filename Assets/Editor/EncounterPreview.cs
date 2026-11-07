@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 把遭遇战面板（带「无视，继续走」出口的版本）单独渲染成 PNG，用来检查两个按钮的排布。
+/// 把遭遇战面板渲染成 PNG（两个出口：路过用「无视，继续走」，停在别人格上用「避开」）。
 /// 用法：菜单 Tools/Preview Encounter Prompt，或批处理
 /// `Unity.exe -batchmode -quit -projectPath . -executeMethod EncounterPreview.RenderBatch`。
 /// </summary>
@@ -18,15 +18,17 @@ public static class EncounterPreview
     [MenuItem("Tools/Preview Encounter Prompt")]
     public static void RenderFromMenu()
     {
-        Render("_tmp/encounter_preview.png");
+        Render("_tmp/encounter_preview.png", false);
+        Render("_tmp/encounter_landing_preview.png", true);
     }
 
     public static void RenderBatch()
     {
-        Render("_tmp/encounter_preview.png");
+        Render("_tmp/encounter_preview.png", false);
+        Render("_tmp/encounter_landing_preview.png", true);
     }
 
-    private static void Render(string path)
+    private static void Render(string path, bool landing)
     {
         GameObject cameraObject = new GameObject("PreviewCamera", typeof(Camera));
         Camera camera = cameraObject.GetComponent<Camera>();
@@ -79,8 +81,9 @@ public static class EncounterPreview
             BoardHudOverlayFactory.CreateEncounterOverlay(canvasRect, font);
         view.Overlay.SetActive(true);
 
-        view.Subtitle.text =
-            "玩家 1 经过玩家 2 所在的地块。开战会停在这里结算；无视他就继续走完这一轮。";
+        view.Subtitle.text = landing
+            ? "玩家 1 停在玩家 2 所在的地块。开战会立刻结算这场战斗；避开则两人同格，这一轮就结束。"
+            : "玩家 1 经过玩家 2 所在的地块。开战会停在这里结算；无视他就继续走完这一轮。";
         view.AttackerName.text = "玩家 1";
         view.AttackerStats.text = "Lv.3 · 装配 6c · 碎片 12 · 胜场 1";
         view.AttackerLoadout.text = "撬棍 1c · 核废水 2c · 压缩饼干 1c · 汽车门板 2c";
@@ -88,7 +91,7 @@ public static class EncounterPreview
         view.DefenderStats.text = "Lv.4 · 装配 5c · 碎片 8 · 胜场 2";
         view.DefenderLoadout.text = "打火机 1c · 油桶 2c · 燃烧瓶 1c · 雪水净化器 1c";
         view.AcceptLabel.text = "开战";
-        view.IgnoreLabel.text = "无视，继续走";
+        view.IgnoreLabel.text = landing ? "避开" : "无视，继续走";
         view.IgnoreButton.gameObject.SetActive(true);
         view.IgnoreButton.interactable = true;
 

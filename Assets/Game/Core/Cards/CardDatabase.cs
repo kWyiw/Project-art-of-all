@@ -88,7 +88,6 @@ namespace ProjectArtOfAll.Core.Cards
         {
             const CardScope battle = CardScope.BattleOnly;
             const CardScope both = CardScope.BagAndBattle;
-            const CardScope bag = CardScope.BagOnly;
 
             return new[]
             {
