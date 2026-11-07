@@ -234,16 +234,16 @@ namespace ProjectArtOfAll.Core.Cards
                     effects: new[] { Heal(1, 20) }),
 
                 Card(
-                    "fresh_water", "淡水", 1, 5, CardTag.Waste, 0, both,
+                    "fresh_water", "淡水", 1, 5, CardTag.Waste, 0, battle,
                     effects: new[] { Heal(1, 4) }),
 
                 // ── 二、食物 / 伙伴（7 张） ────────────────────────────────────────
                 Card(
-                    "mineral_water", "矿泉水", 1, 3, CardTag.Food, 1, both,
+                    "mineral_water", "矿泉水", 1, 3, CardTag.Food, 1, battle,
                     effects: new[] { Heal(1, 6) }),
 
                 Card(
-                    "chocolate", "巧克力", 1, 5, CardTag.Food, 1, both,
+                    "chocolate", "巧克力", 1, 5, CardTag.Food, 1, battle,
                     effects: new[]
                     {
                         Haste(2, 1),
@@ -251,11 +251,11 @@ namespace ProjectArtOfAll.Core.Cards
                     }),
 
                 Card(
-                    "hardtack", "压缩饼干", 1, 3, CardTag.Food, 1, both,
+                    "hardtack", "压缩饼干", 1, 3, CardTag.Food, 1, battle,
                     effects: new[] { Status(EffectOp.ApplyRegeneration, 1, 4) }),
 
                 Card(
-                    "baguette", "法棍", 1, 6, CardTag.Food | CardTag.Weapon, 1, both,
+                    "baguette", "法棍", 1, 6, CardTag.Food | CardTag.Weapon, 1, battle,
                     effects: new[]
                     {
                         Damage(1, 6),
@@ -263,7 +263,7 @@ namespace ProjectArtOfAll.Core.Cards
                     }),
 
                 Card(
-                    "dorayaki", "铜锣烧", 1, 6, CardTag.Food, 1, both,
+                    "dorayaki", "铜锣烧", 1, 6, CardTag.Food, 1, battle,
                     effects: new[]
                     {
                         new CardEffect(

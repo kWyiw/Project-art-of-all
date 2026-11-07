@@ -369,6 +369,19 @@ namespace ProjectArtOfAll.Core.Checks
                 "A card with a cooldown and effects must cast on its own.");
             Assert(catalog.All.Select(card => card.Id).Distinct().Count() == 30,
                 "Card ids must be unique.");
+
+            // 一次性消耗品只在战斗里生效：背包里不该有回血、回再生这类效果。
+            foreach (string id in new[]
+                     {
+                         "fresh_water", "mineral_water", "chocolate", "hardtack", "baguette", "dorayaki"
+                     })
+            {
+                Assert(catalog.Get(id).Scope == CardScope.BattleOnly,
+                    string.Concat(id, " is a consumable and must only work in battle."));
+            }
+
+            Assert(catalog.Get("recycler").Scope == CardScope.BagAndBattle,
+                "The recycler keeps working while it sits in the bag.");
         }
 
         private static void CheckEventBus()

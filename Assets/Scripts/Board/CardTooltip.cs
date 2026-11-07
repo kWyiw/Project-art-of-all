@@ -94,9 +94,7 @@ namespace ProjectArtOfAll.Board
             string meta = string.Concat(
                 CardText.Meta(card),
                 " · 价值 ",
-                card.Value.ToString(),
-                " · ",
-                CardTooltipText.ScopeLabel(card.Scope));
+                card.Value.ToString());
             AddText("Meta", meta, 24, MetaColor, FontStyle.Normal, 0f,
                 contentWidth, 0f, TextAnchor.UpperLeft);
 
@@ -484,20 +482,6 @@ namespace ProjectArtOfAll.Board
             return builder.ToString();
         }
 
-        public static string ScopeLabel(CardScope scope)
-        {
-            switch (scope)
-            {
-                case CardScope.BattleOnly:
-                    return "仅战斗生效";
-                case CardScope.BagAndBattle:
-                    return "战斗与背包均可用";
-                case CardScope.BagOnly:
-                    return "仅背包生效";
-                default:
-                    return string.Empty;
-            }
-        }
 
         public static List<string> Glossary(CardDefinition card)
         {
