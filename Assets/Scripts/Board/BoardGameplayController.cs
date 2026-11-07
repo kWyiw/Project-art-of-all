@@ -432,6 +432,36 @@ namespace ProjectArtOfAll.Board
                     break;
                 }
 
+                // R-HOME-002：经过自家 Home 时给一次"停步做升级结算"的选择。
+                // 停下就放弃这一轮剩余的点数——内核走 TargetNodeId 重放这条更短的路径
+                // （MoveCommand 的候选本来就包含任意步数可达的自家 Home）。
+                if (!automaticTurn &&
+                    step + 1 < steps &&
+                    current == movingPlayer.HomeNode)
+                {
+                    bool homeStopAnswered = false;
+                    bool stopAtHome = false;
+                    if (hud != null &&
+                        hud.ShowHomeStopPrompt(value =>
+                        {
+                            stopAtHome = value;
+                            homeStopAnswered = true;
+                        }))
+                    {
+                        while (!homeStopAnswered)
+                        {
+                            yield return null;
+                        }
+                    }
+
+                    if (stopAtHome)
+                    {
+                        targetNodeId = current;
+                        UpdateHudStatus("停在自己的家  ·  升级结算");
+                        break;
+                    }
+                }
+
                 MatchPlayerState defender = FindPlayerAtNode(
                     current,
                     movingPlayer.Id);

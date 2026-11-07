@@ -72,6 +72,8 @@ namespace ProjectArtOfAll.Board
         private BoardHudCardDrawerView cardView;
         private CardBandController cardBand;
         private BoardHudCombatResultView combatResultView;
+        private BoardHomeStopView homeStopView;
+        private Action<bool> homeStopHandler;
         private BoardHudRewardChoiceView rewardView;
         private BoardHudShopView shopView;
         private Action<int> shopBuyHandler;
@@ -117,6 +119,7 @@ namespace ProjectArtOfAll.Board
 
             HideForkChoices();
             HideEncounter();
+            HideHomeStopPrompt();
             RefreshDrawerScrim();
             GameSettings.Changed -= OnGameSettingsChanged;
             GameSettings.Changed += OnGameSettingsChanged;
@@ -606,6 +609,48 @@ namespace ProjectArtOfAll.Board
             }
         }
 
+        /// <summary>
+        /// 经过自家 Home 时询问是否停步（R-HOME-002）。
+        /// 返回 false 表示浮层不可用，调用方应当按"不停"处理。
+        /// </summary>
+        public bool ShowHomeStopPrompt(Action<bool> onChosen)
+        {
+            EnsureOverlayViews();
+            if (homeStopView == null ||
+                homeStopView.Overlay == null ||
+                homeStopView.StopButton == null ||
+                homeStopView.ContinueButton == null)
+            {
+                return false;
+            }
+
+            homeStopHandler = onChosen;
+            homeStopView.Overlay.SetActive(true);
+            homeStopView.Overlay.transform.SetAsLastSibling();
+
+            homeStopView.StopButton.onClick.RemoveAllListeners();
+            homeStopView.StopButton.onClick.AddListener(() => ResolveHomeStop(true));
+            homeStopView.ContinueButton.onClick.RemoveAllListeners();
+            homeStopView.ContinueButton.onClick.AddListener(() => ResolveHomeStop(false));
+            return true;
+        }
+
+        public void HideHomeStopPrompt()
+        {
+            homeStopHandler = null;
+            if (homeStopView != null && homeStopView.Overlay != null)
+            {
+                homeStopView.Overlay.SetActive(false);
+            }
+        }
+
+        private void ResolveHomeStop(bool stop)
+        {
+            Action<bool> handler = homeStopHandler;
+            HideHomeStopPrompt();
+            handler?.Invoke(stop);
+        }
+
         public void HideForkChoices()
         {
             forkArrowsVisible = false;
@@ -851,6 +896,13 @@ namespace ProjectArtOfAll.Board
                 encounterStakes = views.Stakes;
                 encounterAcceptButton = views.AcceptButton;
                 encounterAcceptLabel = views.AcceptLabel;
+            }
+
+            if (homeStopView == null)
+            {
+                homeStopView = BoardHudOverlayFactory.CreateHomeStopView(
+                    transform,
+                    font);
             }
 
             if (encounterAcceptButton != null && !encounterButtonBound)

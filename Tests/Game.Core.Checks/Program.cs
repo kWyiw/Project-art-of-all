@@ -42,6 +42,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckFreeActionsDuringAnotherTurn();
                 CheckSceneMapTeleport();
                 CheckFirstMoveFromHome();
+                CheckEarlyHomeStop();
                 CheckShopTile();
                 CheckCpuAi();
                 CheckM3FullMatch();
@@ -1681,6 +1682,83 @@ namespace ProjectArtOfAll.Core.Checks
                 "[firstmove] home=" + home.ToString()
                 + " forced=" + expected.ToString()
                 + " stops=" + controller.CurrentCandidates.Count.ToString());
+        }
+
+        private static void CheckEarlyHomeStop()
+        {
+            // 四个家首尾相接：任何一次 >= 5 点的掷骰都会路过自家 Home，
+            // 用来验证 R-HOME-002 的"经过自家 Home 可以提前停步"。
+            MapGraph graph = MapGraph.Create(
+                new[]
+                {
+                    new MapNode(0, TileType.Home, 0, 1),
+                    new MapNode(1, TileType.Home, 1, 2),
+                    new MapNode(2, TileType.Home, 2, 3),
+                    new MapNode(3, TileType.Home, 3, 0)
+                },
+                playerCount: 4);
+
+            MatchController match = null;
+            MovementCandidate stop = null;
+            for (ulong seed = 1; seed <= 200 && stop == null; seed++)
+            {
+                MatchController probe = new MatchController(graph, seed);
+                MatchPlayerState probePlayer = probe.State.CurrentPlayer;
+                Assert(
+                    probePlayer.CurrentNode == probePlayer.HomeNode,
+                    "The probe player must start on their own Home.");
+                probe.Submit(new RollCommand(probePlayer.Id));
+
+                int roll = probe.State.LastRoll;
+                foreach (MovementCandidate candidate in probe.CurrentCandidates)
+                {
+                    if (candidate.TargetNodeId == probePlayer.HomeNode &&
+                        candidate.Steps < roll)
+                    {
+                        match = probe;
+                        stop = candidate;
+                        break;
+                    }
+                }
+            }
+
+            Assert(
+                match != null && stop != null,
+                "Some roll must offer an early stop on the player's own Home.");
+
+            MatchPlayerState player = match.State.CurrentPlayer;
+            int rollValue = match.State.LastRoll;
+            int steps = stop.Steps;
+            Assert(
+                steps < rollValue,
+                "The early stop must cost fewer steps than the rolled value.");
+
+            match.Submit(new MoveCommand(player.Id, stop.TargetNodeId));
+
+            List<PlayerMovedEvent> walked = match.Events.History
+                .OfType<PlayerMovedEvent>()
+                .Where(moved => moved.PlayerId == player.Id)
+                .ToList();
+
+            Assert(
+                walked.Count == steps,
+                "Stopping early on Home must walk exactly "
+                    + steps.ToString() + " steps, walked "
+                    + walked.Count.ToString() + ".");
+            Assert(
+                walked.Count < rollValue,
+                "Stopping early on Home must give up the remaining steps.");
+            Assert(
+                player.CurrentNode == player.HomeNode,
+                "The early stop must leave the player on their own Home.");
+            Assert(
+                match.State.Phase == MatchPhase.AwaitRoll,
+                "An early stop must end the turn instead of waiting for more movement.");
+
+            Console.WriteLine(
+                "[homestop] roll=" + rollValue.ToString()
+                + " steps=" + steps.ToString()
+                + " home=" + player.HomeNode.ToString());
         }
 
         private static void CheckSceneMapTeleport()
