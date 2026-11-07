@@ -43,11 +43,10 @@ namespace ProjectArtOfAll.Core.Combat
 
             List<CombatCardRuntime> activeCards = side.Cards
                 .Where(card => !card.IsDestroyed)
-                .OrderBy(card => card.SlotIndex)
+                .OrderBy(card => card.Column)
                 .ToList();
 
-            int targetIndex = activeCards.IndexOf(target);
-            if (targetIndex < 0)
+            if (!activeCards.Contains(target))
             {
                 return 0;
             }
@@ -58,7 +57,7 @@ namespace ProjectArtOfAll.Core.Combat
                 foreach (AuraDefinition aura in source.Definition.Auras)
                 {
                     if (aura.Stat != stat ||
-                        !Targets(aura, source, target, targetIndex, activeCards))
+                        !Targets(aura, source, target))
                     {
                         continue;
                     }
@@ -84,9 +83,7 @@ namespace ProjectArtOfAll.Core.Combat
         private static bool Targets(
             AuraDefinition aura,
             CombatCardRuntime source,
-            CombatCardRuntime target,
-            int targetIndex,
-            IReadOnlyList<CombatCardRuntime> activeCards)
+            CombatCardRuntime target)
         {
             if (aura.RequiredTag != CardTag.None &&
                 !target.Definition.HasTag(aura.RequiredTag))
@@ -105,16 +102,12 @@ namespace ProjectArtOfAll.Core.Combat
                 case AuraTarget.Self:
                     return source == target;
                 case AuraTarget.AdjacentLeft:
-                    // 目标是源卡的左邻：源卡恰好在 target 的右边一格。
-                    return targetIndex + 1 < activeCards.Count &&
-                           activeCards[targetIndex + 1] == source;
+                    // 目标是源卡的左邻：两张牌的列号紧贴（中间留空就不算相邻）。
+                    return target.IsImmediatelyLeftOf(source);
                 case AuraTarget.AdjacentRight:
-                    // 目标是源卡的右邻：源卡恰好在 target 的左边一格。
-                    return targetIndex > 0 && activeCards[targetIndex - 1] == source;
+                    return target.IsImmediatelyRightOf(source);
                 case AuraTarget.AllAdjacent:
-                    return (targetIndex > 0 && activeCards[targetIndex - 1] == source) ||
-                           (targetIndex + 1 < activeCards.Count &&
-                            activeCards[targetIndex + 1] == source);
+                    return target.IsAdjacentTo(source);
                 case AuraTarget.AllByTag:
                     return true;
                 default:
@@ -127,34 +120,19 @@ namespace ProjectArtOfAll.Core.Combat
             CardTag requiredTag,
             IReadOnlyList<CombatCardRuntime> activeCards)
         {
-            int sourceIndex = -1;
-            for (int index = 0; index < activeCards.Count; index++)
-            {
-                if (activeCards[index] == source)
-                {
-                    sourceIndex = index;
-                    break;
-                }
-            }
-
-            if (sourceIndex < 0)
-            {
-                return 0;
-            }
-
             int count = 0;
-            if (sourceIndex > 0 &&
-                (requiredTag == CardTag.None ||
-                 activeCards[sourceIndex - 1].Definition.HasTag(requiredTag)))
+            foreach (CombatCardRuntime candidate in activeCards)
             {
-                count++;
-            }
+                if (!candidate.IsAdjacentTo(source))
+                {
+                    continue;
+                }
 
-            if (sourceIndex + 1 < activeCards.Count &&
-                (requiredTag == CardTag.None ||
-                 activeCards[sourceIndex + 1].Definition.HasTag(requiredTag)))
-            {
-                count++;
+                if (requiredTag == CardTag.None ||
+                    candidate.Definition.HasTag(requiredTag))
+                {
+                    count++;
+                }
             }
 
             return count;

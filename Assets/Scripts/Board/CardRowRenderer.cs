@@ -210,6 +210,13 @@ namespace ProjectArtOfAll.Board
         }
 
         /// <summary>相邻加成的角标文字：骰值 +N / 额外 N 颗骰 / MAX。</summary>
+        /// <summary>第 column 格左边缘在行内的 x（行 pivot 在左上）。</summary>
+        public float ColumnX(int column)
+        {
+            return RowInset + column * (SlotWidth + SlotGap);
+        }
+
+        /// <summary>按"连续摆放"的旧口径算角标：内部先打包成列位再求值。</summary>
         public static string BonusBadge(IReadOnlyList<CardInstance> rowCards, int rowIndex)
         {
             if (rowCards == null || rowIndex < 0 || rowIndex >= rowCards.Count)
@@ -217,9 +224,21 @@ namespace ProjectArtOfAll.Board
                 return null;
             }
 
-            int dice = LoadoutPreview.DiceModifier(rowCards, rowIndex);
-            int extra = LoadoutPreview.BonusDice(rowCards, rowIndex);
-            bool maxRoll = LoadoutPreview.HasMaxRoll(rowCards, rowIndex);
+            IReadOnlyList<CardSlot> slots = CardSlotRules.Unpack(rowCards);
+            return rowIndex >= slots.Count ? null : BonusBadge(slots, rowCards[rowIndex].Uid);
+        }
+
+        /// <summary>按栏位列位算角标：中间留空就不相邻，加成自然掉（R-CARD-011）。</summary>
+        public static string BonusBadge(IReadOnlyList<CardSlot> slots, int cardUid)
+        {
+            if (slots == null)
+            {
+                return null;
+            }
+
+            int dice = LoadoutPreview.DiceModifier(slots, cardUid);
+            int extra = LoadoutPreview.BonusDice(slots, cardUid);
+            bool maxRoll = LoadoutPreview.HasMaxRoll(slots, cardUid);
             if (dice == 0 && extra == 0 && !maxRoll)
             {
                 return null;

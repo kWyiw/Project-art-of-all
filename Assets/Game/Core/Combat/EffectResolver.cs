@@ -302,15 +302,12 @@ namespace ProjectArtOfAll.Core.Combat
         {
             IReadOnlyList<CombatCardRuntime> active = owner.ActiveCards();
             List<CombatCardRuntime> result = new List<CombatCardRuntime>(2);
-            int index = active.ToList().IndexOf(card);
-            if (index > 0)
+            foreach (CombatCardRuntime candidate in active)
             {
-                result.Add(active[index - 1]);
-            }
-
-            if (index >= 0 && index + 1 < active.Count)
-            {
-                result.Add(active[index + 1]);
+                if (candidate.IsAdjacentTo(card))
+                {
+                    result.Add(candidate);
+                }
             }
 
             return result;

@@ -6,10 +6,15 @@ using ProjectArtOfAll.Core.Util;
 
 namespace ProjectArtOfAll.Core.Match
 {
+    /// <summary>
+    /// 玩家持有的牌。背包与战斗各是一排栏位，每张牌占连续的 SlotSize 个格子，
+    /// 牌与牌之间允许留空：玩家可以把牌放在任意合法空位，从而主动拆散相邻关系，
+    /// 或者刻意把两张牌贴在一起吃相邻光环（R-AURA-001 / UI 规格 §3.2）。
+    /// </summary>
     internal sealed class PlayerCardCollection
     {
-        private readonly List<CardInstance> ownedCards = new List<CardInstance>();
-        private readonly List<int> battleOrder = new List<int>();
+        private readonly List<CardSlot> bagSlots = new List<CardSlot>();
+        private readonly List<CardSlot> battleSlots = new List<CardSlot>();
 
         public PlayerCardCollection(
             IEnumerable<CardInstance> startingCards,
@@ -20,50 +25,115 @@ namespace ProjectArtOfAll.Core.Match
                 throw new ArgumentNullException(nameof(startingCards));
             }
 
+            int bagColumn = 0;
             foreach (CardInstance card in startingCards)
             {
-                if (!TryAddCard(card))
+                if (card == null)
+                {
+                    continue;
+                }
+
+                int column = CardSlotRules.FindFreeColumn(
+                    bagSlots,
+                    card.Definition.SlotSize,
+                    LoadoutRules.BagCapacity,
+                    preferredColumn: bagColumn);
+                if (column < 0 || !TryPlace(bagSlots, card, column))
                 {
                     throw new InvalidOperationException(
                         "The starting card collection exceeds the Bag capacity.");
                 }
+
+                bagColumn = column + card.Definition.SlotSize;
             }
 
-            foreach (CardInstance card in ownedCards.ToArray())
+            int battleColumn = 0;
+            foreach (CardSlot slot in bagSlots.OrderBy(slot => slot.Column).ToList())
             {
-                TryEquip(card.Uid, startingBattleCapacity);
+                int column = CardSlotRules.FindFreeColumn(
+                    battleSlots,
+                    slot.Card.Definition.SlotSize,
+                    startingBattleCapacity,
+                    preferredColumn: battleColumn);
+                if (column < 0)
+                {
+                    break;
+                }
+
+                if (TryMoveBetween(bagSlots, battleSlots, slot.Card, column))
+                {
+                    battleColumn = column + slot.Card.Definition.SlotSize;
+                }
             }
         }
 
-        public IReadOnlyList<CardInstance> OwnedCards => ownedCards;
-        public IReadOnlyList<CardInstance> BattleCards => battleOrder
-            .Select(FindByUid)
-            .Where(card => card != null)
+        /// <summary>全部已拥有的牌（背包在前、战斗在后，各自按列从左到右）。</summary>
+        public IReadOnlyList<CardInstance> OwnedCards => BagCards.Concat(BattleCards).ToArray();
+
+        /// <summary>背包栏位里的牌，按列从左到右。</summary>
+        public IReadOnlyList<CardInstance> BagCards => bagSlots
+            .OrderBy(slot => slot.Column)
+            .Select(slot => slot.Card)
             .ToArray();
-        public int OwnedWidth => ownedCards.Sum(card => card.Definition.SlotSize);
-        public int BattleWidth => BattleCards.Sum(card => card.Definition.SlotSize);
+
+        /// <summary>战斗栏位里的牌，按列从左到右。</summary>
+        public IReadOnlyList<CardInstance> BattleCards => battleSlots
+            .OrderBy(slot => slot.Column)
+            .Select(slot => slot.Card)
+            .ToArray();
+
+        /// <summary>背包栏位的占位（只含非空牌，按列排序）。</summary>
+        public IReadOnlyList<CardSlot> BagSlots => bagSlots
+            .OrderBy(slot => slot.Column)
+            .ToArray();
+
+        /// <summary>战斗栏位的占位（只含非空牌，按列排序）。</summary>
+        public IReadOnlyList<CardSlot> BattleSlots => battleSlots
+            .OrderBy(slot => slot.Column)
+            .ToArray();
+
+        public int OwnedWidth =>
+            bagSlots.Sum(slot => slot.Card.Definition.SlotSize) +
+            battleSlots.Sum(slot => slot.Card.Definition.SlotSize);
+
+        public int BattleWidth => battleSlots.Sum(slot => slot.Card.Definition.SlotSize);
 
         public bool TryAddCard(CardInstance card)
+        {
+            return TryAddCardAt(card, -1);
+        }
+
+        /// <summary>把新牌放进背包：给了 <paramref name="column"/> 就放那里，否则最靠左的合法空位。</summary>
+        public bool TryAddCardAt(CardInstance card, int column)
         {
             if (card == null)
             {
                 throw new ArgumentNullException(nameof(card));
             }
 
-            if (ownedCards.Any(existing => existing.Uid == card.Uid) ||
+            if (OwnedCards.Any(existing => existing.Uid == card.Uid) ||
                 OwnedWidth + card.Definition.SlotSize > LoadoutRules.BagCapacity)
             {
                 return false;
             }
 
-            ownedCards.Add(card);
-            return true;
+            int target = CardSlotRules.FindFreeColumn(
+                bagSlots,
+                card.Definition.SlotSize,
+                LoadoutRules.BagCapacity,
+                preferredColumn: column);
+            return target >= 0 && TryPlace(bagSlots, card, target);
         }
 
         public bool TryEquip(int cardUid, int battleCapacity)
         {
+            return TryEquipAt(cardUid, battleCapacity, -1);
+        }
+
+        public bool TryEquipAt(int cardUid, int battleCapacity, int column)
+        {
             CardInstance card = FindByUid(cardUid);
-            if (card == null || battleOrder.Contains(cardUid))
+            if (card == null || IsEquipped(cardUid))
             {
                 return false;
             }
@@ -73,15 +143,19 @@ namespace ProjectArtOfAll.Core.Match
                 return false;
             }
 
-            battleOrder.Add(cardUid);
-            return true;
+            int target = CardSlotRules.FindFreeColumn(
+                battleSlots,
+                card.Definition.SlotSize,
+                battleCapacity,
+                preferredColumn: column);
+            return target >= 0 && TryMoveBetween(bagSlots, battleSlots, card, target);
         }
 
         /// <summary>
-        /// Moves an owned card to <paramref name="index"/> inside the battle row,
-        /// equipping it when it was in the bag. Order is the visual order (UI 规格 §3.2).
+        /// 把牌摆到战斗栏位的 <paramref name="column"/> 列（从背包取出或在本行内移动）。
+        /// 该列放不下时返回 false，由 UI 吸附到最近的合法空位。
         /// </summary>
-        public bool TryMoveToBattle(int cardUid, int battleCapacity, int index)
+        public bool TryMoveToBattle(int cardUid, int battleCapacity, int column)
         {
             CardInstance card = FindByUid(cardUid);
             if (card == null)
@@ -90,21 +164,29 @@ namespace ProjectArtOfAll.Core.Match
             }
 
             int slotSize = card.Definition.SlotSize;
-            bool already = battleOrder.Contains(cardUid);
-            int widthWithout = BattleWidth - (already ? slotSize : 0);
+            bool alreadyEquipped = IsEquipped(cardUid);
+            int widthWithout = BattleWidth - (alreadyEquipped ? slotSize : 0);
             if (widthWithout + slotSize > battleCapacity)
             {
                 return false;
             }
 
-            battleOrder.Remove(cardUid);
-            int clamped = Math.Max(0, Math.Min(index, battleOrder.Count));
-            battleOrder.Insert(clamped, cardUid);
-            return true;
+            int target = CardSlotRules.FindFreeColumn(
+                battleSlots,
+                slotSize,
+                battleCapacity,
+                ignoreUid: cardUid,
+                preferredColumn: column);
+            if (target < 0)
+            {
+                return false;
+            }
+
+            return TryMoveBetween(bagSlots, battleSlots, card, target);
         }
 
-        /// <summary>Moves a card back to the bag row at <paramref name="index"/>.</summary>
-        public bool TryMoveToBag(int cardUid, int index)
+        /// <summary>把牌摆回背包栏位的 <paramref name="column"/> 列。</summary>
+        public bool TryMoveToBag(int cardUid, int column)
         {
             CardInstance card = FindByUid(cardUid);
             if (card == null)
@@ -112,57 +194,147 @@ namespace ProjectArtOfAll.Core.Match
                 return false;
             }
 
-            battleOrder.Remove(cardUid);
-            ownedCards.Remove(card);
-            int clamped = Math.Max(0, Math.Min(index, ownedCards.Count));
-            ownedCards.Insert(clamped, card);
-            return true;
+            int target = CardSlotRules.FindFreeColumn(
+                bagSlots,
+                card.Definition.SlotSize,
+                LoadoutRules.BagCapacity,
+                ignoreUid: cardUid,
+                preferredColumn: column);
+            if (target < 0)
+            {
+                return false;
+            }
+
+            return TryMoveBetween(battleSlots, bagSlots, card, target);
         }
 
         public bool TryUnequip(int cardUid)
         {
-            return battleOrder.Remove(cardUid);
+            CardInstance card = FindByUid(cardUid);
+            if (card == null || !IsEquipped(cardUid))
+            {
+                return false;
+            }
+
+            int target = CardSlotRules.FindFreeColumn(
+                bagSlots,
+                card.Definition.SlotSize,
+                LoadoutRules.BagCapacity,
+                ignoreUid: cardUid);
+            return target >= 0 && TryMoveBetween(battleSlots, bagSlots, card, target);
         }
 
         public bool TryRemove(int cardUid, out CardInstance removed)
         {
-            CardInstance card = FindByUid(cardUid);
-            if (card == null)
+            removed = FindByUid(cardUid);
+            if (removed == null)
             {
-                removed = null;
                 return false;
             }
 
-            battleOrder.Remove(cardUid);
-            ownedCards.Remove(card);
-            removed = card;
+            Remove(bagSlots, cardUid);
+            Remove(battleSlots, cardUid);
             return true;
         }
 
         public CardInstance FindByUid(int cardUid)
         {
-            return ownedCards.FirstOrDefault(card => card.Uid == cardUid);
+            CardSlot? bag = Find(bagSlots, cardUid);
+            if (bag.HasValue)
+            {
+                return bag.Value.Card;
+            }
+
+            CardSlot? battle = Find(battleSlots, cardUid);
+            return battle?.Card;
+        }
+
+        /// <summary>牌当前所在的栏位列号，不在任何栏位时返回 -1。</summary>
+        public int ColumnOf(int cardUid)
+        {
+            CardSlot? bag = Find(bagSlots, cardUid);
+            if (bag.HasValue)
+            {
+                return bag.Value.Column;
+            }
+
+            CardSlot? battle = Find(battleSlots, cardUid);
+            return battle?.Column ?? -1;
         }
 
         public bool IsEquipped(int cardUid)
         {
-            return battleOrder.Contains(cardUid);
+            return Find(battleSlots, cardUid).HasValue;
         }
 
         public ulong AddToHash(ulong hash)
         {
-            foreach (CardInstance card in ownedCards)
+            foreach (CardSlot slot in bagSlots.OrderBy(slot => slot.Column))
             {
-                hash = StableHash.Add(hash, card.Uid);
-                hash = StableHash.Add(hash, card.Definition.Id);
+                hash = StableHash.Add(hash, slot.Card.Uid);
+                hash = StableHash.Add(hash, slot.Card.Definition.Id);
+                hash = StableHash.Add(hash, 0);
+                hash = StableHash.Add(hash, slot.Column);
             }
 
-            foreach (int cardUid in battleOrder)
+            foreach (CardSlot slot in battleSlots.OrderBy(slot => slot.Column))
             {
-                hash = StableHash.Add(hash, cardUid);
+                hash = StableHash.Add(hash, slot.Card.Uid);
+                hash = StableHash.Add(hash, slot.Card.Definition.Id);
+                hash = StableHash.Add(hash, 1);
+                hash = StableHash.Add(hash, slot.Column);
             }
 
             return hash;
+        }
+
+        private static bool TryPlace(List<CardSlot> slots, CardInstance card, int column)
+        {
+            if (card == null || column < 0 ||
+                CardSlotRules.Overlaps(slots, column, card.Definition.SlotSize, card.Uid))
+            {
+                return false;
+            }
+
+            Remove(slots, card.Uid);
+            slots.Add(new CardSlot(column, card));
+            return true;
+        }
+
+        private static bool TryMoveBetween(
+            List<CardSlot> from,
+            List<CardSlot> to,
+            CardInstance card,
+            int column)
+        {
+            if (card == null || column < 0 ||
+                CardSlotRules.Overlaps(to, column, card.Definition.SlotSize, card.Uid))
+            {
+                return false;
+            }
+
+            Remove(from, card.Uid);
+            Remove(to, card.Uid);
+            to.Add(new CardSlot(column, card));
+            return true;
+        }
+
+        private static void Remove(List<CardSlot> slots, int cardUid)
+        {
+            slots.RemoveAll(slot => slot.Card != null && slot.Card.Uid == cardUid);
+        }
+
+        private static CardSlot? Find(List<CardSlot> slots, int cardUid)
+        {
+            foreach (CardSlot slot in slots)
+            {
+                if (slot.Card != null && slot.Card.Uid == cardUid)
+                {
+                    return slot;
+                }
+            }
+
+            return null;
         }
     }
 }

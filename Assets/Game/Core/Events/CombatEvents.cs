@@ -27,15 +27,18 @@ namespace ProjectArtOfAll.Core.Events
 
     public sealed class CardCastEvent : GameEvent
     {
-        public CardCastEvent(int playerId, int slotIndex, int cardUid)
+        public CardCastEvent(int playerId, int column, int cardUid)
         {
             PlayerId = playerId;
-            SlotIndex = slotIndex;
+            Column = column;
             CardUid = cardUid;
         }
 
         public int PlayerId { get; }
-        public int SlotIndex { get; }
+
+        /// <summary>施放时这张牌在战斗栏里的最左列号（中间可以留空）。</summary>
+        public int Column { get; }
+
         public int CardUid { get; }
     }
 

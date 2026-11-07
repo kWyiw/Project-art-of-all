@@ -57,6 +57,19 @@ namespace ProjectArtOfAll.Core.Match
         }
 
         public IReadOnlyList<CardInstance> BattleCards => cards.BattleCards;
+
+        /// <summary>背包栏位的占位（牌可以放在任意合法空位，中间允许留空）。</summary>
+        public IReadOnlyList<CardSlot> BagSlots => cards.BagSlots;
+
+        /// <summary>战斗栏位的占位（相邻光环按这里的列号判断相邻）。</summary>
+        public IReadOnlyList<CardSlot> BattleSlots => cards.BattleSlots;
+
+        /// <summary>这张牌当前占用的列号；不在任何栏位时返回 -1。</summary>
+        public int ColumnOf(int cardUid)
+        {
+            return cards.ColumnOf(cardUid);
+        }
+
         public int OwnedCardWidth => cards.OwnedWidth;
         public int BattleCardWidth => cards.BattleWidth;
 
@@ -106,11 +119,12 @@ namespace ProjectArtOfAll.Core.Match
                    cards.TryEquip(cardUid, LoadoutRules.GetBattleCapacity(Level));
         }
 
-        internal bool TryMoveCard(int cardUid, bool toBattle, int index)
+        /// <summary>把牌摆到某个栏位的 <paramref name="column"/> 列（背包 / 战斗都一样）。</summary>
+        internal bool TryMoveCard(int cardUid, bool toBattle, int column)
         {
             return toBattle
-                ? cards.TryMoveToBattle(cardUid, LoadoutRules.GetBattleCapacity(Level), index)
-                : cards.TryMoveToBag(cardUid, index);
+                ? cards.TryMoveToBattle(cardUid, LoadoutRules.GetBattleCapacity(Level), column)
+                : cards.TryMoveToBag(cardUid, column);
         }
 
         internal bool TryUnequipCard(int cardUid)

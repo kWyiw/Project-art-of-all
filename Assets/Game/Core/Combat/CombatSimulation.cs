@@ -196,7 +196,7 @@ namespace ProjectArtOfAll.Core.Combat
                         }
 
                         if (passive.RequiresAdjacentSource &&
-                            (sourceCard == null || !IsAdjacent(owner, card, sourceCard)))
+                            (sourceCard == null || !IsAdjacent(card, sourceCard)))
                         {
                             continue;
                         }
@@ -222,35 +222,12 @@ namespace ProjectArtOfAll.Core.Combat
             return ReferenceEquals(owner, left) ? right : left;
         }
 
+        /// <summary>两张牌在战斗栏里是否紧贴（列号相连，中间不留空格）。</summary>
         private static bool IsAdjacent(
-            CombatantRuntime owner,
             CombatCardRuntime anchor,
             CombatCardRuntime other)
         {
-            if (ReferenceEquals(anchor, other))
-            {
-                return false;
-            }
-
-            IReadOnlyList<CombatCardRuntime> active = owner.ActiveCards();
-            int anchorIndex = -1;
-            int otherIndex = -1;
-            for (int index = 0; index < active.Count; index++)
-            {
-                if (ReferenceEquals(active[index], anchor))
-                {
-                    anchorIndex = index;
-                }
-
-                if (ReferenceEquals(active[index], other))
-                {
-                    otherIndex = index;
-                }
-            }
-
-            return anchorIndex >= 0 &&
-                   otherIndex >= 0 &&
-                   Math.Abs(anchorIndex - otherIndex) == 1;
+            return anchor != null && anchor.IsAdjacentTo(other);
         }
 
         private void ResolveReadyCards(
@@ -259,7 +236,7 @@ namespace ProjectArtOfAll.Core.Combat
         {
             foreach (CombatCardRuntime card in source.Cards
                          .Where(card => !card.IsDestroyed)
-                         .OrderBy(card => card.SlotIndex)
+                         .OrderBy(card => card.Column)
                          .ToArray())
             {
                 if (!card.Cooldown.IsReady || !card.Definition.IsActive)
@@ -277,7 +254,7 @@ namespace ProjectArtOfAll.Core.Combat
                     Publish(
                         new CardCastEvent(
                             source.PlayerId,
-                            card.SlotIndex,
+                            card.Column,
                             card.Instance.Uid));
                     effectResolver.ResolveActive(this, source, enemy, card);
 

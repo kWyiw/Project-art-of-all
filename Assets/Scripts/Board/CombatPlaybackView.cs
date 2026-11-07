@@ -600,6 +600,7 @@ namespace ProjectArtOfAll.Board
             }
 
             List<CardInstance> cards = snapshot.BattleCards.ToList();
+            List<CardSlot> slots = snapshot.BattleSlots.ToList();
             int capacity = snapshot.Level >= 6
                 ? 10
                 : LoadoutRules.GetBattleCapacity(snapshot.Level);
@@ -611,19 +612,21 @@ namespace ProjectArtOfAll.Board
             renderer.Scale = renderer.FitScale(Mathf.Max(90f, rowHeight - 8f));
             renderer.TopInset = Mathf.Max(0f, (rowHeight - renderer.CardHeight) * 0.5f);
             renderer.BuildCells(side.CardRow, side.Cells, Mathf.Max(capacity, cards.Count));
-            float startX = CardRowRenderer.RowInset;
-
-            for (int index = 0; index < cards.Count; index++)
+            foreach (CardSlot slot in slots)
             {
-                CardInstance card = cards[index];
+                if (slot.Card == null)
+                {
+                    continue;
+                }
+
+                CardInstance card = slot.Card;
                 float width = renderer.WidthOf(card);
                 GameObject widget = renderer.AddCard(
                     side.CardRow,
                     card,
-                    startX,
+                    renderer.ColumnX(slot.Column),
                     width,
-                    CardRowRenderer.BonusBadge(cards, index));
-                startX += width + renderer.SlotGap;
+                    CardRowRenderer.BonusBadge(slots, card.Uid));
 
                 // 悬停看牌：战斗打到一半也能停下来读这张牌到底在做什么。
                 CardHoverTarget hover = widget.AddComponent<CardHoverTarget>();

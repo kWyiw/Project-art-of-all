@@ -181,7 +181,7 @@ namespace ProjectArtOfAll.Board
             : match.State.Players[humanPlayerId];
 
         /// <summary>跨区移动 / 同排重排（R-TURN-002 免费动作）。</summary>
-        public void SubmitCardMove(int cardUid, bool toBattle, int index)
+        public void SubmitCardMove(int cardUid, bool toBattle, int column)
         {
             if (match == null || match.IsFinished)
             {
@@ -190,7 +190,7 @@ namespace ProjectArtOfAll.Board
 
             try
             {
-                match.Submit(new MoveCardCommand(humanPlayerId, cardUid, toBattle, index));
+                match.Submit(new MoveCardCommand(humanPlayerId, cardUid, toBattle, column));
             }
             catch (System.InvalidOperationException error)
             {

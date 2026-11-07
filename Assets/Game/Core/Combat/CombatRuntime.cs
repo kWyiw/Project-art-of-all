@@ -11,9 +11,8 @@ namespace ProjectArtOfAll.Core.Combat
             Snapshot = snapshot;
             MaximumHealth = snapshot.MaxHealth;
             Health = MaximumHealth;
-            Cards = snapshot.BattleCards
-                .Select((card, slotIndex) =>
-                    new CombatCardRuntime(card, slotIndex))
+            Cards = snapshot.BattleSlots
+                .Select(slot => new CombatCardRuntime(slot.Card, slot.Column))
                 .ToList();
         }
 
@@ -37,17 +36,17 @@ namespace ProjectArtOfAll.Core.Combat
         {
             return Cards
                 .Where(card => !card.IsDestroyed)
-                .OrderBy(card => card.SlotIndex)
+                .OrderBy(card => card.Column)
                 .ToList();
         }
     }
 
     internal sealed class CombatCardRuntime
     {
-        public CombatCardRuntime(CardInstance instance, int slotIndex)
+        public CombatCardRuntime(CardInstance instance, int column)
         {
             Instance = instance;
-            SlotIndex = slotIndex;
+            Column = column;
             // 战斗开始时冷却从零开始走（BT-2.5 ③）：主动牌要等满一整条冷却才会施放第一次。
             Cooldown = new CooldownTimer(
                 instance.Definition.IsActive ? instance.Definition.CooldownTicks : 0);
@@ -55,7 +54,30 @@ namespace ProjectArtOfAll.Core.Combat
 
         public CardInstance Instance { get; }
         public CardDefinition Definition => Instance.Definition;
-        public int SlotIndex { get; }
+
+        /// <summary>战斗栏里的最左列号；相邻光环按列号判断相邻，中间留空就不相邻。</summary>
+        public int Column { get; }
+
+        /// <summary>这张牌占的格子数。</summary>
+        public int Size => System.Math.Max(1, Definition.SlotSize);
+
+        /// <summary>紧贴在本卡左侧（中间没有空格）。</summary>
+        public bool IsImmediatelyLeftOf(CombatCardRuntime other)
+        {
+            return other != null && Column + Size == other.Column;
+        }
+
+        /// <summary>紧贴在本卡右侧（中间没有空格）。</summary>
+        public bool IsImmediatelyRightOf(CombatCardRuntime other)
+        {
+            return other != null && other.Column + other.Size == Column;
+        }
+
+        public bool IsAdjacentTo(CombatCardRuntime other)
+        {
+            return !ReferenceEquals(this, other) &&
+                   (IsImmediatelyLeftOf(other) || IsImmediatelyRightOf(other));
+        }
 
         /// <summary>Position inside the battle bar; the bar keeps its slots when a card dies.</summary>
         public CooldownTimer Cooldown { get; }

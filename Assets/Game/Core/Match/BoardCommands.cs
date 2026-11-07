@@ -73,23 +73,26 @@ namespace ProjectArtOfAll.Core.Match
     }
 
     /// <summary>
-    /// Free card action (`大富翁层规则书.md` R-TURN-002): move a card inside a row or
-    /// across the bag / battle boundary, inserting it at <see cref="Index"/>.
+    /// Free card action (`大富翁层规则书.md` R-TURN-002): put a card into any legal column of
+    /// the bag or the battle row. Cards may leave gaps between them on purpose
+    /// (UI 规格 §3.2), so <see cref="Column"/> is a slot column, not a compacted index.
     /// </summary>
     public sealed class MoveCardCommand : IMatchCommand
     {
-        public MoveCardCommand(int playerId, int cardUid, bool toBattle, int index)
+        public MoveCardCommand(int playerId, int cardUid, bool toBattle, int column)
         {
             PlayerId = playerId;
             CardUid = cardUid;
             ToBattle = toBattle;
-            Index = index;
+            Column = column;
         }
 
         public int PlayerId { get; }
         public int CardUid { get; }
         public bool ToBattle { get; }
-        public int Index { get; }
+
+        /// <summary>目标栏位里最左一列的列号（0 起）。</summary>
+        public int Column { get; }
     }
 
     public sealed class EquipCardCommand : IMatchCommand

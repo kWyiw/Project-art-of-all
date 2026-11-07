@@ -57,7 +57,11 @@ namespace ProjectArtOfAll.Board
         private readonly List<GameObject> battleCells = new List<GameObject>();
 
         private CardInstance dragging;
-        private List<CardInstance> battleSnapshot = new List<CardInstance>();
+        private List<CardSlot> battleSlots = new List<CardSlot>();
+
+        private List<CardSlot> bagSlots = new List<CardSlot>();
+
+        private int battleCellCount = LoadoutRules.GetBattleCapacity(1);
         private bool collapsed;
         private float scale = 1f;
         private MatchPlayerState lastPlayer;
@@ -413,17 +417,18 @@ namespace ProjectArtOfAll.Board
             battleCapacityLabel.text = string.Concat(
                 player.BattleCardWidth.ToString(), "/", capacity.ToString(), "c");
 
-            List<CardInstance> bag = player.OwnedCards.Where(card => !player.IsEquipped(card)).ToList();
-            List<CardInstance> battle = player.BattleCards.ToList();
-            RenderRow(bagRow, bagCells, bagWidgets, bag, false, LoadoutRules.BagCapacity);
-            RenderRow(battleRow, battleCells, battleWidgets, battle, true, capacity);
+            battleCellCount = capacity;
+            bagSlots = player.BagSlots.ToList();
+            battleSlots = player.BattleSlots.ToList();
+            RenderRow(bagRow, bagCells, bagWidgets, bagSlots, false, LoadoutRules.BagCapacity);
+            RenderRow(battleRow, battleCells, battleWidgets, battleSlots, true, capacity);
         }
 
         private void RenderRow(
             RectTransform row,
             List<GameObject> cellBucket,
             List<GameObject> bucket,
-            List<CardInstance> cards,
+            List<CardSlot> slots,
             bool inBattle,
             int cellCount)
         {
@@ -434,21 +439,36 @@ namespace ProjectArtOfAll.Board
             }
 
             BuildSlotCells(row, cellBucket, rowWidth, cellCount, inBattle);
-
-            List<float> widths = cards.Select(WidthOf).ToList();
-            float total = widths.Sum() + Mathf.Max(0, cards.Count - 1) * SlotGap;
-            float x = 16f;
-
             if (inBattle)
             {
-                battleSnapshot = cards;
+                battleSlots = slots.ToList();
             }
 
-            for (int index = 0; index < cards.Count; index++)
+            // 卡牌按"列号"落位：中间可以留空，拖动时想空几格都行（R-CARD-011）。
+            foreach (CardSlot slot in slots)
             {
-                AddWidget(row, bucket, cards[index], x, widths[index], inBattle, cards, index);
-                x += widths[index] + SlotGap;
+                if (slot.Card == null)
+                {
+                    continue;
+                }
+
+                float width = WidthOf(slot.Card);
+                AddWidget(
+                    row,
+                    bucket,
+                    slot.Card,
+                    ColumnX(slot.Column),
+                    width,
+                    inBattle,
+                    slots,
+                    slot.Column);
             }
+        }
+
+        /// <summary>第 column 格左边缘在行内的 x（行内坐标，行 pivot 在左上）。</summary>
+        private float ColumnX(int column)
+        {
+            return 16f + column * (SlotWidth + SlotGap);
         }
 
         /// <summary>空槽位画成"格子"：暗底 + 铜线，和参考图一样能看出还能放几张。</summary>
@@ -625,8 +645,8 @@ namespace ProjectArtOfAll.Board
             float x,
             float width,
             bool inBattle,
-            System.Collections.Generic.IReadOnlyList<CardInstance> rowCards,
-            int rowIndex)
+            System.Collections.Generic.IReadOnlyList<CardSlot> slots,
+            int column)
         {
             GameObject widget = new GameObject(
                 "Card_" + card.Definition.Id,
@@ -649,7 +669,7 @@ namespace ProjectArtOfAll.Board
             AddValueBadge(widget.transform, card.Value);
             if (inBattle)
             {
-                string bonus = BonusBadge(rowCards, rowIndex);
+                string bonus = BonusBadge(slots, card.Uid);
                 if (bonus != null)
                 {
                     AddBonusBadge(widget.transform, width, bonus);
@@ -700,17 +720,17 @@ namespace ProjectArtOfAll.Board
 
         /// <summary>相邻加成的角标文字：骰值 +N / 额外 N 颗骰 / MAX。</summary>
         private static string BonusBadge(
-            System.Collections.Generic.IReadOnlyList<CardInstance> rowCards,
-            int rowIndex)
+            System.Collections.Generic.IReadOnlyList<CardSlot> slots,
+            int cardUid)
         {
-            if (rowCards == null || rowIndex < 0 || rowIndex >= rowCards.Count)
+            if (slots == null)
             {
                 return null;
             }
 
-            int dice = LoadoutPreview.DiceModifier(rowCards, rowIndex);
-            int extra = LoadoutPreview.BonusDice(rowCards, rowIndex);
-            bool maxRoll = LoadoutPreview.HasMaxRoll(rowCards, rowIndex);
+            int dice = LoadoutPreview.DiceModifier(slots, cardUid);
+            int extra = LoadoutPreview.BonusDice(slots, cardUid);
+            bool maxRoll = LoadoutPreview.HasMaxRoll(slots, cardUid);
             if (dice == 0 && extra == 0 && !maxRoll)
             {
                 return null;
@@ -847,13 +867,27 @@ namespace ProjectArtOfAll.Board
 
             if (Contains(battleRow, eventData))
             {
-                gameplay.SubmitCardMove(card.Uid, true, IndexAt(battleRow, eventData));
+                int column = ColumnAt(battleRow, eventData, battleSlots, card, battleCellCount);
+                if (column < 0)
+                {
+                    gameplay.RefreshCardBand();
+                    return;
+                }
+
+                gameplay.SubmitCardMove(card.Uid, true, column);
                 return;
             }
 
             if (Contains(bagRow, eventData))
             {
-                gameplay.SubmitCardMove(card.Uid, false, IndexAt(bagRow, eventData));
+                int column = ColumnAt(bagRow, eventData, bagSlots, card, LoadoutRules.BagCapacity);
+                if (column < 0)
+                {
+                    gameplay.RefreshCardBand();
+                    return;
+                }
+
+                gameplay.SubmitCardMove(card.Uid, false, column);
                 return;
             }
 
@@ -913,15 +947,7 @@ namespace ProjectArtOfAll.Board
         /// <summary>这张牌（在战斗栏里时）当前吃到的相邻加成，没有则返回 null。</summary>
         private string DescribeBonus(CardInstance card)
         {
-            for (int i = 0; i < battleSnapshot.Count; i++)
-            {
-                if (battleSnapshot[i] != null && battleSnapshot[i].Uid == card.Uid)
-                {
-                    return LoadoutPreview.Describe(battleSnapshot, i);
-                }
-            }
-
-            return null;
+            return card == null ? null : LoadoutPreview.Describe(battleSlots, card.Uid);
         }
 
         /// <summary>详情面板里的「出售」：和拖进出售区等价，无确认无撤销（UI-4.1.1）。</summary>
@@ -987,25 +1013,36 @@ namespace ProjectArtOfAll.Board
                 local.y <= max.y + pad;
         }
 
-        private int IndexAt(RectTransform row, PointerEventData eventData)
+        /// <summary>
+        /// 鼠标落点换算成目标列：先按格距四舍五入到最近的格子，
+        /// 再在这一行里找最近的、放得下的空位（整块放不下就挪到旁边），
+        /// 于是留空、插空、贴边都能拖出来（R-CARD-011）。
+        /// </summary>
+        private int ColumnAt(
+            RectTransform row,
+            PointerEventData eventData,
+            System.Collections.Generic.IReadOnlyList<CardSlot> slots,
+            CardInstance card,
+            int capacity)
         {
-            int index = 0;
-            for (int i = 0; i < row.childCount; i++)
+            Vector2 local;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    row,
+                    eventData.position,
+                    CameraFor(),
+                    out local))
             {
-                RectTransform child = row.GetChild(i) as RectTransform;
-                if (child == null || !child.gameObject.activeSelf)
-                {
-                    continue;
-                }
-
-                float centerX = RectTransformUtility.WorldToScreenPoint(CameraFor(), child.position).x;
-                if (eventData.position.x > centerX)
-                {
-                    index++;
-                }
+                return CardSlotRules.FindFreeColumn(slots, card.Definition.SlotSize, capacity);
             }
 
-            return index;
+            float pitch = SlotWidth + SlotGap;
+            int wanted = Mathf.RoundToInt((local.x - 16f) / Mathf.Max(1f, pitch));
+            return CardSlotRules.NearestFreeColumn(
+                slots,
+                card.Definition.SlotSize,
+                capacity,
+                wanted,
+                card.Uid);
         }
 
         private Camera CameraFor()

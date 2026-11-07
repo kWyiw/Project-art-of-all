@@ -343,6 +343,22 @@ namespace ProjectArtOfAll.Core.Checks
             Assert(LoadoutPreview.BonusDice(new[] { fire, waste, waste2 }, 0) == 1,
                 "火堆只有一张相邻废料时只能 +1。");
 
+            // 栏位可以留空：磨刀石在 0 列、撬棍在 2 列（中间空一格）就不再相邻。
+            List<CardSlot> gapped = new List<CardSlot>
+            {
+                new CardSlot(0, whetstone),
+                new CardSlot(2, crowbar)
+            };
+            Assert(LoadoutPreview.DiceModifier(gapped, crowbar.Uid) == 0,
+                "A gap between two slots must break the adjacency bonus.");
+            List<CardSlot> packed = new List<CardSlot>
+            {
+                new CardSlot(0, whetstone),
+                new CardSlot(1, crowbar)
+            };
+            Assert(LoadoutPreview.DiceModifier(packed, crowbar.Uid) == 2,
+                "Two touching slots must still count as adjacent.");
+
             // 回收站：全场废料多重释放 +1（AllByTag，不限相邻）。
             CardInstance recycler = new CardInstance(8, CardDatabase.Instance.Get("recycler"));
             Assert(LoadoutPreview.BonusDice(new[] { recycler, crowbar, waste }, 2) == 1,
@@ -751,16 +767,44 @@ namespace ProjectArtOfAll.Core.Checks
             Assert(player.OwnedCards.Count >= 2, "The starting loadout must contain cards.");
 
             CardInstance battleCard = player.BattleCards[0];
-            controller.Submit(new MoveCardCommand(player.Id, battleCard.Uid, toBattle: false, index: 0));
+            controller.Submit(new MoveCardCommand(player.Id, battleCard.Uid, toBattle: false, column: 0));
             Assert(!player.IsEquipped(battleCard), "Dropping a battle card on the bag must unequip it.");
             Assert(
-                player.OwnedCards[0].Uid == battleCard.Uid,
-                "The bag row order must follow the drop index.");
+                player.ColumnOf(battleCard.Uid) >= 0,
+                "The unequipped card must land on some free column of the bag row.");
 
-            controller.Submit(new MoveCardCommand(player.Id, battleCard.Uid, toBattle: true, index: 0));
+            // 关键：栏位可以不连续。先把战斗栏全部退回背包，再单独把这张牌停到第 5 列，
+            // 中间 0~4 列留空（R-CARD-011）。
+            int battleCapacity = LoadoutRules.GetBattleCapacity(player.Level);
+            foreach (CardInstance equipped in player.BattleCards.ToArray())
+            {
+                controller.Submit(new MoveCardCommand(player.Id, equipped.Uid, toBattle: false, column: -1));
+            }
+
+            Assert(player.BattleCards.Count == 0, "The battle row must be empty before the gap test.");
+            if (battleCapacity >= 6)
+            {
+                controller.Submit(new MoveCardCommand(
+                    player.Id,
+                    battleCard.Uid,
+                    toBattle: true,
+                    column: 5));
+                Assert(
+                    player.ColumnOf(battleCard.Uid) == 5,
+                    "A card dropped on column 5 must stay on column 5 with a gap in front.");
+            }
+            else
+            {
+                controller.Submit(new MoveCardCommand(
+                    player.Id,
+                    battleCard.Uid,
+                    toBattle: true,
+                    column: 0));
+            }
+
             Assert(
                 player.BattleCards[0].Uid == battleCard.Uid,
-                "Dropping a bag card at index 0 must put it first in the battle row.");
+                "BattleCards must stay ordered by column.");
 
             // 塞满战斗栏：首张放不下的牌必须被拒绝，且容量永不被突破。
             int capacity = LoadoutRules.GetBattleCapacity(player.Level);
@@ -2069,7 +2113,7 @@ namespace ProjectArtOfAll.Core.Checks
                 if (gameEvent is CardCastEvent cast)
                 {
                     hash = StableHash.Add(hash, cast.PlayerId);
-                    hash = StableHash.Add(hash, cast.SlotIndex);
+                    hash = StableHash.Add(hash, cast.Column);
                     hash = StableHash.Add(hash, cast.CardUid);
                 }
                 else if (gameEvent is DamageDealtEvent damage)

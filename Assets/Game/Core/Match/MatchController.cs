@@ -364,10 +364,10 @@ namespace ProjectArtOfAll.Core.Match
                     $"Player {command.PlayerId} does not own card {command.CardUid}.");
             }
 
-            if (!State.CurrentPlayer.TryMoveCard(command.CardUid, command.ToBattle, command.Index))
+            if (!State.CurrentPlayer.TryMoveCard(command.CardUid, command.ToBattle, command.Column))
             {
                 throw new InvalidOperationException(
-                    "The card does not fit there at the current battle capacity.");
+                    "The card does not fit in that slot of the current row.");
             }
 
             Publish(
@@ -376,7 +376,7 @@ namespace ProjectArtOfAll.Core.Match
                     card.Uid,
                     card.Definition.Id,
                     command.ToBattle,
-                    command.Index));
+                    State.CurrentPlayer.ColumnOf(card.Uid)));
         }
 
         private void HandleEquip(EquipCardCommand command)
@@ -822,7 +822,7 @@ namespace ProjectArtOfAll.Core.Match
             CombatantSnapshot leftSnapshot = new CombatantSnapshot(
                 left.Id,
                 leftLevel,
-                left.BattleCards);
+                left.BattleSlots);
             CombatantSnapshot rightSnapshot = new CombatantSnapshot(
                 rightPlayerId,
                 rightLevel,

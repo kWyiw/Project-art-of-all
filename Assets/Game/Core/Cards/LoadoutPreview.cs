@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace ProjectArtOfAll.Core.Cards
@@ -6,24 +7,63 @@ namespace ProjectArtOfAll.Core.Cards
     /// 棋盘层构筑预览：只依赖卡表与排列，不依赖战斗运行时。
     /// 用途是给常驻卡槽带画"相邻加成是否生效"，让玩家在拖拽时立刻看到结果。
     /// 与战斗内光环求值同规则（R-AURA-001~005）：光环每次求值时现算、不写回卡牌，光环不能互相串联。
+    ///
+    /// 排列有两种口径：背包/战斗栏现在是一排格子，牌可以放在任意空位、中间可以留空，
+    /// 相邻只看列号是否相连；只给了牌列表的旧重载按"从第 0 列连续摆放"处理。
     /// </summary>
     public static class LoadoutPreview
     {
         /// <summary>第 index 张牌当前能吃到的骰值修正合计（已按来源顺序相加，未夹取）。</summary>
         public static int DiceModifier(IReadOnlyList<CardInstance> row, int index)
         {
-            return SumAura(row, index, AuraStat.DiceFlatModifier);
+            return DiceModifier(Pack(row), index);
         }
 
         /// <summary>第 index 张牌当前能吃到的额外骰数（多重释放 / 骰数修正）。</summary>
         public static int BonusDice(IReadOnlyList<CardInstance> row, int index)
         {
-            return SumAura(row, index, AuraStat.MultiCast) + SumAura(row, index, AuraStat.DiceCount);
+            return BonusDice(Pack(row), index);
         }
 
         /// <summary>第 index 张牌的骰值是否被强制取最大值（自噬之蛇）。</summary>
         public static bool HasMaxRoll(IReadOnlyList<CardInstance> row, int index)
         {
+            return HasMaxRoll(Pack(row), index);
+        }
+
+        /// <summary>一句话说明第 index 张牌吃到的加成，没有加成时返回 null。</summary>
+        public static string Describe(IReadOnlyList<CardInstance> row, int index)
+        {
+            return Describe(Pack(row), index);
+        }
+
+        /// <summary>按栏位排列（<paramref name="slots"/>）看某张牌的骰值修正。</summary>
+        public static int DiceModifier(IReadOnlyList<CardSlot> slots, int cardUid)
+        {
+            List<Placed> row = Place(slots);
+            int index = IndexOf(row, cardUid);
+            return index < 0 ? 0 : SumAura(row, index, AuraStat.DiceFlatModifier);
+        }
+
+        public static int BonusDice(IReadOnlyList<CardSlot> slots, int cardUid)
+        {
+            List<Placed> row = Place(slots);
+            int index = IndexOf(row, cardUid);
+            return index < 0
+                ? 0
+                : SumAura(row, index, AuraStat.MultiCast) +
+                  SumAura(row, index, AuraStat.DiceCount);
+        }
+
+        public static bool HasMaxRoll(IReadOnlyList<CardSlot> slots, int cardUid)
+        {
+            List<Placed> row = Place(slots);
+            int index = IndexOf(row, cardUid);
+            if (index < 0)
+            {
+                return false;
+            }
+
             for (int i = 0; i < row.Count; i++)
             {
                 if (i == index)
@@ -31,15 +71,9 @@ namespace ProjectArtOfAll.Core.Cards
                     continue;
                 }
 
-                CardInstance source = row[i];
-                if (source == null)
+                foreach (AuraDefinition aura in row[i].Card.Definition.Auras)
                 {
-                    continue;
-                }
-
-                foreach (AuraDefinition aura in source.Definition.Auras)
-                {
-                    if (aura.Stat == AuraStat.MaxRoll && Matches(row, i, index, aura))
+                    if (aura.Stat == AuraStat.MaxRoll && Matches(row[i], row[index], aura))
                     {
                         return true;
                     }
@@ -49,8 +83,50 @@ namespace ProjectArtOfAll.Core.Cards
             return false;
         }
 
-        /// <summary>一句话说明第 index 张牌吃到的加成，没有加成时返回 null。</summary>
-        public static string Describe(IReadOnlyList<CardInstance> row, int index)
+        public static string Describe(IReadOnlyList<CardSlot> slots, int cardUid)
+        {
+            List<Placed> row = Place(slots);
+            int index = IndexOf(row, cardUid);
+            return index < 0 ? null : DescribeSlot(row, index);
+        }
+
+        private static int DiceModifier(IReadOnlyList<Placed> row, int index)
+        {
+            return SumAura(row, index, AuraStat.DiceFlatModifier);
+        }
+
+        private static int BonusDice(IReadOnlyList<Placed> row, int index)
+        {
+            return SumAura(row, index, AuraStat.MultiCast) + SumAura(row, index, AuraStat.DiceCount);
+        }
+
+        private static bool HasMaxRoll(IReadOnlyList<Placed> row, int index)
+        {
+            for (int i = 0; i < row.Count; i++)
+            {
+                if (i == index)
+                {
+                    continue;
+                }
+
+                foreach (AuraDefinition aura in row[i].Card.Definition.Auras)
+                {
+                    if (aura.Stat == AuraStat.MaxRoll && Matches(row[i], row[index], aura))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static string Describe(IReadOnlyList<Placed> row, int index)
+        {
+            return index < 0 || index >= row.Count ? null : DescribeSlot(row, index);
+        }
+
+        private static string DescribeSlot(IReadOnlyList<Placed> row, int index)
         {
             int dice = DiceModifier(row, index);
             int extra = BonusDice(row, index);
@@ -79,9 +155,12 @@ namespace ProjectArtOfAll.Core.Cards
             return string.Join(" · ", parts);
         }
 
-        private static int SumAura(IReadOnlyList<CardInstance> row, int index, AuraStat stat)
+        private static int SumAura(
+            IReadOnlyList<Placed> row,
+            int index,
+            AuraStat stat)
         {
-            if (row == null || index < 0 || index >= row.Count || row[index] == null)
+            if (row == null || index < 0 || index >= row.Count)
             {
                 return 0;
             }
@@ -89,16 +168,10 @@ namespace ProjectArtOfAll.Core.Cards
             int total = 0;
             for (int i = 0; i < row.Count; i++)
             {
-                CardInstance source = row[i];
-                if (source == null)
-                {
-                    continue;
-                }
-
-                foreach (AuraDefinition aura in source.Definition.Auras)
+                foreach (AuraDefinition aura in row[i].Card.Definition.Auras)
                 {
                     // 自指光环（火堆给自己的多重释放）也要算进来，所以这里不跳过 i == index。
-                    if (aura.Stat != stat || !Matches(row, i, index, aura))
+                    if (aura.Stat != stat || !Matches(row[i], row[index], aura))
                     {
                         continue;
                     }
@@ -110,40 +183,32 @@ namespace ProjectArtOfAll.Core.Cards
             return total;
         }
 
-        /// <summary>光环来源 i 是否覆盖目标 index（R-AURA-004 的五个选择器 + 词条过滤 + 尺寸过滤）。</summary>
-        private static bool Matches(
-            IReadOnlyList<CardInstance> row,
-            int sourceIndex,
-            int targetIndex,
-            AuraDefinition aura)
+        /// <summary>光环来源是否覆盖目标（R-AURA-004 的五个选择器 + 词条过滤 + 尺寸过滤）。</summary>
+        private static bool Matches(Placed source, Placed target, AuraDefinition aura)
         {
-            CardInstance target = row[targetIndex];
-            if (target == null)
+            if (aura.RequiredTag != CardTag.None &&
+                (target.Card.Definition.Tags & aura.RequiredTag) == 0)
             {
                 return false;
             }
 
-            if (aura.RequiredTag != CardTag.None && (target.Definition.Tags & aura.RequiredTag) == 0)
+            if (aura.MinimumSlotSize > 0 &&
+                target.Card.Definition.SlotSize < aura.MinimumSlotSize)
             {
                 return false;
             }
 
-            if (aura.MinimumSlotSize > 0 && target.Definition.SlotSize < aura.MinimumSlotSize)
-            {
-                return false;
-            }
-
-            bool adjacent = sourceIndex + 1 == targetIndex || sourceIndex - 1 == targetIndex;
             switch (aura.Target)
             {
                 case AuraTarget.Self:
-                    return sourceIndex == targetIndex;
+                    return ReferenceEquals(source.Card, target.Card);
                 case AuraTarget.AdjacentLeft:
-                    return sourceIndex - 1 == targetIndex;
+                    // 目标是源卡的左邻：两张牌紧贴，中间不能留空。
+                    return target.IsImmediatelyLeftOf(source);
                 case AuraTarget.AdjacentRight:
-                    return sourceIndex + 1 == targetIndex;
+                    return target.IsImmediatelyRightOf(source);
                 case AuraTarget.AllAdjacent:
-                    return adjacent;
+                    return target.Card != source.Card && target.IsAdjacentTo(source);
                 case AuraTarget.AllByTag:
                     // 全场按词条：不限相邻，由上面的 RequiredTag 过滤决定谁受益。
                     return true;
@@ -152,7 +217,10 @@ namespace ProjectArtOfAll.Core.Cards
             }
         }
 
-        private static int ScalingFactor(IReadOnlyList<CardInstance> row, int sourceIndex, AuraDefinition aura)
+        private static int ScalingFactor(
+            IReadOnlyList<Placed> row,
+            int sourceIndex,
+            AuraDefinition aura)
         {
             if (aura.Scaling != AuraScaling.PerAdjacentMatchingTag)
             {
@@ -162,25 +230,109 @@ namespace ProjectArtOfAll.Core.Cards
             int count = 0;
             for (int i = 0; i < row.Count; i++)
             {
-                // 只数源卡的左右邻居（与战斗内 AuraResolver 的 Self 缩放口径一致）。
-                if (row[i] == null || i == sourceIndex)
-                {
-                    continue;
-                }
-
-                if (i != sourceIndex - 1 && i != sourceIndex + 1)
+                if (i == sourceIndex || !row[i].IsAdjacentTo(row[sourceIndex]))
                 {
                     continue;
                 }
 
                 if (aura.RequiredTag == CardTag.None ||
-                    (row[i].Definition.Tags & aura.RequiredTag) != 0)
+                    (row[i].Card.Definition.Tags & aura.RequiredTag) != 0)
                 {
                     count++;
                 }
             }
 
             return count;
+        }
+
+        private static List<Placed> Pack(IReadOnlyList<CardInstance> row)
+        {
+            List<Placed> placed = new List<Placed>();
+            if (row == null)
+            {
+                return placed;
+            }
+
+            int column = 0;
+            foreach (CardInstance card in row)
+            {
+                if (card == null)
+                {
+                    continue;
+                }
+
+                placed.Add(new Placed(column, card));
+                column += Math.Max(1, card.Definition.SlotSize);
+            }
+
+            return placed;
+        }
+
+        private static List<Placed> Place(IReadOnlyList<CardSlot> slots)
+        {
+            List<Placed> placed = new List<Placed>();
+            if (slots == null)
+            {
+                return placed;
+            }
+
+            List<CardSlot> sorted = new List<CardSlot>(slots);
+            sorted.Sort((left, right) => left.Column.CompareTo(right.Column));
+            foreach (CardSlot slot in sorted)
+            {
+                if (slot.Card != null)
+                {
+                    placed.Add(new Placed(slot.Column, slot.Card));
+                }
+            }
+
+            return placed;
+        }
+
+        private static int IndexOf(IReadOnlyList<Placed> row, int cardUid)
+        {
+            for (int i = 0; i < row.Count; i++)
+            {
+                if (row[i].Card.Uid == cardUid)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        /// <summary>一张牌在栏位里的位置：列号 + 牌。</summary>
+        private readonly struct Placed
+        {
+            public Placed(int column, CardInstance card)
+            {
+                Column = column;
+                Card = card;
+            }
+
+            public int Column { get; }
+            public CardInstance Card { get; }
+
+            public int Size => Math.Max(1, Card.Definition.SlotSize);
+
+            public int RightColumn => Column + Size - 1;
+
+            /// <summary>本卡紧贴 <paramref name="other"/> 的左侧（中间没有空格）。</summary>
+            public bool IsImmediatelyLeftOf(Placed other)
+            {
+                return other.Card != null && RightColumn + 1 == other.Column;
+            }
+
+            public bool IsImmediatelyRightOf(Placed other)
+            {
+                return other.Card != null && other.RightColumn + 1 == Column;
+            }
+
+            public bool IsAdjacentTo(Placed other)
+            {
+                return IsImmediatelyLeftOf(other) || IsImmediatelyRightOf(other);
+            }
         }
     }
 }
