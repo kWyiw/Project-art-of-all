@@ -464,22 +464,14 @@ namespace ProjectArtOfAll.Board
         }
     }
 
-    /// <summary>每块画布上只留一个工具提示实例，谁悬停就更新它；悬停满 0.35 秒才弹出。</summary>
+    /// <summary>每块画布上只留一个工具提示实例：指针扫到就立刻弹出，跟着指针走，离开就收。</summary>
     public static class CardTooltipHost
     {
-        private const float ShowDelay = 0.35f;
-
         private static CardTooltipView view;
         private static RectTransform hostedCanvas;
         private static CardDefinition visibleCard;
-        private static CardDefinition pendingCard;
-        private static Vector2 pendingPosition;
-        private static RectTransform pendingCanvas;
-        private static Font pendingFont;
-        private static Camera pendingCamera;
-        private static float pendingSince;
-        private static TooltipDelayDriver driver;
 
+        /// <summary>扫到卡牌立即显示（原先的 0.35 秒悬停延迟按玩家要求去掉）。</summary>
         public static void Show(
             RectTransform canvas,
             Font font,
@@ -492,34 +484,39 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
-            if (view != null
-                && hostedCanvas == canvas
-                && visibleCard == card
-                && view.IsShown)
+            if (view != null && hostedCanvas != canvas)
             {
-                pendingCard = null;
+                Object.Destroy(view.gameObject);
+                view = null;
+                visibleCard = null;
+            }
+
+            if (view == null)
+            {
+                view = CardTooltipView.Create(canvas, font);
+                hostedCanvas = canvas;
+            }
+
+            if (visibleCard == card && view.IsShown)
+            {
                 view.Follow(screenPosition, canvas, screenCamera);
                 return;
             }
 
-            pendingCard = card;
-            pendingPosition = screenPosition;
-            pendingCanvas = canvas;
-            pendingFont = font;
-            pendingCamera = screenCamera;
-            pendingSince = Time.unscaledTime;
-            EnsureDriver(canvas);
+            visibleCard = card;
+            view.Show(card, screenPosition, canvas, screenCamera);
         }
 
         public static void Hide()
         {
-            pendingCard = null;
+            visibleCard = null;
 
             if (view != null)
             {
-                visibleCard = null;
                 view.Hide();
             }
+
+            CardHoverLift.ReleaseAll();
         }
 
         /// <summary>把任意层级里的控件换算到它所在画布的根 RectTransform，tooltip 一律挂在这上面。</summary>
@@ -539,75 +536,129 @@ namespace ProjectArtOfAll.Board
 
             return from as RectTransform;
         }
-
-        private static void EnsureDriver(RectTransform canvas)
-        {
-            if (driver != null && driver.transform.parent == canvas)
-            {
-                return;
-            }
-
-            if (driver != null)
-            {
-                Object.Destroy(driver.gameObject);
-            }
-
-            GameObject host = new GameObject("CardTooltipDriver", typeof(RectTransform));
-            host.transform.SetParent(canvas, false);
-            driver = host.AddComponent<TooltipDelayDriver>();
-            driver.transform.SetParent(canvas, false);
-        }
-
-        internal static void TickDelay()
-        {
-            if (pendingCard == null || pendingCanvas == null)
-            {
-                return;
-            }
-
-            if (Time.unscaledTime - pendingSince < ShowDelay)
-            {
-                return;
-            }
-
-            CardDefinition card = pendingCard;
-            Vector2 position = pendingPosition;
-            RectTransform canvas = pendingCanvas;
-            Font font = pendingFont;
-            Camera camera = pendingCamera;
-            pendingCard = null;
-
-            if (view == null || hostedCanvas != canvas)
-            {
-                if (view != null)
-                {
-                    Object.Destroy(view.gameObject);
-                }
-
-                if (canvas == null)
-                {
-                    return;
-                }
-
-                view = CardTooltipView.Create(canvas, font);
-                hostedCanvas = canvas;
-            }
-
-            visibleCard = card;
-            view.Show(card, position, canvas, camera);
-        }
     }
 
-    /// <summary>挂在画布上的小驱动，只负责把「悬停了多久」算出来。</summary>
-    internal sealed class TooltipDelayDriver : MonoBehaviour
+    /// <summary>
+    /// 悬停时把牌面放大一点：支点在左上角，这里补上位移让底边钉在原处、只往上升，
+    /// 于是卡片不会掉出栏位下沿，也不会被屏幕裁掉。
+    /// </summary>
+    public static class CardHoverLift
     {
-        private void Update()
+        private const float HoverScale = 1.16f;
+
+        private static readonly List<Lifted> Active = new List<Lifted>();
+
+        public static void Apply(RectTransform rect)
         {
-            CardTooltipHost.TickDelay();
+            if (rect == null || Find(rect) != null)
+            {
+                return;
+            }
+
+            // 滚动区里套着 RectMask2D，放大会被裁掉一半，那里只出详情、不放大。
+            if (rect.GetComponentInParent<RectMask2D>() != null)
+            {
+                return;
+            }
+
+            Lifted state = new Lifted
+            {
+                Rect = rect,
+                Scale = rect.localScale,
+                Position = rect.anchoredPosition,
+                SiblingIndex = rect.GetSiblingIndex(),
+                Parent = rect.parent,
+                ParentSiblingIndex = rect.parent != null ? rect.parent.GetSiblingIndex() : 0
+            };
+
+            float width = rect.rect.width;
+            float height = rect.rect.height;
+            bool anchoredTopLeft = rect.pivot.x <= 0.01f && rect.pivot.y >= 0.99f;
+
+            rect.localScale = new Vector3(
+                state.Scale.x * HoverScale,
+                state.Scale.y * HoverScale,
+                state.Scale.z);
+
+            if (anchoredTopLeft)
+            {
+                rect.anchoredPosition = state.Position + new Vector2(
+                    -(HoverScale - 1f) * width * 0.5f,
+                    (HoverScale - 1f) * height);
+            }
+
+            // 抬起来的那张要压住同排邻居，连它所在的那一行一起提到最前，别被上/下一排盖住。
+            if (state.Parent != null)
+            {
+                state.Parent.SetAsLastSibling();
+            }
+
+            rect.SetAsLastSibling();
+            Active.Add(state);
+        }
+
+        public static void Release(RectTransform rect)
+        {
+            Lifted state = Find(rect);
+            if (state != null)
+            {
+                Restore(state);
+            }
+        }
+
+        public static void ReleaseAll()
+        {
+            for (int index = Active.Count - 1; index >= 0; index--)
+            {
+                Restore(Active[index]);
+            }
+        }
+
+        private static void Restore(Lifted state)
+        {
+            Active.Remove(state);
+
+            if (state.Rect == null)
+            {
+                return;
+            }
+
+            state.Rect.localScale = state.Scale;
+            state.Rect.anchoredPosition = state.Position;
+
+            if (state.Parent != null)
+            {
+                state.Parent.SetSiblingIndex(state.ParentSiblingIndex);
+            }
+
+            state.Rect.SetSiblingIndex(state.SiblingIndex);
+        }
+
+        private static Lifted Find(RectTransform rect)
+        {
+            for (int index = 0; index < Active.Count; index++)
+            {
+                if (Active[index].Rect == rect)
+                {
+                    return Active[index];
+                }
+            }
+
+            return null;
+        }
+
+        private sealed class Lifted
+        {
+            public RectTransform Rect;
+            public Vector3 Scale;
+            public Vector2 Position;
+            public int SiblingIndex;
+            public Transform Parent;
+            public int ParentSiblingIndex;
         }
     }
 
-    /// <summary>给任意可点击的卡牌行补上「悬停看详情」：截图里的商店、奖励选择都用它。</summary>
+    /// <summary>给任意可悬停的卡牌补上「立刻看详情 + 牌面放大」：商店、奖励、模拟战斗都用它。</summary>
     public sealed class CardHoverTarget : MonoBehaviour,
         IPointerEnterHandler,
         IPointerExitHandler,
@@ -616,13 +667,19 @@ namespace ProjectArtOfAll.Board
         private CardDefinition card;
         private RectTransform canvas;
         private Font font;
+        private bool liftCard = true;
         private bool hovering;
 
-        public void Bind(CardDefinition definition, RectTransform tooltipCanvas, Font tooltipFont)
+        public void Bind(
+            CardDefinition definition,
+            RectTransform tooltipCanvas,
+            Font tooltipFont,
+            bool lift = true)
         {
             card = definition;
             canvas = tooltipCanvas;
             font = tooltipFont;
+            liftCard = lift;
         }
 
         public void OnPointerEnter(PointerEventData eventData)
@@ -633,6 +690,11 @@ namespace ProjectArtOfAll.Board
             }
 
             hovering = true;
+            if (liftCard)
+            {
+                CardHoverLift.Apply(transform as RectTransform);
+            }
+
             CardTooltipHost.Show(canvas, font, card, eventData.position, eventData.enterEventCamera);
         }
 
@@ -649,16 +711,20 @@ namespace ProjectArtOfAll.Board
         public void OnPointerExit(PointerEventData eventData)
         {
             hovering = false;
+            CardHoverLift.Release(transform as RectTransform);
             CardTooltipHost.Hide();
         }
 
         private void OnDisable()
         {
-            if (hovering)
+            if (!hovering)
             {
-                hovering = false;
-                CardTooltipHost.Hide();
+                return;
             }
+
+            hovering = false;
+            CardHoverLift.Release(transform as RectTransform);
+            CardTooltipHost.Hide();
         }
     }
 }

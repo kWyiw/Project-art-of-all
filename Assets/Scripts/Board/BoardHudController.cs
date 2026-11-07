@@ -1282,7 +1282,8 @@ namespace ProjectArtOfAll.Board
                 hover = row.AddComponent<CardHoverTarget>();
             }
 
-            hover.Bind(definition, CardTooltipHost.CanvasRect(transform), HudFont);
+            // 商店/奖励行是整块列表行，不放大（放大只会糊住相邻行），只出详情。
+            hover.Bind(definition, CardTooltipHost.CanvasRect(transform), HudFont, false);
         }
 
         private void RenderShop(MatchPlayerState player, ShopSession shop)

@@ -983,11 +983,14 @@ namespace ProjectArtOfAll.Board
 
         public void OnPointerEnter(PointerEventData eventData)
         {
+            // 扫到就立刻出详情，并把这张牌抬起来放大一点。
+            CardHoverLift.Apply(transform as RectTransform);
             owner?.ShowTooltip(this, eventData.position);
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
+            CardHoverLift.Release(transform as RectTransform);
             owner?.HideTooltip();
         }
     }

@@ -116,6 +116,7 @@ namespace ProjectArtOfAll.UI
 
         public void Hide()
         {
+            CardTooltipHost.Hide();
             gameObject.SetActive(false);
         }
 
@@ -215,7 +216,7 @@ namespace ProjectArtOfAll.UI
                 drag.Index = index;
 
                 CardHoverTarget hover = rowRect.gameObject.AddComponent<CardHoverTarget>();
-                hover.Bind(card, root, font);
+                hover.Bind(card, CardTooltipHost.CanvasRect(root), font, false);
             }
         }
 
@@ -468,7 +469,7 @@ namespace ProjectArtOfAll.UI
                 button.onClick.AddListener(() => RemoveCard(isLeft, captured));
 
                 CardHoverTarget hover = chip.AddComponent<CardHoverTarget>();
-                hover.Bind(card, root, font);
+                hover.Bind(card, CardTooltipHost.CanvasRect(root), font);
 
                 chips.Add(chip);
             }
