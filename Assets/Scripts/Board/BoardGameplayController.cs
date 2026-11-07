@@ -397,7 +397,7 @@ namespace ProjectArtOfAll.Board
                     awaitingFork = true;
 
                     hud?.ShowForkChoices(
-                        CreateForkChoices(current, legalEdges),
+                        CreateForkChoices(current, previous, legalEdges, steps - step),
                         SelectFork);
                     // 每个可选方向对应的目标地块同时点亮，颜色与箭头一致。
                     forkHighlight?.Show(forkTargetTiles, forkTargetColors);
@@ -1026,9 +1026,15 @@ namespace ProjectArtOfAll.Board
             return -1;
         }
 
+        /// <summary>
+        /// 岔路按钮：箭头朝着「下一步」的方向，高亮的那块地是「这一轮剩下的步数走完预计停下的地方」。
+        /// 后面的岔路按直行优先预测（提前没法再问一次），箭头按钮放在预测落点上。
+        /// </summary>
         private IReadOnlyList<BoardForkChoice> CreateForkChoices(
             int currentNodeId,
-            IReadOnlyList<int> edges)
+            int previousNodeId,
+            IReadOnlyList<int> edges,
+            int remainingSteps)
         {
             List<BoardForkChoice> choices = new List<BoardForkChoice>(edges.Count);
             Vector2Int currentCell = UnityMapGraphFactory.CellFromNodeId(currentNodeId);
@@ -1038,7 +1044,17 @@ namespace ProjectArtOfAll.Board
             foreach (int edge in edges)
             {
                 Vector2Int targetCell = UnityMapGraphFactory.CellFromNodeId(edge);
-                BoardTileView targetTile = tilesByNode[edge];
+                int landingNodeId = remainingSteps > 1 && graph != null
+                    ? MovementSolver.PredictLanding(
+                        graph,
+                        currentNodeId,
+                        previousNodeId,
+                        remainingSteps,
+                        edge)
+                    : edge;
+                BoardTileView targetTile = tilesByNode.ContainsKey(landingNodeId)
+                    ? tilesByNode[landingNodeId]
+                    : tilesByNode[edge];
                 Vector3 screen = Camera.main.WorldToScreenPoint(
                     targetTile.transform.position + Vector3.up * 1.2f);
                 Color color = ForkChoiceColors[choices.Count % ForkChoiceColors.Length];

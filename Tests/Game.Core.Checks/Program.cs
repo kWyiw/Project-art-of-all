@@ -44,6 +44,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckFirstMoveFromHome();
                 CheckEarlyHomeStop();
                 CheckPassThroughOpponent();
+                CheckStraightOnlyAndPrediction();
                 CheckShopTile();
                 CheckCpuAi();
                 CheckM3FullMatch();
@@ -1826,6 +1827,45 @@ namespace ProjectArtOfAll.Core.Checks
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// 力直格（ForceStraight）不再给岔路选择，预测落点按「直行优先」走完剩余步数。
+        /// </summary>
+        private static void CheckStraightOnlyAndPrediction()
+        {
+            MapGraph Build(bool straightOnly)
+            {
+                MapNode[] nodes =
+                {
+                    new MapNode(0, TileType.Home, 0, new MapCell(0, 0), 1, 3),
+                    new MapNode(1, TileType.Home, 1, new MapCell(0, 1), straightOnly, 0, 2, 4),
+                    new MapNode(2, TileType.Home, 2, new MapCell(0, 2), 1, 3),
+                    new MapNode(3, TileType.Home, 3, new MapCell(0, 3), 2, 0),
+                    new MapNode(4, TileType.Neutral, -1, new MapCell(1, 1), 1),
+                };
+
+                return MapGraph.Create(nodes, playerCount: 4);
+            }
+
+            MapGraph open = Build(false);
+            Assert(
+                open.LegalNextNodes(1, 0).Count == 2,
+                "A normal junction must offer the straight edge and the right turn.");
+
+            MapGraph forced = Build(true);
+            IReadOnlyList<int> legal = forced.LegalNextNodes(1, 0);
+            Assert(
+                legal.Count == 1 && legal[0] == 2,
+                "A straight-only tile must keep only the straight edge, not the right turn.");
+
+            int landing = MovementSolver.PredictLanding(forced, 0, 3, 3);
+            Assert(
+                landing == 3,
+                "Predicting three steps across a straight-only tile must land on node 3, got "
+                    + landing.ToString() + ".");
+
+            Console.WriteLine("[straightonly] junction keeps straight only, predicted landing=3");
         }
 
         private static void CheckSceneMapTeleport()

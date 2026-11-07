@@ -62,6 +62,19 @@ namespace ProjectArtOfAll.Core.Board
             GridColumn = cell.Column;
         }
 
+        /// <summary>Grid node that never offers a choice: it may only be walked straight through.</summary>
+        public MapNode(
+            int id,
+            TileType tileType,
+            int ownerPlayerId,
+            MapCell cell,
+            bool forceStraight,
+            params int[] outEdges)
+            : this(id, tileType, ownerPlayerId, cell, outEdges)
+        {
+            ForceStraight = forceStraight;
+        }
+
         public int Id { get; }
         public TileType TileType { get; }
         public int OwnerPlayerId { get; }
@@ -70,6 +83,13 @@ namespace ProjectArtOfAll.Core.Board
         public int GridColumn { get; } = -1;
         public bool HasGridPosition => GridRow >= 0 && GridColumn >= 0;
         public MapCell Cell { get; }
-        public bool IsFork => outEdges.Count >= 2;
+
+        /// <summary>
+        /// 这一格不算岔路口：即使它有三条连线，走到这里也只能继续直行。
+        /// 用来掐掉那些"右拐会把人带回顺时针"的格子（R-MAP-002）。
+        /// </summary>
+        public bool ForceStraight { get; }
+
+        public bool IsFork => !ForceStraight && outEdges.Count >= 2;
     }
 }

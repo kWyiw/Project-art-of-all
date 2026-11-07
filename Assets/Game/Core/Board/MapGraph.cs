@@ -152,6 +152,13 @@ namespace ProjectArtOfAll.Core.Board
                 }
             }
 
+            // 被标成「不算岔路口」的格子只能直行：这些格子右拐会把人带回顺时针方向，
+            // 而棋盘约定只能逆时针推进（R-MAP-002）。
+            if (node.ForceStraight && straight.Count > 0)
+            {
+                return straight.AsReadOnly();
+            }
+
             if (straight.Count > 0 && rightTurn.Count > 0)
             {
                 straight.AddRange(rightTurn);

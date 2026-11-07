@@ -7,12 +7,18 @@ namespace ProjectArtOfAll.Board
     /// <summary>One placed tile of a generated board.</summary>
     public readonly struct BoardMapCell
     {
-        public BoardMapCell(int row, int column, TileType type, int ownerPlayerId = -1)
+        public BoardMapCell(
+            int row,
+            int column,
+            TileType type,
+            int ownerPlayerId = -1,
+            bool forceStraight = false)
         {
             Row = row;
             Column = column;
             Type = type;
             OwnerPlayerId = ownerPlayerId;
+            ForceStraight = forceStraight;
         }
 
         public int Row { get; }
@@ -22,6 +28,9 @@ namespace ProjectArtOfAll.Board
         public TileType Type { get; }
 
         public int OwnerPlayerId { get; }
+
+        /// <summary>三向连线的格子，但走到这里只能直行（不算岔路口）。</summary>
+        public bool ForceStraight { get; }
     }
 
     /// <summary>One walkable link between two tiles of a generated board.</summary>
@@ -162,7 +171,8 @@ namespace ProjectArtOfAll.Board
                         row,
                         column,
                         Parse(code),
-                        code == 'H' ? HomeOwnerFor(row, column) : -1));
+                        code == 'H' ? HomeOwnerFor(row, column) : -1,
+                        IsStraightOnly(row, column)));
                 }
             }
 
@@ -209,9 +219,33 @@ namespace ProjectArtOfAll.Board
                 1f);
         }
 
-        /// <summary>The four home squares own one seat each, in the order the sketch numbers them.</summary>
-        private static int HomeOwnerFor(int row, int column)
+        /// <summary>
+        /// 这四块地虽然有三条连线，但不再算岔路口，只能直行：从它们右拐会把人带回
+        /// 顺时针方向，而棋盘约定只能逆时针推进（R-MAP-002）。
+        /// </summary>
+        private static readonly MapCell[] StraightOnlyCells =
         {
+            new MapCell(2, 4),
+            new MapCell(3, 7),
+            new MapCell(5, 3),
+            new MapCell(6, 6),
+        };
+
+        private static bool IsStraightOnly(int row, int column)
+        {
+            foreach (MapCell cell in StraightOnlyCells)
+            {
+                if (cell.Row == row && cell.Column == column)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>The four home squares own one seat each, in the order the sketch numbers them.</summary>
+        private static int HomeOwnerFor(int row, int column)        {
             if (row == 2 && column == 3)
             {
                 return 0;

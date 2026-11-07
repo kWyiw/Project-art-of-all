@@ -211,6 +211,110 @@ namespace ProjectArtOfAll.Core.Board
         }
 
         /// <summary>
+        /// Where a roll is expected to end when it starts with
+        /// <paramref name="forcedFirstNodeId"/> and spends every remaining step walking.
+        /// The fork buttons use it to light up the tile the player will actually land on
+        /// instead of the first tile behind the junction. Later junctions are walked
+        /// straight-first (then right, then the only edge) because the highlight cannot ask
+        /// the player twice in advance; the roll itself still offers those choices.
+        /// </summary>
+        public static int PredictLanding(
+            MapGraph graph,
+            int startNodeId,
+            int previousNodeId,
+            int steps,
+            int forcedFirstNodeId = -1)
+        {
+            if (graph == null)
+            {
+                throw new ArgumentNullException(nameof(graph));
+            }
+
+            if (steps < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(steps));
+            }
+
+            graph.GetNode(startNodeId);
+            int current = startNodeId;
+            int previous = previousNodeId;
+
+            for (int step = 0; step < steps; step++)
+            {
+                IReadOnlyList<int> legal = LegalNextNodes(
+                    graph,
+                    current,
+                    previous,
+                    forcedFirstNodeId,
+                    step);
+                if (legal.Count == 0)
+                {
+                    break;
+                }
+
+                int next = PreferredNext(graph, current, previous, legal);
+                previous = current;
+                current = next;
+            }
+
+            return current;
+        }
+
+        /// <summary>Straight first, then a right turn, otherwise whatever is left.</summary>
+        private static int PreferredNext(
+            MapGraph graph,
+            int currentNodeId,
+            int previousNodeId,
+            IReadOnlyList<int> legal)
+        {
+            if (legal.Count == 1 || previousNodeId < 0)
+            {
+                return legal[0];
+            }
+
+            MapNode node = graph.GetNode(currentNodeId);
+            MapNode previous = graph.GetNode(previousNodeId);
+            if (!node.HasGridPosition || !previous.HasGridPosition)
+            {
+                return legal[0];
+            }
+
+            int forwardRow = node.GridRow - previous.GridRow;
+            int forwardColumn = node.GridColumn - previous.GridColumn;
+
+            foreach (int edge in legal)
+            {
+                if (IsStep(graph, node, edge, forwardRow, forwardColumn))
+                {
+                    return edge;
+                }
+            }
+
+            foreach (int edge in legal)
+            {
+                if (IsStep(graph, node, edge, forwardColumn, -forwardRow))
+                {
+                    return edge;
+                }
+            }
+
+            return legal[0];
+        }
+
+        private static bool IsStep(
+            MapGraph graph,
+            MapNode node,
+            int edge,
+            int stepRow,
+            int stepColumn)
+        {
+            MapNode target = graph.GetNode(edge);
+            return target.HasGridPosition &&
+                   target.GridRow - node.GridRow == stepRow &&
+                   target.GridColumn - node.GridColumn == stepColumn;
+        }
+
+        /// <summary>
         /// The edges available for one step. On the first step of a move the forced Home
         /// departure (counter-clockwise) is the only choice, so the walk never branches there.
         /// </summary>

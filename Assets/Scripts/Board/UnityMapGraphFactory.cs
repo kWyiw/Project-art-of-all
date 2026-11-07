@@ -144,6 +144,7 @@ namespace ProjectArtOfAll.Board
                     cell.Type,
                     cell.Type == TileType.Home ? cell.OwnerPlayerId : -1,
                     new MapCell(cell.Row, cell.Column),
+                    cell.ForceStraight,
                     outgoing.ToArray()));
             }
 
