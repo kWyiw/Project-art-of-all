@@ -61,6 +61,10 @@ namespace ProjectArtOfAll.Board
         private Vector2 animationVelocity;
         private Action<int> forkSelectionHandler;
         private bool forkArrowsVisible;
+
+        /// <summary>岔路箭头的字形色：底色换成方向色后，深色箭头在所有配色上都清楚。</summary>
+        private static readonly Color ForkArrowInkColor =
+            new Color(0.10f, 0.10f, 0.11f);
         private Action encounterAcceptedHandler;
         private bool encounterVisible;
         private float encounterShownAt;
@@ -580,6 +584,21 @@ namespace ProjectArtOfAll.Board
                 rect.position = choices[index].ScreenPosition;
                 rect.localScale = Vector3.one;
                 forkArrowLabels[index].text = choices[index].Arrow;
+                // 箭头与它指向的地块用同一种颜色：淡色底 + 深色字形仍然清晰可读。
+                Image arrowBack = button.targetGraphic as Image;
+                if (arrowBack == null)
+                {
+                    arrowBack = button.GetComponent<Image>();
+                }
+
+                if (arrowBack != null)
+                {
+                    Color tint = choices[index].Color;
+                    tint.a = 1f;
+                    arrowBack.color = tint;
+                }
+
+                forkArrowLabels[index].color = ForkArrowInkColor;
 
                 button.onClick.RemoveAllListeners();
                 int capturedIndex = index;

@@ -16,14 +16,18 @@ namespace ProjectArtOfAll.Board
 {
     public readonly struct BoardForkChoice
     {
-        public BoardForkChoice(Vector3 screenPosition, string arrow)
+        public BoardForkChoice(Vector3 screenPosition, string arrow, Color color)
         {
             ScreenPosition = screenPosition;
             Arrow = arrow;
+            Color = color;
         }
 
         public Vector3 ScreenPosition { get; }
         public string Arrow { get; }
+
+        /// <summary>这个方向在棋盘上的高亮色，与目标地块上的薄片同色。</summary>
+        public Color Color { get; }
     }
 
     [DisallowMultipleComponent]
@@ -71,6 +75,22 @@ namespace ProjectArtOfAll.Board
         private MapGraph graph;
         private MatchController match;
         private GameObject pathLines;
+        private BoardForkHighlight forkHighlight;
+        private readonly List<BoardTileView> forkTargetTiles =
+            new List<BoardTileView>();
+        private readonly List<Color> forkTargetColors = new List<Color>();
+
+        /// <summary>
+        /// 每个岔路方向的配色：箭头按钮与目标地块薄片用同一种颜色，
+        /// 让"点哪个按钮会走到哪块地"直接可读。
+        /// </summary>
+        private static readonly Color[] ForkChoiceColors =
+        {
+            new Color(0.99f, 0.82f, 0.40f),
+            new Color(0.52f, 0.84f, 0.97f),
+            new Color(0.62f, 0.93f, 0.70f),
+            new Color(0.86f, 0.74f, 0.99f),
+        };
         private int pendingForkSelection = -1;
         private bool isMoving;
         private bool awaitingFork;
@@ -109,6 +129,7 @@ namespace ProjectArtOfAll.Board
                 ? UnityMapGraphFactory.BuildFromDefinition(generatedMap)
                 : UnityMapGraphFactory.Build(tilesByNode.Values);
             pathLines = BoardPathLines.Build(transform, graph, tilesByNode);
+            forkHighlight = BoardForkHighlight.Create(transform);
             // 正常模式让真人先手（从主页面进来的第一回合就能操作）；
             // 无CPU测试模式没有固定真人，沿用准备室选的门。
             int startingPlayer = GameSession.HumanSeat >= 0
@@ -378,6 +399,8 @@ namespace ProjectArtOfAll.Board
                     hud?.ShowForkChoices(
                         CreateForkChoices(current, legalEdges),
                         SelectFork);
+                    // 每个可选方向对应的目标地块同时点亮，颜色与箭头一致。
+                    forkHighlight?.Show(forkTargetTiles, forkTargetColors);
 
                     while (pendingForkSelection < 0)
                     {
@@ -387,6 +410,7 @@ namespace ProjectArtOfAll.Board
                     selectedEdgeIndex = pendingForkSelection;
                     awaitingFork = false;
                     hud?.HideForkChoices();
+                    forkHighlight?.Clear();
                     forkDirections.Add(selectedEdgeIndex);
                 }
 
@@ -941,6 +965,8 @@ namespace ProjectArtOfAll.Board
         {
             List<BoardForkChoice> choices = new List<BoardForkChoice>(edges.Count);
             Vector2Int currentCell = UnityMapGraphFactory.CellFromNodeId(currentNodeId);
+            forkTargetTiles.Clear();
+            forkTargetColors.Clear();
 
             foreach (int edge in edges)
             {
@@ -948,10 +974,14 @@ namespace ProjectArtOfAll.Board
                 BoardTileView targetTile = tilesByNode[edge];
                 Vector3 screen = Camera.main.WorldToScreenPoint(
                     targetTile.transform.position + Vector3.up * 1.2f);
+                Color color = ForkChoiceColors[choices.Count % ForkChoiceColors.Length];
                 choices.Add(
                     new BoardForkChoice(
                         screen,
-                        GetArrowSymbol(currentCell, targetCell)));
+                        GetArrowSymbol(currentCell, targetCell),
+                        color));
+                forkTargetTiles.Add(targetTile);
+                forkTargetColors.Add(color);
             }
 
             return choices;
