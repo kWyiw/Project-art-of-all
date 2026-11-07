@@ -1499,8 +1499,17 @@ namespace ProjectArtOfAll.Board
                 out Text continueLabel);
 
             ColorBlock continueColors = continueButton.colors;
-            continueColors.normalColor = new Color(0.86f, 0.86f, 0.84f, 1f);
+            continueColors.normalColor = Color.white;
             continueButton.colors = continueColors;
+
+            // 「继续前进」是次要动作：底色换成中性灰，免得和「停在家」的金色抢注意力。
+            Image continueImage = continueButton.GetComponent<Image>();
+            continueImage.color = new Color(0.22f, 0.24f, 0.25f, 1f);
+
+            Outline continueOutline = continueButton.GetComponent<Outline>();
+            continueOutline.effectColor = new Color(0.60f, 0.64f, 0.60f, 0.55f);
+
+            continueLabel.color = new Color(0.90f, 0.90f, 0.86f, 1f);
 
             overlay.SetActive(false);
             return new BoardHomeStopView(
