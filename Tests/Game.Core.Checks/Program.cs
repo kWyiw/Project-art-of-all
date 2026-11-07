@@ -39,6 +39,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckRewardChoice();
                 CheckWarpTeleport();
                 CheckCardBandCommands();
+                CheckFreeActionsDuringAnotherTurn();
                 CheckSceneMapTeleport();
                 CheckFirstMoveFromHome();
                 CheckShopTile();
@@ -1196,6 +1197,57 @@ namespace ProjectArtOfAll.Core.Checks
         /// R-CARD-011：栏位可以留空，留空就不是相邻——战斗里的光环也必须按列号判邻，
         /// 于是"磨刀石 + 撬棍"中间空一格时撬棍吃不到 +2 骰值。
         /// </summary>
+        /// <summary>
+        /// R-TURN-002：整理卡牌、出售、装备是免费动作，不占用回合行动——所以轮不到自己
+        /// 的时候也能提交（本地玩家要能在别人回合里调整自己的装配）。掷骰这类回合行动
+        /// 仍然只属于当前座位。
+        /// </summary>
+        private static void CheckFreeActionsDuringAnotherTurn()
+        {
+            MatchController controller = new MatchController(CreateM3Graph(), 5150UL);
+            MatchPlayerState active = controller.State.CurrentPlayer;
+            MatchPlayerState other = controller.State.Players.First(player => player.Id != active.Id);
+            Assert(
+                controller.State.Phase == MatchPhase.AwaitRoll,
+                "The match has to open on the roll phase for the free action test.");
+
+            CardInstance equipped = other.BattleCards[0];
+            controller.Submit(new MoveCardCommand(other.Id, equipped.Uid, toBattle: false, column: 3));
+            Assert(
+                !other.IsEquipped(equipped),
+                "A seat that is not active must still be able to pull a card out of battle.");
+            Assert(
+                other.ColumnOf(equipped.Uid) == 3,
+                "A seat that is not active keeps the exact column it asked for.");
+
+            CardInstance spare = other.OwnedCards.First(card => card.Uid != equipped.Uid);
+            int shardsBefore = other.Shards;
+            int ownedBefore = other.OwnedCards.Count;
+            controller.Submit(new SellCardCommand(other.Id, spare.Uid));
+            Assert(
+                other.OwnedCards.Count == ownedBefore - 1,
+                "A seat that is not active must still be able to sell a card.");
+            Assert(other.Shards > shardsBefore, "Selling refunds shards no matter whose turn it is.");
+
+            controller.Submit(new EquipCardCommand(other.Id, equipped.Uid));
+            Assert(
+                other.IsEquipped(equipped),
+                "A seat that is not active must still be able to equip a card.");
+
+            bool rollRejected = false;
+            try
+            {
+                controller.Submit(new RollCommand(other.Id));
+            }
+            catch (InvalidOperationException)
+            {
+                rollRejected = true;
+            }
+
+            Assert(rollRejected, "Rolling stays exclusive to the active seat.");
+            Console.WriteLine("[freeactions] move/sell/equip outside turn ok");
+        }
+
         private static void CheckSlotAdjacencyInCombat()
         {
             CardInstance Make(int uid, string id)

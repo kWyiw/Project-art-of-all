@@ -815,7 +815,7 @@ namespace ProjectArtOfAll.Board
                 "（-",
                 offer.Price.ToString(),
                 " 碎片）"));
-            hud?.RefreshCardBand(player);
+            hud?.RefreshCardBand(HumanPlayer);
             RefreshShopPanel();
         }
 
@@ -1254,7 +1254,9 @@ namespace ProjectArtOfAll.Board
             }
 
             hud.SetMatchStatus(status);
-            hud.ShowCards(player);
+            // 卡槽带永远只显示本地玩家自己的藏品：轮到别人时也不能变成别人的牌，
+            // 这样玩家在自己的回合之外也能整理装配（R-TURN-002 免费动作）。
+            hud.ShowCards(HumanPlayer);
             hud.SetAssemblyLevel(player.Level);
             hud.RefreshPlayerPanels(match.State);
             hud.PumpEvents(match);

@@ -336,8 +336,8 @@ namespace ProjectArtOfAll.Core.Match
 
         private void HandleSell(SellCardCommand command)
         {
-            ValidateCurrentPlayer(command.PlayerId);
-            if (!State.CurrentPlayer.TrySellCard(command.CardUid, out CardInstance card))
+            MatchPlayerState actor = ResolveFreeActionPlayer(command.PlayerId);
+            if (!actor.TrySellCard(command.CardUid, out CardInstance card))
             {
                 throw new InvalidOperationException(
                     $"Player {command.PlayerId} does not own card {command.CardUid}.");
@@ -345,10 +345,10 @@ namespace ProjectArtOfAll.Core.Match
 
             // R-ECO-005：出售按这张牌的当前价值结算（幸运饼干这类会成长）。
             int refund = card.Value;
-            AddShards(State.CurrentPlayer, refund);
+            AddShards(actor, refund);
             Publish(
                 new CardSoldEvent(
-                    State.CurrentPlayer.Id,
+                    actor.Id,
                     card.Uid,
                     card.Definition.Id,
                     refund));
@@ -356,15 +356,15 @@ namespace ProjectArtOfAll.Core.Match
 
         private void HandleMoveCard(MoveCardCommand command)
         {
-            ValidateCurrentPlayer(command.PlayerId);
-            CardInstance card = State.CurrentPlayer.FindCard(command.CardUid);
+            MatchPlayerState actor = ResolveFreeActionPlayer(command.PlayerId);
+            CardInstance card = actor.FindCard(command.CardUid);
             if (card == null)
             {
                 throw new InvalidOperationException(
                     $"Player {command.PlayerId} does not own card {command.CardUid}.");
             }
 
-            if (!State.CurrentPlayer.TryMoveCard(command.CardUid, command.ToBattle, command.Column))
+            if (!actor.TryMoveCard(command.CardUid, command.ToBattle, command.Column))
             {
                 throw new InvalidOperationException(
                     "The card does not fit in that slot of the current row.");
@@ -372,42 +372,42 @@ namespace ProjectArtOfAll.Core.Match
 
             Publish(
                 new CardMovedEvent(
-                    State.CurrentPlayer.Id,
+                    actor.Id,
                     card.Uid,
                     card.Definition.Id,
                     command.ToBattle,
-                    State.CurrentPlayer.ColumnOf(card.Uid)));
+                    actor.ColumnOf(card.Uid)));
         }
 
         private void HandleEquip(EquipCardCommand command)
         {
-            ValidateCurrentPlayer(command.PlayerId);
-            CardInstance card = State.CurrentPlayer.FindCard(command.CardUid);
+            MatchPlayerState actor = ResolveFreeActionPlayer(command.PlayerId);
+            CardInstance card = actor.FindCard(command.CardUid);
             if (card == null)
             {
                 throw new InvalidOperationException(
                     $"Player {command.PlayerId} does not own card {command.CardUid}.");
             }
 
-            if (!State.CurrentPlayer.TryEquipCard(command.CardUid))
+            if (!actor.TryEquipCard(command.CardUid))
             {
                 throw new InvalidOperationException(
                     "The card cannot be equipped at the current battle capacity.");
             }
 
-            Publish(new CardEquippedEvent(State.CurrentPlayer.Id, card.Uid, true));
+            Publish(new CardEquippedEvent(actor.Id, card.Uid, true));
         }
 
         private void HandleUnequip(UnequipCardCommand command)
         {
-            ValidateCurrentPlayer(command.PlayerId);
-            if (!State.CurrentPlayer.TryUnequipCard(command.CardUid))
+            MatchPlayerState actor = ResolveFreeActionPlayer(command.PlayerId);
+            if (!actor.TryUnequipCard(command.CardUid))
             {
                 throw new InvalidOperationException(
                     $"Card {command.CardUid} is not currently equipped.");
             }
 
-            Publish(new CardEquippedEvent(State.CurrentPlayer.Id, command.CardUid, false));
+            Publish(new CardEquippedEvent(actor.Id, command.CardUid, false));
         }
 
         /// <summary>
@@ -964,6 +964,22 @@ namespace ProjectArtOfAll.Core.Match
 
             player.Wins = Math.Max(0, player.Wins + amount);
             Publish(new WinsChangedEvent(player.Id, amount, player.Wins));
+        }
+
+        /// <summary>
+        /// R-TURN-002：整理卡牌、出售、装备这些免费动作不属于"回合行动"，任何座位在
+        /// 对局进行中都可以随时提交——包括正在等别人掷骰的时候（本地玩家要能在对手
+        /// 回合里调整自己的装配）。
+        /// </summary>
+        private MatchPlayerState ResolveFreeActionPlayer(int playerId)
+        {
+            if (playerId < 0 || playerId >= State.Players.Count)
+            {
+                throw new InvalidOperationException(
+                    $"Player {playerId} is not seated.");
+            }
+
+            return State.Players[playerId];
         }
 
         private void ValidateCurrentPlayer(int playerId)
