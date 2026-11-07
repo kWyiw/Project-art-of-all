@@ -15,11 +15,11 @@ namespace ProjectArtOfAll.Board
     /// </summary>
     public sealed class CardTooltipView : MonoBehaviour
     {
-        private const float PanelWidth = 368f;
-        private const float PaddingX = 16f;
-        private const float PaddingTop = 14f;
-        private const float PaddingBottom = 14f;
-        private const float BadgeWidth = 62f;
+        private const float PanelWidth = 736f;
+        private const float PaddingX = 32f;
+        private const float PaddingTop = 28f;
+        private const float PaddingBottom = 28f;
+        private const float BadgeWidth = 124f;
 
         private static readonly Color PanelColor = new Color(0.075f, 0.068f, 0.058f, 0.985f);
         private static readonly Color FrameColor = new Color(0.85f, 0.63f, 0.25f, 0.95f);
@@ -80,14 +80,14 @@ namespace ProjectArtOfAll.Board
             contentWidth = PanelWidth - PaddingX * 2f;
             cursorY = PaddingTop;
 
-            AddText("Title", card.DisplayName, 21, TitleColor, FontStyle.Bold, 3f,
+            AddText("Title", card.DisplayName, 42, TitleColor, FontStyle.Bold, 6f,
                 contentWidth - BadgeWidth, 0f, TextAnchor.UpperLeft);
             AddBadge(card.SlotSize.ToString() + "c");
 
             string english = CardTooltipText.EnglishName(card.Id);
             if (!string.IsNullOrEmpty(english))
             {
-                AddText("English", english, 12, EnglishColor, FontStyle.Normal, 3f,
+                AddText("English", english, 24, EnglishColor, FontStyle.Normal, 6f,
                     contentWidth - BadgeWidth, 0f, TextAnchor.UpperLeft);
             }
 
@@ -97,7 +97,7 @@ namespace ProjectArtOfAll.Board
                 card.Value.ToString(),
                 " · ",
                 CardTooltipText.ScopeLabel(card.Scope));
-            AddText("Meta", meta, 12, MetaColor, FontStyle.Normal, 0f,
+            AddText("Meta", meta, 24, MetaColor, FontStyle.Normal, 0f,
                 contentWidth, 0f, TextAnchor.UpperLeft);
 
             bool hasEffects = card.ActiveEffects != null && card.ActiveEffects.Count > 0;
@@ -108,7 +108,7 @@ namespace ProjectArtOfAll.Board
 
             if (hasEffects)
             {
-                cursorY += 8f;
+                cursorY += 16f;
                 foreach (CardEffect effect in card.ActiveEffects)
                 {
                     AddBulletRow(CardTooltipText.Colorize(CardText.Effect(effect)));
@@ -117,7 +117,7 @@ namespace ProjectArtOfAll.Board
 
             if (hasPassives)
             {
-                cursorY += hasEffects ? 6f : 8f;
+                cursorY += hasEffects ? 12f : 16f;
                 if (card.Auras != null)
                 {
                     foreach (AuraDefinition aura in card.Auras)
@@ -139,14 +139,14 @@ namespace ProjectArtOfAll.Board
 
             if (hasEffects || hasPassives)
             {
-                AddInnerBox(effectsTop + 2f, cursorY - 4f);
+                AddInnerBox(effectsTop + 4f, cursorY - 8f);
             }
 
             if (!hasEffects && !hasPassives)
             {
-                AddDivider(6f);
-                AddText("Plain", "这张牌没有触发效果。", 13, BodyColor, FontStyle.Normal, 0f,
-                    contentWidth, 8f, TextAnchor.UpperLeft);
+                AddDivider(12f);
+                AddText("Plain", "这张牌没有触发效果。", 26, BodyColor, FontStyle.Normal, 0f,
+                    contentWidth, 16f, TextAnchor.UpperLeft);
             }
 
             List<string> glossary = CardTooltipText.Glossary(card);
@@ -158,15 +158,15 @@ namespace ProjectArtOfAll.Board
 
             if (glossary.Count > 0)
             {
-                AddDivider(8f);
+                AddDivider(16f);
                 foreach (string line in glossary)
                 {
-                    AddText("Note", CardTooltipText.Colorize(line), 11, NoteColor, FontStyle.Normal, 2f,
-                        contentWidth, 5f, TextAnchor.UpperLeft);
+                    AddText("Note", CardTooltipText.Colorize(line), 22, NoteColor, FontStyle.Normal, 4f,
+                        contentWidth, 10f, TextAnchor.UpperLeft);
                 }
             }
 
-            float height = Mathf.Max(cursorY + PaddingBottom, 96f);
+            float height = Mathf.Max(cursorY + PaddingBottom, 192f);
             root.sizeDelta = new Vector2(PanelWidth, height);
             PlaceAt(screenPosition, canvas, height, screenCamera);
         }
@@ -212,17 +212,17 @@ namespace ProjectArtOfAll.Board
             float x = local.x + canvas.rect.width * canvas.pivot.x;
             float y = local.y + canvas.rect.height * canvas.pivot.y;
 
-            float offset = 22f;
+            float offset = 40f;
             float targetX = x + offset;
             if (targetX + PanelWidth > width - 8f)
             {
                 targetX = x - PanelWidth - offset;
             }
 
-            float targetY = y + 16f;
+            float targetY = y + 32f;
             if (targetY + height > canvasHeight - 8f)
             {
-                targetY = y - height - 16f;
+                targetY = y - height - 32f;
             }
 
             root.anchoredPosition = new Vector2(
@@ -237,10 +237,10 @@ namespace ProjectArtOfAll.Board
                 "Badge",
                 content,
                 font,
-                15,
+                30,
                 FontStyle.Bold,
                 new Vector2(-PaddingX, -PaddingTop),
-                new Vector2(BadgeWidth, 22f),
+                new Vector2(BadgeWidth, 44f),
                 TextAnchor.UpperRight);
             badge.rectTransform.anchorMin = new Vector2(1f, 1f);
             badge.rectTransform.anchorMax = new Vector2(1f, 1f);
@@ -263,11 +263,11 @@ namespace ProjectArtOfAll.Board
                 "Bullet",
                 new Vector2(0f, 1f),
                 new Vector2(0f, 1f),
-                new Vector2(PaddingX, -(cursorY + 4f)),
-                new Vector2(PaddingX + 3f, -(cursorY + 17f)),
+                new Vector2(PaddingX, -(cursorY + 8f)),
+                new Vector2(PaddingX + 6f, -(cursorY + 34f)),
                 BulletColor);
-            AddText("Row", content, 13, BodyColor, FontStyle.Normal, 5f,
-                contentWidth - 16f, 12f, TextAnchor.UpperLeft);
+            AddText("Row", content, 26, BodyColor, FontStyle.Normal, 10f,
+                contentWidth - 32f, 24f, TextAnchor.UpperLeft);
         }
 
         private Text AddText(
@@ -286,7 +286,7 @@ namespace ProjectArtOfAll.Board
                 return null;
             }
 
-            float textWidth = Mathf.Max(40f, width - indent);
+            float textWidth = Mathf.Max(80f, width - indent);
             Text text = BoardHudOverlayFactory.CreateText(
                 transform,
                 name,
@@ -295,7 +295,7 @@ namespace ProjectArtOfAll.Board
                 size,
                 style,
                 new Vector2(PaddingX + indent, -cursorY),
-                new Vector2(textWidth, 10f),
+                new Vector2(textWidth, 20f),
                 alignment);
             text.supportRichText = true;
             text.color = color;
@@ -308,7 +308,7 @@ namespace ProjectArtOfAll.Board
             text.rectTransform.anchoredPosition = new Vector2(PaddingX + indent, -cursorY);
             generated.Add(text.gameObject);
 
-            cursorY += Mathf.Max(text.preferredHeight, 14f) + gap;
+            cursorY += Mathf.Max(text.preferredHeight, 28f) + gap;
             // 上一行创建的 bullet 条也记进 generated（由 AddBulletRow 负责），这里统一清理文本即可。
             return text;
         }
@@ -321,17 +321,17 @@ namespace ProjectArtOfAll.Board
                 "Divider",
                 new Vector2(0f, 1f),
                 new Vector2(0f, 1f),
-                new Vector2(PaddingX + 6f, -(cursorY + 1f)),
-                new Vector2(PaddingX + contentWidth - 6f, -cursorY),
+                new Vector2(PaddingX + 12f, -(cursorY + 2f)),
+                new Vector2(PaddingX + contentWidth - 12f, -cursorY),
                 DividerColor));
-            cursorY += 8f;
+            cursorY += 16f;
         }
 
         /// <summary>效果区背后垫一层浅色内框，把「这块是效果」与标题、词条分开（参考图的红框区域）。</summary>
         private void AddInnerBox(float top, float bottom)
         {
             float height = bottom - top;
-            if (height <= 4f)
+            if (height <= 8f)
             {
                 return;
             }
@@ -341,8 +341,8 @@ namespace ProjectArtOfAll.Board
                 "InnerBox",
                 new Vector2(0f, 1f),
                 new Vector2(0f, 1f),
-                new Vector2(PaddingX - 2f, -top),
-                new Vector2(PaddingX + contentWidth + 2f, -bottom),
+                new Vector2(PaddingX - 4f, -top),
+                new Vector2(PaddingX + contentWidth + 4f, -bottom),
                 new Color(0.22f, 0.19f, 0.15f, 0.55f));
             box.transform.SetSiblingIndex(1);
             generated.Add(box);
