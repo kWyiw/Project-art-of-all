@@ -30,6 +30,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckLoadoutPreview();
                 CheckCombatSimulation();
                 CheckCombatTimeline();
+                CheckSlotAdjacencyInCombat();
                 CheckCustomMaxHealth();
                 CheckCardMechanics();
                 CheckM1MatchDurability();
@@ -1191,6 +1192,60 @@ namespace ProjectArtOfAll.Core.Checks
         }
 
         /// <summary>回放用的时间轴：结算结果必须把完整事件流和战前快照带出来。</summary>
+        /// <summary>
+        /// R-CARD-011：栏位可以留空，留空就不是相邻——战斗里的光环也必须按列号判邻，
+        /// 于是"磨刀石 + 撬棍"中间空一格时撬棍吃不到 +2 骰值。
+        /// </summary>
+        private static void CheckSlotAdjacencyInCombat()
+        {
+            CardInstance Make(int uid, string id)
+            {
+                return new CardInstance(uid, CardDatabase.Instance.Get(id));
+            }
+
+            CardInstance stone = Make(1, "whetstone");
+            CardInstance bar = Make(2, "crowbar");
+            CardInstance door = Make(3, "car_door");
+
+            List<CardSlot> touching = new List<CardSlot>
+            {
+                new CardSlot(0, stone),
+                new CardSlot(1, bar)
+            };
+            List<CardSlot> gapped = new List<CardSlot>
+            {
+                new CardSlot(0, stone),
+                new CardSlot(2, bar)
+            };
+            List<CardSlot> lone = new List<CardSlot> { new CardSlot(0, door) };
+
+            int touchingDamage = DamageInto(touching, lone);
+            int gappedDamage = DamageInto(gapped, lone);
+            Assert(
+                touchingDamage > gappedDamage,
+                "A gap between the whetstone and the crowbar must drop the +2 damage bonus.");
+
+            Console.WriteLine($"[slots] touching={touchingDamage} gapped={gappedDamage}");
+        }
+
+        private static int DamageInto(List<CardSlot> left, List<CardSlot> right)
+        {
+            BattleSnapshot battle = new BattleSnapshot(
+                new CombatantSnapshot(0, 1, left),
+                new CombatantSnapshot(1, 1, right));
+            CombatResult result = new CombatSimulation(battle, 424242UL).RunToCompletion();
+            int total = 0;
+            foreach (GameEvent gameEvent in result.Timeline)
+            {
+                if (gameEvent is DamageDealtEvent damage && damage.TargetPlayerId == 1)
+                {
+                    total += damage.Amount;
+                }
+            }
+
+            return total;
+        }
+
         private static void CheckCombatTimeline()
         {
             CardDatabase catalog = CardDatabase.Instance;
