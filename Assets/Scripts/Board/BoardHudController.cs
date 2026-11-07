@@ -1155,6 +1155,7 @@ namespace ProjectArtOfAll.Board
                         "c）");
                 rewardView.Details[index].text = CardText.Description(definition);
                 rewardView.Buttons[index].interactable = fits;
+                BindHover(rewardView.Buttons[index].gameObject, definition);
             }
 
             rewardView.Overlay.SetActive(true);
@@ -1166,6 +1167,8 @@ namespace ProjectArtOfAll.Board
             {
                 rewardView.Overlay.SetActive(false);
             }
+
+            CardTooltipHost.Hide();
 
             rewardChoiceHandler = null;
         }
@@ -1203,6 +1206,28 @@ namespace ProjectArtOfAll.Board
             {
                 shopView.Overlay.SetActive(false);
             }
+
+            CardTooltipHost.Hide();
+        }
+
+        private Font HudFont =>
+            drawerHandleLabel != null ? drawerHandleLabel.font : null;
+
+        /// <summary>给商店/奖励的整行挂上悬停详情（复用同一块画布上的工具提示）。</summary>
+        private void BindHover(GameObject row, CardDefinition definition)
+        {
+            if (row == null || definition == null)
+            {
+                return;
+            }
+
+            CardHoverTarget hover = row.GetComponent<CardHoverTarget>();
+            if (hover == null)
+            {
+                hover = row.AddComponent<CardHoverTarget>();
+            }
+
+            hover.Bind(definition, CardTooltipHost.CanvasRect(transform), HudFont);
         }
 
         private void RenderShop(MatchPlayerState player, ShopSession shop)
@@ -1261,6 +1286,7 @@ namespace ProjectArtOfAll.Board
                     ? new Color(0.92f, 0.69f, 0.27f, 1f)
                     : new Color(0.6f, 0.58f, 0.54f, 1f);
                 shopView.Buttons[index].interactable = purchasable;
+                BindHover(shopView.Buttons[index].gameObject, definition);
             }
 
             bool canReroll = !shop.RerollUsed &&

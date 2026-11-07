@@ -57,7 +57,6 @@ namespace ProjectArtOfAll.Board
         private readonly List<GameObject> battleCells = new List<GameObject>();
 
         private CardInstance dragging;
-        private CardTooltipView tooltip;
         private List<CardInstance> battleSnapshot = new List<CardInstance>();
         private bool collapsed;
         private float scale = 1f;
@@ -855,26 +854,16 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
-            if (tooltip == null)
-            {
-                RectTransform canvas = root.parent as RectTransform;
-                if (canvas == null)
-                {
-                    return;
-                }
-
-                tooltip = CardTooltipView.Create(canvas, font);
-            }
-
-            tooltip.Show(handler.Card, screenPosition, root.parent as RectTransform);
+            CardTooltipHost.Show(
+                CardTooltipHost.CanvasRect(root),
+                font,
+                handler.Card.Definition,
+                screenPosition);
         }
 
         public void HideTooltip()
         {
-            if (tooltip != null)
-            {
-                tooltip.Hide();
-            }
+            CardTooltipHost.Hide();
         }
 
         public void Select(CardBandDragHandler handler)
