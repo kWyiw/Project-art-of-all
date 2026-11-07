@@ -571,6 +571,9 @@ namespace ProjectArtOfAll.Board
             }
 
             forkArrowLayer.gameObject.SetActive(true);
+            // 方向箭头是玩家正在做的操作：压过卡槽带等常驻面板（UI-2.5.4 的卡槽带永远在，
+            // 但可点的箭头必须浮在它上面，否则被抽屉盖住就选不了方向）。
+            forkArrowLayer.SetAsLastSibling();
             forkArrowsVisible = true;
             forkSelectionHandler = onSelected;
 
