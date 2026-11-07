@@ -38,11 +38,6 @@ namespace ProjectArtOfAll.Board
         private readonly RectTransform bagRow;
         private readonly RectTransform battleRow;
         private readonly RectTransform sellZone;
-        private readonly RectTransform detailPanel;
-        private readonly Text detailText;
-        private readonly Text detailTitle;
-        private readonly Button detailSellButton;
-        private readonly Text detailSellLabel;
         private readonly Image sellImage;
         private readonly Text sellLabel;
         private readonly Text bagLabel;
@@ -65,7 +60,6 @@ namespace ProjectArtOfAll.Board
         private bool collapsed;
         private float scale = 1f;
         private MatchPlayerState lastPlayer;
-        private CardInstance selectedCard;
 
         private CardBandController(BoardGameplayController gameplay, RectTransform root, Font font)
         {
@@ -125,79 +119,6 @@ namespace ProjectArtOfAll.Board
                 new Vector2(80f, 22f),
                 TextAnchor.MiddleCenter);
             sellLabel.color = MutedColor;
-
-            GameObject detailObject = BoardHudOverlayFactory.CreateBar(
-                root,
-                "Detail",
-                new Vector2(1f, 0f),
-                new Vector2(1f, 0f),
-                new Vector2(-456f, 20f),
-                new Vector2(-16f, 318f),
-                new Color(0.048f, 0.078f, 0.09f, 0.98f));
-            detailPanel = detailObject.GetComponent<RectTransform>();
-            detailTitle = BoardHudOverlayFactory.CreateText(
-                detailObject.transform,
-                "Title",
-                "卡牌",
-                font,
-                20,
-                FontStyle.Bold,
-                new Vector2(18f, -14f),
-                new Vector2(404f, 30f),
-                TextAnchor.MiddleLeft);
-            detailTitle.color = Brass;
-            detailText = BoardHudOverlayFactory.CreateText(
-                detailObject.transform,
-                "Body",
-                string.Empty,
-                font,
-                15,
-                FontStyle.Normal,
-                new Vector2(18f, -50f),
-                new Vector2(404f, 196f),
-                TextAnchor.UpperLeft);
-            detailText.color = TextColor;
-            detailText.verticalOverflow = VerticalWrapMode.Truncate;
-
-            GameObject sellButtonObject = new GameObject(
-                "SellButton",
-                typeof(RectTransform),
-                typeof(Image),
-                typeof(Button),
-                typeof(Outline));
-            sellButtonObject.transform.SetParent(detailObject.transform, false);
-            RectTransform sellButtonRect =
-                sellButtonObject.GetComponent<RectTransform>();
-            sellButtonRect.anchorMin = new Vector2(0f, 0f);
-            sellButtonRect.anchorMax = new Vector2(1f, 0f);
-            sellButtonRect.pivot = new Vector2(0.5f, 0f);
-            sellButtonRect.offsetMin = new Vector2(18f, 12f);
-            sellButtonRect.offsetMax = new Vector2(-18f, 54f);
-
-            sellButtonObject.GetComponent<Image>().color =
-                new Color(0.32f, 0.16f, 0.11f, 1f);
-            sellButtonObject.GetComponent<Outline>().effectColor =
-                new Color(0.92f, 0.45f, 0.28f, 0.7f);
-            detailSellButton = sellButtonObject.GetComponent<Button>();
-            detailSellLabel = BoardHudOverlayFactory.CreateText(
-                sellButtonObject.transform,
-                "Label",
-                "出售",
-                font,
-                17,
-                FontStyle.Bold,
-                Vector2.zero,
-                new Vector2(404f, 42f),
-                TextAnchor.MiddleCenter);
-            detailSellLabel.rectTransform.anchorMin = Vector2.zero;
-            detailSellLabel.rectTransform.anchorMax = Vector2.one;
-            detailSellLabel.rectTransform.pivot = new Vector2(0.5f, 0.5f);
-            detailSellLabel.rectTransform.offsetMin = Vector2.zero;
-            detailSellLabel.rectTransform.offsetMax = Vector2.zero;
-            detailSellLabel.color = new Color(1f, 0.88f, 0.7f, 1f);
-            detailSellButton.onClick.AddListener(SellSelectedCard);
-
-            detailObject.SetActive(false);
 
             root.gameObject.AddComponent<CardBandLayoutDriver>().Bind(this);
         }
@@ -387,7 +308,6 @@ namespace ProjectArtOfAll.Board
             sellZone.gameObject.SetActive(!collapsed);
             if (collapsed)
             {
-                detailPanel.gameObject.SetActive(false);
                 SetBandHeight(HandleHeight + 12f);
             }
             else
@@ -399,12 +319,6 @@ namespace ProjectArtOfAll.Board
         public void Refresh(MatchPlayerState player)
         {
             lastPlayer = player;
-            if (selectedCard != null &&
-                (player == null || !player.OwnedCards.Contains(selectedCard)))
-            {
-                HideDetail();
-            }
-
             ClearWidgets(bagWidgets);
             ClearWidgets(battleWidgets);
             if (player == null)
@@ -860,7 +774,6 @@ namespace ProjectArtOfAll.Board
 
             if (ContainsPadded(sellZone, eventData, 18f))
             {
-                HideDetail();
                 gameplay.SubmitSellCard(card.Uid);
                 return;
             }
@@ -911,60 +824,6 @@ namespace ProjectArtOfAll.Board
         public void HideTooltip()
         {
             CardTooltipHost.Hide();
-        }
-
-        public void Select(CardBandDragHandler handler)
-        {
-            CardInstance card = handler.Card;
-            if (card == null)
-            {
-                return;
-            }
-
-            selectedCard = card;
-            detailPanel.gameObject.SetActive(true);
-            detailSellButton.interactable = true;
-            detailSellLabel.text = string.Concat(
-                "出售 · +",
-                card.Value.ToString(),
-                " 碎片");
-            detailTitle.text = string.Concat(
-                card.Definition.DisplayName,
-                "   ",
-                card.Definition.SlotSize.ToString(),
-                "c");
-            string bonus = DescribeBonus(card);
-            detailText.text = string.Concat(
-                CardText.Meta(card.Definition),
-                "\n\n",
-                CardText.Description(card.Definition),
-                "\n\n当前价值 ",
-                card.Value.ToString(),
-                " 碎片",
-                bonus == null ? string.Empty : "\n相邻加成 " + bonus);
-        }
-
-        /// <summary>这张牌（在战斗栏里时）当前吃到的相邻加成，没有则返回 null。</summary>
-        private string DescribeBonus(CardInstance card)
-        {
-            return card == null ? null : LoadoutPreview.Describe(battleSlots, card.Uid);
-        }
-
-        /// <summary>详情面板里的「出售」：和拖进出售区等价，无确认无撤销（UI-4.1.1）。</summary>
-        private void SellSelectedCard()
-        {
-            if (selectedCard == null)
-            {
-                return;
-            }
-
-            gameplay.SubmitSellCard(selectedCard.Uid);
-        }
-
-        private void HideDetail()
-        {
-            selectedCard = null;
-            detailPanel.gameObject.SetActive(false);
         }
 
         private bool Contains(RectTransform rect, PointerEventData eventData)
@@ -1090,7 +949,6 @@ namespace ProjectArtOfAll.Board
         IBeginDragHandler,
         IDragHandler,
         IEndDragHandler,
-        IPointerClickHandler,
         IPointerEnterHandler,
         IPointerExitHandler
     {
@@ -1121,11 +979,6 @@ namespace ProjectArtOfAll.Board
         public void OnEndDrag(PointerEventData eventData)
         {
             owner?.EndDrag(this, eventData);
-        }
-
-        public void OnPointerClick(PointerEventData eventData)
-        {
-            owner?.Select(this);
         }
 
         public void OnPointerEnter(PointerEventData eventData)

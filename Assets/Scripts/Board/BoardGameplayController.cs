@@ -201,7 +201,7 @@ namespace ProjectArtOfAll.Board
             UpdateHudStatus();
         }
 
-        /// <summary>拖进出售区松手 / 详情面板点「出售」= 立即出售，无确认无撤销（UI-4.1.1）。</summary>
+        /// <summary>拖进出售区松手 = 立即出售，无确认无撤销（UI-4.1.1）。</summary>
         public void SubmitSellCard(int cardUid)
         {
             if (match == null)

@@ -188,7 +188,7 @@ namespace ProjectArtOfAll.Board
                 new Vector2(width - 20f, CardHeight - fontSize * 2f - 46f),
                 TextAnchor.UpperLeft);
             body.color = new Color(0.80f, 0.81f, 0.78f, 1f);
-            // 卡面短句里的关键词和详情面板用同一份配色（内核 CardKeywords）。
+            // 卡面短句里的关键词和悬停面板用同一份配色（内核 CardKeywords）。
             body.supportRichText = true;
             body.text = CardKeywords.Colorize(CardText.Description(card.Definition));
 
