@@ -59,6 +59,7 @@ namespace ProjectArtOfAll.Board
         private static readonly Color CooldownShade = new Color(0.02f, 0.03f, 0.05f, 0.62f);
         private const int BurnDecayTicks = 30;
 
+        [System.Serializable]
         private sealed class SideRuntime
         {
             public RectTransform Root;
@@ -91,10 +92,11 @@ namespace ProjectArtOfAll.Board
             public Text MeterRegeneration;
             public Image MeterRegenerationBack;
             public int NextBurnDecayTick = BurnDecayTicks;
-            public readonly List<Chip> Chips = new List<Chip>();
-            public readonly List<GameObject> Cells = new List<GameObject>();
+            public List<Chip> Chips = new List<Chip>();
+            public List<GameObject> Cells = new List<GameObject>();
         }
 
+        [System.Serializable]
         private sealed class Chip
         {
             public int CardUid;
@@ -109,14 +111,14 @@ namespace ProjectArtOfAll.Board
         }
 
         private readonly List<GameEvent> timeline = new List<GameEvent>();
-        private SideRuntime selfSide;
-        private SideRuntime foeSide;
-        private Text subtitleLabel;
-        private Text clockLabel;
-        private Text logLabel;
-        private RectTransform root;
-        private RectTransform panel;
-        private RectTransform content;
+        [SerializeField] private SideRuntime selfSide;
+        [SerializeField] private SideRuntime foeSide;
+        [SerializeField] private Text subtitleLabel;
+        [SerializeField] private Text clockLabel;
+        [SerializeField] private Text logLabel;
+        [SerializeField] private RectTransform root;
+        [SerializeField] private RectTransform panel;
+        [SerializeField] private RectTransform content;
         private int cursor;
         private float clock;
         private float duration;

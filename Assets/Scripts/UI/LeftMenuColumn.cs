@@ -24,30 +24,66 @@ namespace ProjectArtOfAll.UI
 
         private static Font menuFont;
 
-        private RectTransform canvasRect;
-        private GameSettingsPanel settingsPanel;
-        private GameObject modePanel;
-        private CombatLabView combatLab;
+        [SerializeField] private RectTransform canvasRect;
+        [SerializeField] private GameSettingsPanel settingsPanel;
+        [SerializeField] private GameObject modePanel;
+        [SerializeField] private CombatLabView combatLab;
 
         private void Awake()
         {
-            // 版式只认代码这一份。场景里如果还留着早期烘焙出来的旧界面
-            // （旧按钮绑着已经被删掉的方法），先清掉再重建，避免"看到的是旧主页面"。
-            // 用全场景搜索而不是 transform.Find：早期烘焙出来的 Canvas 不一定是本物体的子节点。
-            Transform[] allTransforms = Object.FindObjectsOfType<Transform>(true);
-            for (int index = 0; index < allTransforms.Length; index++)
+            EnsureEventSystem();
+            if (canvasRect == null || modePanel == null)
             {
-                Transform candidate = allTransforms[index];
-                if (candidate != null &&
-                    candidate != transform &&
-                    candidate.name == "LeftMenuCanvas")
+                BuildMenu();
+            }
+            else
+            {
+                BindMenu();
+            }
+
+            if (settingsPanel != null)
+            {
+                settingsPanel.Bind();
+            }
+
+            ApplyMenuFont();
+        }
+
+        private void BindMenu()
+        {
+            BindButton("MenuButton_开始游戏", ShowModePanel);
+            BindButton("MenuButton_设置", OpenSettings);
+            BindButton("MenuButton_战斗模拟", OpenCombatLab);
+            BindButton("MenuButton_退出游戏", QuitGame);
+            BindButton("Mode_正常模式", () => GameSession.ChooseMode(GameMode.Normal));
+            BindButton("Mode_无CPU测试模式", () => GameSession.ChooseMode(GameMode.NoCpuTest));
+            BindButton("Button_返回", HideModePanel);
+        }
+
+        private void BindButton(string objectName, System.Action action)
+        {
+            Button button = FindButton(objectName);
+            if (button == null)
+            {
+                return;
+            }
+
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() => action?.Invoke());
+        }
+
+        private Button FindButton(string objectName)
+        {
+            Button[] buttons = GetComponentsInChildren<Button>(true);
+            for (int index = 0; index < buttons.Length; index++)
+            {
+                if (buttons[index].gameObject.name == objectName)
                 {
-                    Destroy(candidate.gameObject);
+                    return buttons[index];
                 }
             }
 
-            BuildMenu();
-            ApplyMenuFont();
+            return null;
         }
 
         private void BuildMenu()
@@ -526,6 +562,20 @@ namespace ProjectArtOfAll.UI
         }
 
 #if UNITY_EDITOR
+        public RectTransform EditorCanvasRect => canvasRect;
+        public Font EditorFont => GetMenuFont();
+        public GameSettingsPanel EditorSettingsPanel
+        {
+            get => settingsPanel;
+            set => settingsPanel = value;
+        }
+
+        public CombatLabView EditorCombatLab
+        {
+            get => combatLab;
+            set => combatLab = value;
+        }
+
         public void BuildMenuForEditor()
         {
             Transform existingCanvas = transform.Find("LeftMenuCanvas");
@@ -536,6 +586,7 @@ namespace ProjectArtOfAll.UI
 
             settingsPanel = null;
             BuildMenu();
+            BindMenu();
             ApplyMenuFont();
         }
 #endif

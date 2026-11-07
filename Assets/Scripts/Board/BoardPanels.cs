@@ -13,7 +13,7 @@ namespace ProjectArtOfAll.Board
     /// 每格显示等级、碎片、胜场、装配/背包占用；当前行动者高亮。
     /// 点击弹出对手档案（§2.7），这是界面上唯一能看别人战斗栏的入口。
     /// </summary>
-    public sealed class PlayerCornerPanels : MonoBehaviour
+    public class PlayerCornerPanels : MonoBehaviour
     {
         private const float PanelWidth = 300f;
         private const float PanelHeight = 74f;
@@ -26,10 +26,11 @@ namespace ProjectArtOfAll.Board
         private static readonly Color TextColor = new Color(0.94f, 0.93f, 0.88f, 1f);
         private static readonly Color MutedColor = new Color(0.66f, 0.68f, 0.66f, 1f);
 
-        private readonly List<PanelSlot> slots = new List<PanelSlot>();
-        private Font font;
+        [SerializeField] private List<PanelSlot> slots = new List<PanelSlot>();
+        [SerializeField] private Font font;
         private System.Action<int> onClick;
 
+        [System.Serializable]
         private sealed class PanelSlot
         {
             public RectTransform Root;
@@ -51,7 +52,8 @@ namespace ProjectArtOfAll.Board
             rect.offsetMin = Vector2.zero;
             rect.offsetMax = Vector2.zero;
 
-            PlayerCornerPanels panels = rootObject.AddComponent<PlayerCornerPanels>();
+            PlayerCornerPanels panels =
+                rootObject.AddComponent<PlayerCornerPanelsScene>();
             panels.font = font;
             panels.onClick = onClick;
             panels.BuildSlots(rect);
@@ -96,7 +98,7 @@ namespace ProjectArtOfAll.Board
             button.transition = Selectable.Transition.None;
 
             title = BoardHudOverlayFactory.CreateText(
-                panelObject.transform, "Title", "P1", font, 15, FontStyle.Bold,
+                panelObject.transform, "Title", "P" + (index + 1), font, 15, FontStyle.Bold,
                 new Vector2(12f, -7f), new Vector2(PanelWidth - 24f, 20f), TextAnchor.UpperLeft);
             title.color = Brass;
 
@@ -168,13 +170,30 @@ namespace ProjectArtOfAll.Board
                 }
             }
         }
+
+        public void Bind(System.Action<int> handler)
+        {
+            onClick = handler;
+            for (int index = 0; index < slots.Count; index++)
+            {
+                PanelSlot slot = slots[index];
+                if (slot == null || slot.Button == null)
+                {
+                    continue;
+                }
+
+                int captured = slot.PlayerId;
+                slot.Button.onClick.RemoveAllListeners();
+                slot.Button.onClick.AddListener(() => onClick?.Invoke(captured));
+            }
+        }
     }
 
     /// <summary>
     /// 对手档案面板（`棋盘层双栏卡槽UI与拖拽交互规格.md` §2.7）。
     /// 战斗栏按真实顺序渲染；背包只给三个数字 + 占用条，永远不渲染牌名。
     /// </summary>
-    public sealed class OpponentDossierView : MonoBehaviour
+    public class OpponentDossierView : MonoBehaviour
     {
         private const float PanelWidth = 372f;
         private const float PanelHeight = 452f;
@@ -186,16 +205,16 @@ namespace ProjectArtOfAll.Board
         private static readonly Color BarColor = new Color(0.20f, 0.16f, 0.10f, 1f);
         private static readonly Color BarFill = new Color(0.89f, 0.64f, 0.20f, 1f);
 
-        private RectTransform root;
-        private Text title;
-        private Text subtitle;
-        private Text battleHeader;
-        private RectTransform battleRow;
-        private Text bagHeader;
-        private RectTransform bagFill;
-        private Text bagFooter;
-        private Button closeButton;
-        private Font font;
+        [SerializeField] private RectTransform root;
+        [SerializeField] private Text title;
+        [SerializeField] private Text subtitle;
+        [SerializeField] private Text battleHeader;
+        [SerializeField] private RectTransform battleRow;
+        [SerializeField] private Text bagHeader;
+        [SerializeField] private RectTransform bagFill;
+        [SerializeField] private Text bagFooter;
+        [SerializeField] private Button closeButton;
+        [SerializeField] private Font font;
 
         public bool IsOpen => root != null && root.gameObject.activeSelf;
 
@@ -210,7 +229,8 @@ namespace ProjectArtOfAll.Board
             rect.sizeDelta = new Vector2(PanelWidth, PanelHeight);
             rect.anchoredPosition = new Vector2(-16f, 40f);
 
-            OpponentDossierView view = rootObject.AddComponent<OpponentDossierView>();
+            OpponentDossierView view =
+                rootObject.AddComponent<OpponentDossierSceneView>();
             view.root = rect;
             view.font = font;
             view.Build(onClose);
@@ -373,12 +393,23 @@ namespace ProjectArtOfAll.Board
         {
             gameObject.SetActive(false);
         }
+
+        public void BindClose(System.Action onClose)
+        {
+            if (closeButton == null)
+            {
+                return;
+            }
+
+            closeButton.onClick.RemoveAllListeners();
+            closeButton.onClick.AddListener(() => onClose?.Invoke());
+        }
     }
 
     /// <summary>
     /// 暂停面板（Esc）：继续 / 重开本局。暂停只遮输入，不改对局状态——内核是纯函数，没有"暂停"这个概念。
     /// </summary>
-    public sealed class PauseOverlayView : MonoBehaviour
+    public class PauseOverlayView : MonoBehaviour
     {
         private static readonly Color ScrimColor = new Color(0.012f, 0.02f, 0.024f, 0.72f);
         private static readonly Color PanelColor = new Color(0.048f, 0.078f, 0.09f, 0.99f);
@@ -386,12 +417,13 @@ namespace ProjectArtOfAll.Board
         private static readonly Color TextColor = new Color(0.94f, 0.93f, 0.88f, 1f);
         private static readonly Color MutedText = new Color(0.64f, 0.66f, 0.63f, 1f);
 
-        private Font font;
-        private Button resumeButton;
-        private Text seedText;
-        private ProjectArtOfAll.UI.GameSettingsPanel settingsPanel;
+        [SerializeField] private Font font;
+        [SerializeField] private Button resumeButton;
+        [SerializeField] private Text seedText;
+        [SerializeField] private ProjectArtOfAll.UI.GameSettingsPanel settingsPanel;
 
         public bool IsOpen => gameObject.activeSelf;
+        public ProjectArtOfAll.UI.GameSettingsPanel SettingsPanel => settingsPanel;
 
         public static PauseOverlayView Create(
             RectTransform parent,
@@ -413,7 +445,8 @@ namespace ProjectArtOfAll.Board
             scrim.color = ScrimColor;
             scrim.raycastTarget = true;
 
-            PauseOverlayView view = rootObject.AddComponent<PauseOverlayView>();
+            PauseOverlayView view =
+                rootObject.AddComponent<PauseOverlaySceneView>();
             view.font = font;
             view.Build(onResume);
             rootObject.SetActive(false);
@@ -486,6 +519,7 @@ namespace ProjectArtOfAll.Board
             {
                 settingsPanel = ProjectArtOfAll.UI.GameSettingsPanel.Create(
                     (RectTransform)transform.parent, font);
+                settingsPanel.Bind();
             }
 
             settingsPanel.Show();
@@ -578,6 +612,41 @@ namespace ProjectArtOfAll.Board
         public void Hide()
         {
             gameObject.SetActive(false);
+        }
+
+        public void Bind(System.Action onResume)
+        {
+            if (settingsPanel != null)
+            {
+                settingsPanel.Bind();
+            }
+
+            Button[] buttons = GetComponentsInChildren<Button>(true);
+            for (int index = 0; index < buttons.Length; index++)
+            {
+                Button button = buttons[index];
+                button.onClick.RemoveAllListeners();
+                switch (button.gameObject.name)
+                {
+                    case "Button_继续游戏":
+                        resumeButton = button;
+                        button.onClick.AddListener(() => onResume?.Invoke());
+                        break;
+                    case "Button_重开本局":
+                        button.onClick.AddListener(RestartScene);
+                        break;
+                    case "Button_回主页面":
+                        button.onClick.AddListener(
+                            ProjectArtOfAll.Flow.GameSession.BackToMenu);
+                        break;
+                    case "Button_设置":
+                        button.onClick.AddListener(OpenSettings);
+                        break;
+                    case "Button_退出游戏":
+                        button.onClick.AddListener(QuitGame);
+                        break;
+                }
+            }
         }
     }
 }

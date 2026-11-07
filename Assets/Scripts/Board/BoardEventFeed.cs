@@ -32,7 +32,7 @@ namespace ProjectArtOfAll.Board
 
         private readonly Queue<Entry> pending = new Queue<Entry>();
         private readonly List<Entry> shown = new List<Entry>();
-        private readonly List<Text> rows = new List<Text>();
+        [SerializeField] private List<Text> rows = new List<Text>();
         private float nextAt;
 
         public static BoardEventFeed Create(RectTransform parent, Font font)

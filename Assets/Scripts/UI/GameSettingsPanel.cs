@@ -7,7 +7,7 @@ namespace ProjectArtOfAll.UI
 {
     /// <summary>
     /// 通用设置面板：主菜单与游戏内暂停菜单共用同一份（同名、同布局、同 <see cref="GameSettings"/>）。
-    /// 所有设置只影响表现——卡槽大小、路径线显隐、镜头跟随、自动降档——不改任何规则数值。
+    /// 所有设置只影响表现——卡槽大小、镜头跟随、自动降档——不改任何规则数值。
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class GameSettingsPanel : MonoBehaviour
@@ -21,17 +21,17 @@ namespace ProjectArtOfAll.UI
         private static readonly Color TextColor = new Color(0.94f, 0.93f, 0.88f, 1f);
         private static readonly Color MutedText = new Color(0.64f, 0.66f, 0.63f, 1f);
 
-        private Font font;
-        private Slider cardScaleSlider;
-        private Text cardScaleValue;
-        private Button pathButton;
-        private Text pathLabel;
-        private Button followButton;
-        private Text followLabel;
-        private Button autoButton;
-        private Text autoLabel;
-        private Button difficultyButton;
-        private Text difficultyLabel;
+        [SerializeField] private Font font;
+        [SerializeField] private Slider cardScaleSlider;
+        [SerializeField] private Text cardScaleValue;
+        [SerializeField] private Button followButton;
+        [SerializeField] private Text followLabel;
+        [SerializeField] private Button autoButton;
+        [SerializeField] private Text autoLabel;
+        [SerializeField] private Button difficultyButton;
+        [SerializeField] private Text difficultyLabel;
+        [SerializeField] private Button resetButton;
+        [SerializeField] private Button backButton;
 
         public bool IsOpen => gameObject.activeSelf;
 
@@ -101,21 +101,17 @@ namespace ProjectArtOfAll.UI
                 GameSettings.CardScale = value;
             });
 
-            // 四个开关 --------------------------------------------------------
-            pathButton = MakeToggle(panelObject.transform, "地图路径线", 150f, () =>
-                GameSettings.PathLinesVisible = !GameSettings.PathLinesVisible);
-            pathLabel = pathButton.GetComponentInChildren<Text>();
-
-            followButton = MakeToggle(panelObject.transform, "镜头跟随", 194f, () =>
+            // 三个开关 --------------------------------------------------------
+            followButton = MakeToggle(panelObject.transform, "镜头跟随", 150f, () =>
                 GameSettings.CameraFollow = !GameSettings.CameraFollow);
             followLabel = followButton.GetComponentInChildren<Text>();
 
-            autoButton = MakeToggle(panelObject.transform, "掉帧自动降档", 238f, () =>
+            autoButton = MakeToggle(panelObject.transform, "掉帧自动降档", 194f, () =>
                 GameSettings.AutoQuality = !GameSettings.AutoQuality);
             autoLabel = autoButton.GetComponentInChildren<Text>();
 
             // CPU 难度：只改 AI 的决策参数，四档人格式权重照旧按座位分配。
-            difficultyButton = MakeToggle(panelObject.transform, "CPU 难度", 282f, () =>
+            difficultyButton = MakeToggle(panelObject.transform, "CPU 难度", 238f, () =>
                 GameSettings.CpuDifficultyLevel = (GameSettings.CpuDifficultyLevel + 1) % 3);
             difficultyLabel = difficultyButton.GetComponentInChildren<Text>();
 
@@ -125,13 +121,13 @@ namespace ProjectArtOfAll.UI
                 new Vector2(24f, -330f), new Vector2(PanelWidth - 24f, -329f),
                 new Color(0.86f, 0.62f, 0.20f, 0.55f));
 
-            MakeButton(panelObject.transform, "恢复默认", 24f, 350f, 200f, 44f, () =>
+            resetButton = MakeButton(panelObject.transform, "恢复默认", 24f, 350f, 200f, 44f, () =>
             {
                 GameSettings.ResetToDefaults();
                 RefreshControls();
             });
 
-            MakeButton(panelObject.transform, "返回", PanelWidth - 24f - 200f, 350f, 200f, 44f,
+            backButton = MakeButton(panelObject.transform, "返回", PanelWidth - 24f - 200f, 350f, 200f, 44f,
                 () =>
                 {
                     Hide();
@@ -145,6 +141,55 @@ namespace ProjectArtOfAll.UI
 
             RefreshControls();
             GameSettings.Changed += OnSettingsChanged;
+        }
+
+        public void Bind()
+        {
+            if (cardScaleSlider != null)
+            {
+                cardScaleSlider.onValueChanged.RemoveAllListeners();
+                cardScaleSlider.onValueChanged.AddListener(value =>
+                {
+                    cardScaleValue.text = Mathf.RoundToInt(value * 100f) + "%";
+                    GameSettings.CardScale = value;
+                });
+            }
+
+            BindToggle(followButton, () =>
+                GameSettings.CameraFollow = !GameSettings.CameraFollow);
+            BindToggle(autoButton, () =>
+                GameSettings.AutoQuality = !GameSettings.AutoQuality);
+            BindToggle(difficultyButton, () =>
+                GameSettings.CpuDifficultyLevel = (GameSettings.CpuDifficultyLevel + 1) % 3);
+
+            if (resetButton != null)
+            {
+                resetButton.onClick.RemoveAllListeners();
+                resetButton.onClick.AddListener(() =>
+                {
+                    GameSettings.ResetToDefaults();
+                    RefreshControls();
+                });
+            }
+
+            if (backButton != null)
+            {
+                backButton.onClick.RemoveAllListeners();
+                backButton.onClick.AddListener(Hide);
+            }
+
+            RefreshControls();
+        }
+
+        private static void BindToggle(Button button, System.Action action)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() => action?.Invoke());
         }
 
         private void OnDestroy()
@@ -170,11 +215,6 @@ namespace ProjectArtOfAll.UI
             if (cardScaleValue != null)
             {
                 cardScaleValue.text = Mathf.RoundToInt(GameSettings.CardScale * 100f) + "%";
-            }
-
-            if (pathLabel != null)
-            {
-                pathLabel.text = GameSettings.PathLinesVisible ? "显示" : "隐藏";
             }
 
             if (followLabel != null)

@@ -16,21 +16,6 @@ namespace ProjectArtOfAll.Board
     [DisallowMultipleComponent]
     public sealed class BoardHudController : MonoBehaviour
     {
-        [Header("Card Drawer")]
-        [SerializeField] private RectTransform drawerPanel;
-        [SerializeField] private Text drawerHandleLabel;
-        [SerializeField] private Image cardDrawerScrim;
-        [SerializeField] private Vector2 drawerOpenPosition = new Vector2(0f, 58f);
-        [SerializeField] private Vector2 drawerClosedPosition = new Vector2(0f, -342f);
-        [SerializeField, Min(0.01f)] private float drawerAnimationSeconds = 0.24f;
-        [SerializeField] private bool openInEditMode = true;
-        [SerializeField] private Text assemblyLabel;
-        [SerializeField] private RectTransform assemblyLockOverlay;
-        [SerializeField] private RawImage assemblyLockHatch;
-        [SerializeField, Min(1f)] private float assemblySlotStartX = 140f;
-        [SerializeField, Min(1f)] private float assemblySlotWidth = 86f;
-        [SerializeField, Min(1f)] private float hatchPatternSize = 64f;
-
         [Header("Dice")]
         [SerializeField] private Text diceResult;
         [SerializeField] private Button diceButton;
@@ -59,8 +44,25 @@ namespace ProjectArtOfAll.Board
         [SerializeField] private Button encounterIgnoreButton;
         [SerializeField] private Text encounterIgnoreLabel;
 
-        private bool isOpen;
-        private Vector2 animationVelocity;
+        [Header("Baked Overlays")]
+        [SerializeField] private BoardHudCardDrawerView cardView;
+        [SerializeField] private BoardHomeStopView homeStopView;
+        [SerializeField] private BoardHudRewardChoiceView rewardView;
+        [SerializeField] private BoardHudShopView shopView;
+        [SerializeField] private BoardHudEventView eventView;
+        [SerializeField] private BoardHudCombatResultView combatResultView;
+        [SerializeField] private PlayerCornerPanels cornerPanels;
+        [SerializeField] private OpponentDossierView dossier;
+        [SerializeField] private PauseOverlayView pauseOverlay;
+        [SerializeField] private BoardEventFeed eventFeed;
+        [SerializeField] private BoardFieldInfoPanel fieldInfo;
+        [SerializeField] private BoardTileTooltip tileTooltip;
+        [SerializeField] private BoardRoundBanner roundBanner;
+        [SerializeField] private CombatPlaybackView combatPlayback;
+        [SerializeField] private CardTooltipView cardTooltip;
+        [SerializeField] private CardBandSceneView cardBandView;
+
+        private bool isCardViewOpen;
         private Action<int> forkSelectionHandler;
         private bool forkArrowsVisible;
 
@@ -72,30 +74,17 @@ namespace ProjectArtOfAll.Board
         private bool encounterVisible;
         private float encounterShownAt;
         private bool encounterButtonBound;
-        private BoardHudCardDrawerView cardView;
         private CardBandController cardBand;
-        private BoardHudCombatResultView combatResultView;
-        private BoardHomeStopView homeStopView;
         private Action<bool> homeStopHandler;
-        private BoardHudRewardChoiceView rewardView;
-        private BoardHudShopView shopView;
         private Action<int> shopBuyHandler;
         private Action shopRerollHandler;
         private Action shopLeaveHandler;
         private Action<int> rewardChoiceHandler;
-        private BoardHudEventView eventView;
         private Action<int> eventChoiceHandler;
         private MatchEventSession shownEvent;
         private MatchPlayerState cachedPlayer;
         private MatchState cachedState;
         private int humanPlayerId = -1;
-        private PlayerCornerPanels cornerPanels;
-        private OpponentDossierView dossier;
-        private PauseOverlayView pauseOverlay;
-        private BoardEventFeed eventFeed;
-        private BoardFieldInfoPanel fieldInfo;
-        private BoardTileTooltip tileTooltip;
-        private BoardRoundBanner roundBanner;
         private int bannerRound = -1;
         private int eventCursor = -1;
         private int qualityFrames;
@@ -106,17 +95,11 @@ namespace ProjectArtOfAll.Board
         {
             if (Application.isPlaying)
             {
-                EnsureOverlayViews();
+                BindOverlayViews();
                 ApplyGameSettings();
             }
 
-            isOpen = !Application.isPlaying && openInEditMode;
-            ApplyDrawerLabel();
-            if (drawerPanel != null)
-            {
-                drawerPanel.anchoredPosition =
-                    isOpen ? drawerOpenPosition : drawerClosedPosition;
-            }
+            isCardViewOpen = false;
 
             if (diceResult != null)
             {
@@ -126,7 +109,6 @@ namespace ProjectArtOfAll.Board
             HideForkChoices();
             HideEncounter();
             HideHomeStopPrompt();
-            RefreshDrawerScrim();
             GameSettings.Changed -= OnGameSettingsChanged;
             GameSettings.Changed += OnGameSettingsChanged;
             if (boardGameplay == null)
@@ -155,27 +137,6 @@ namespace ProjectArtOfAll.Board
 
             TickAutoQuality();
 
-            if (drawerPanel == null)
-            {
-                return;
-            }
-
-            Vector2 target = isOpen ? drawerOpenPosition : drawerClosedPosition;
-            if (Application.isPlaying)
-            {
-                drawerPanel.anchoredPosition = Vector2.SmoothDamp(
-                    drawerPanel.anchoredPosition,
-                    target,
-                    ref animationVelocity,
-                    drawerAnimationSeconds,
-                    Mathf.Infinity,
-                    Time.unscaledDeltaTime);
-            }
-            else
-            {
-                drawerPanel.anchoredPosition = target;
-            }
-
             if (forkArrowsVisible && forkArrowButtons != null)
             {
                 float scale = 1f + Mathf.Sin(Time.unscaledTime * 7f) * 0.08f;
@@ -202,20 +163,12 @@ namespace ProjectArtOfAll.Board
 
         public void ToggleDrawer()
         {
-            if (cardBand != null)
-            {
-                cardBand.ToggleCollapsed();
-                return;
-            }
-
-            SetDrawerOpen(!isOpen);
+            cardBand?.ToggleCollapsed();
         }
 
-        public void SetDrawerOpen(bool open)
+        public void SetCardViewOpen(bool open)
         {
-            isOpen = open;
-            ApplyDrawerLabel();
-            RefreshDrawerScrim();
+            isCardViewOpen = open;
 
             if (!Application.isPlaying || cardView == null)
             {
@@ -231,7 +184,7 @@ namespace ProjectArtOfAll.Board
 
         public void RollDice()
         {
-            SetDrawerOpen(false);
+            SetCardViewOpen(false);
             if (boardGameplay != null)
             {
                 boardGameplay.RollDice();
@@ -291,27 +244,16 @@ namespace ProjectArtOfAll.Board
         {
             if (cardBand == null)
             {
-                if (boardGameplay == null)
+                if (boardGameplay == null || cardBandView == null)
                 {
+                    Debug.LogError("[BoardHUD] Card band scene view is missing.");
                     return;
                 }
 
-                cardBand = CardBandController.Create(
-                    boardGameplay,
-                    (RectTransform)transform,
-                    BoardHudOverlayFactory.CreateFont());
+                cardBand = cardBandView.CreateController(boardGameplay);
                 if (diceButton != null)
                 {
                     cardBand.DiceButtonTarget = (RectTransform)diceButton.transform;
-                }
-
-                if (drawerHandleLabel != null)
-                {
-                    RectTransform handle = drawerHandleLabel.transform.parent as RectTransform;
-                    if (handle != null && handle != (RectTransform)transform)
-                    {
-                        cardBand.HandleButtonTarget = handle;
-                    }
                 }
 
                 cardBand.UserScale = Mathf.Clamp(GameSettings.CardScale, 0.75f, 1.25f);
@@ -354,8 +296,6 @@ namespace ProjectArtOfAll.Board
             }
         }
 
-        private CombatPlaybackView combatPlayback;
-
         /// <summary>PlayCombat：把这一场战斗按事件时间轴重播一遍，播完回调 onComplete。</summary>
         public void PlayCombat(
             CombatResolvedEvent combat,
@@ -372,9 +312,9 @@ namespace ProjectArtOfAll.Board
 
             if (combatPlayback == null)
             {
-                combatPlayback = CombatPlaybackView.Create(
-                    transform,
-                    BoardHudOverlayFactory.CreateFont());
+                Debug.LogError("[BoardHUD] Combat playback UI is not baked.");
+                onComplete?.Invoke();
+                return;
             }
 
             combatPlayback.Play(combat, leftTitle, rightTitle, leftIsHuman, onComplete);
@@ -457,9 +397,7 @@ namespace ProjectArtOfAll.Board
                 " · Lv.",
                 cachedPlayer.Level.ToString());
 
-            Font font = drawerHandleLabel != null
-                ? drawerHandleLabel.font
-                : BoardHudOverlayFactory.CreateFont();
+            Font font = HudFont ?? BoardHudOverlayFactory.CreateFont();
             const float width = 780f;
             float top = 0f;
 
@@ -624,7 +562,7 @@ namespace ProjectArtOfAll.Board
         /// </summary>
         public bool ShowHomeStopPrompt(Action<bool> onChosen)
         {
-            EnsureOverlayViews();
+            BindOverlayViews();
             if (homeStopView == null ||
                 homeStopView.Overlay == null ||
                 homeStopView.StopButton == null ||
@@ -704,7 +642,7 @@ namespace ProjectArtOfAll.Board
                 throw new ArgumentNullException(nameof(defender));
             }
 
-            EnsureOverlayViews();
+            BindOverlayViews();
             if (encounterOverlay == null || encounterAcceptButton == null)
             {
                 return false;
@@ -814,48 +752,6 @@ namespace ProjectArtOfAll.Board
             }
         }
 
-        public void SetAssemblyLevel(int level)
-        {
-            int capacity = level >= 6 ? 10 : LoadoutRules.GetBattleCapacity(level);
-            capacity = Mathf.Clamp(capacity, 1, 10);
-
-            if (assemblyLabel != null)
-            {
-                assemblyLabel.text = $"装配区  {capacity}c / 10c";
-            }
-
-            if (assemblyLockOverlay == null)
-            {
-                return;
-            }
-
-            float lockedWidth = (10 - capacity) * assemblySlotWidth;
-            assemblyLockOverlay.gameObject.SetActive(lockedWidth > 0f);
-            assemblyLockOverlay.anchoredPosition = new Vector2(
-                assemblySlotStartX + capacity * assemblySlotWidth,
-                assemblyLockOverlay.anchoredPosition.y);
-            assemblyLockOverlay.sizeDelta = new Vector2(
-                lockedWidth,
-                assemblyLockOverlay.sizeDelta.y);
-
-            if (assemblyLockHatch != null)
-            {
-                assemblyLockHatch.uvRect = new Rect(
-                    0f,
-                    0f,
-                    lockedWidth / hatchPatternSize,
-                    assemblyLockOverlay.sizeDelta.y / hatchPatternSize);
-            }
-        }
-
-        private void ApplyDrawerLabel()
-        {
-            if (drawerHandleLabel != null)
-            {
-                drawerHandleLabel.text = isOpen ? "▼  收起卡组  ▼" : "▲  展开卡组  ▲";
-            }
-        }
-
         private void AcceptEncounter()
         {
             if (!encounterVisible)
@@ -910,206 +806,93 @@ namespace ProjectArtOfAll.Board
             ignored?.Invoke();
         }
 
-        private void RefreshDrawerScrim()
+        private void BindOverlayViews()
         {
-            if (cardDrawerScrim == null)
+            if (encounterOverlay == null ||
+                cardView == null ||
+                homeStopView == null ||
+                rewardView == null ||
+                shopView == null ||
+                eventView == null ||
+                combatResultView == null ||
+                cornerPanels == null ||
+                dossier == null ||
+                eventFeed == null ||
+                fieldInfo == null ||
+                tileTooltip == null ||
+                roundBanner == null ||
+                pauseOverlay == null ||
+                combatPlayback == null ||
+                cardTooltip == null ||
+                cardBandView == null)
             {
+                Debug.LogError(
+                    "[BoardHUD] Baked overlay references are incomplete. " +
+                    "Run Tools/Project Art of All/Rebake Gameplay UI.");
                 return;
             }
 
-            cardDrawerScrim.gameObject.SetActive(isOpen && Application.isPlaying);
-        }
-
-        private void EnsureOverlayViews()
-        {
-            Font font = drawerHandleLabel != null
-                ? drawerHandleLabel.font
-                : BoardHudOverlayFactory.CreateFont();
-
-            if (cardDrawerScrim == null)
+            if (encounterAcceptButton != null)
             {
-                GameObject scrim = BoardHudOverlayFactory.CreateCardDrawerScrim(
-                    transform);
-                cardDrawerScrim = scrim.GetComponent<Image>();
-            }
-
-            if (cardDrawerScrim != null && drawerPanel != null)
-            {
-                int scrimIndex = cardDrawerScrim.transform.GetSiblingIndex();
-                int drawerIndex = drawerPanel.GetSiblingIndex();
-                if (scrimIndex > drawerIndex)
-                {
-                    cardDrawerScrim.transform.SetSiblingIndex(drawerIndex);
-                }
-            }
-
-            // 主场景里存着一份旧版遭遇战面板（还没有「无视 / 避开」这个出口）。
-            // 反序列化后 encounterOverlay 非空、但新字段 encounterIgnoreButton 为空，
-            // 这时整块重建一次，免得新按钮永远出不来。
-            if (encounterOverlay != null && encounterIgnoreButton == null)
-            {
-                if (Application.isPlaying)
-                {
-                    Destroy(encounterOverlay);
-                }
-                else
-                {
-                    DestroyImmediate(encounterOverlay);
-                }
-
-                encounterOverlay = null;
-                encounterPanel = null;
-                encounterTitle = null;
-                encounterSubtitle = null;
-                encounterAttackerName = null;
-                encounterAttackerStats = null;
-                encounterAttackerLoadout = null;
-                encounterDefenderName = null;
-                encounterDefenderStats = null;
-                encounterDefenderLoadout = null;
-                encounterStakes = null;
-                encounterAcceptButton = null;
-                encounterAcceptLabel = null;
-                encounterIgnoreLabel = null;
-                encounterButtonBound = false;
-            }
-
-            if (encounterOverlay == null)
-            {
-                BoardHudEncounterViews views =
-                    BoardHudOverlayFactory.CreateEncounterOverlay(transform, font);
-                encounterOverlay = views.Overlay;
-                encounterPanel = views.Panel;
-                encounterTitle = views.Title;
-                encounterSubtitle = views.Subtitle;
-                encounterAttackerName = views.AttackerName;
-                encounterAttackerStats = views.AttackerStats;
-                encounterAttackerLoadout = views.AttackerLoadout;
-                encounterDefenderName = views.DefenderName;
-                encounterDefenderStats = views.DefenderStats;
-                encounterDefenderLoadout = views.DefenderLoadout;
-                encounterStakes = views.Stakes;
-                encounterAcceptButton = views.AcceptButton;
-                encounterAcceptLabel = views.AcceptLabel;
-                encounterIgnoreButton = views.IgnoreButton;
-                encounterIgnoreLabel = views.IgnoreLabel;
-            }
-
-            if (homeStopView == null)
-            {
-                homeStopView = BoardHudOverlayFactory.CreateHomeStopView(
-                    transform,
-                    font);
-            }
-
-            if (encounterAcceptButton != null && !encounterButtonBound)
-            {
-                encounterAcceptButton.onClick.RemoveListener(AcceptEncounter);
+                encounterAcceptButton.onClick.RemoveAllListeners();
                 encounterAcceptButton.onClick.AddListener(AcceptEncounter);
-                encounterButtonBound = true;
             }
 
             if (encounterIgnoreButton != null)
             {
-                encounterIgnoreButton.onClick.RemoveListener(IgnoreEncounter);
+                encounterIgnoreButton.onClick.RemoveAllListeners();
                 encounterIgnoreButton.onClick.AddListener(IgnoreEncounter);
             }
 
-            if (cardView == null)
+            if (cardView.CloseButton != null)
             {
-                cardView = BoardHudOverlayFactory.CreateCardDrawerView(transform, font);
-                if (cardView.CloseButton != null)
-                {
-                    cardView.CloseButton.onClick.AddListener(ToggleCardView);
-                }
+                cardView.CloseButton.onClick.RemoveAllListeners();
+                cardView.CloseButton.onClick.AddListener(ToggleCardView);
             }
 
-            if (rewardView == null)
+            for (int index = 0; index < rewardView.Buttons.Length; index++)
             {
-                rewardView = BoardHudOverlayFactory.CreateRewardChoiceView(transform, font);
-                for (int index = 0; index < rewardView.Buttons.Length; index++)
-                {
-                    int captured = index;
-                    rewardView.Buttons[index].onClick.AddListener(
-                        () => OnRewardChosen(captured));
-                }
+                int captured = index;
+                rewardView.Buttons[index].onClick.RemoveAllListeners();
+                rewardView.Buttons[index].onClick.AddListener(
+                    () => OnRewardChosen(captured));
             }
 
-            if (shopView == null)
+            for (int index = 0; index < shopView.Buttons.Length; index++)
             {
-                shopView = BoardHudOverlayFactory.CreateShopView(transform, font);
-                for (int index = 0; index < shopView.Buttons.Length; index++)
-                {
-                    int captured = index;
-                    shopView.Buttons[index].onClick.AddListener(
-                        () => OnShopBuy(captured));
-                }
-
-                shopView.RerollButton.onClick.AddListener(OnShopReroll);
-                shopView.LeaveButton.onClick.AddListener(OnShopLeave);
+                int captured = index;
+                shopView.Buttons[index].onClick.RemoveAllListeners();
+                shopView.Buttons[index].onClick.AddListener(
+                    () => OnShopBuy(captured));
             }
 
-            if (eventView == null)
-            {
-                eventView = BoardHudOverlayFactory.CreateEventView(transform, font);
-                for (int index = 0; index < eventView.Buttons.Length; index++)
-                {
-                    int captured = index;
-                    eventView.Buttons[index].onClick.AddListener(
-                        () => OnEventOptionChosen(captured));
-                }
+            shopView.RerollButton.onClick.RemoveAllListeners();
+            shopView.RerollButton.onClick.AddListener(OnShopReroll);
+            shopView.LeaveButton.onClick.RemoveAllListeners();
+            shopView.LeaveButton.onClick.AddListener(OnShopLeave);
 
-                eventView.LeaveButton.onClick.AddListener(
-                    () => OnEventOptionChosen(-1));
+            for (int index = 0; index < eventView.Buttons.Length; index++)
+            {
+                int captured = index;
+                eventView.Buttons[index].onClick.RemoveAllListeners();
+                eventView.Buttons[index].onClick.AddListener(
+                    () => OnEventOptionChosen(captured));
             }
 
-            if (combatResultView == null)
+            eventView.LeaveButton.onClick.RemoveAllListeners();
+            eventView.LeaveButton.onClick.AddListener(
+                () => OnEventOptionChosen(-1));
+
+            if (combatResultView.CloseButton != null)
             {
-                combatResultView =
-                    BoardHudOverlayFactory.CreateCombatResultView(transform, font);
-                if (combatResultView.CloseButton != null)
-                {
-                    combatResultView.CloseButton.onClick.AddListener(HideCombatResult);
-                }
+                combatResultView.CloseButton.onClick.RemoveAllListeners();
+                combatResultView.CloseButton.onClick.AddListener(HideCombatResult);
             }
 
-            if (cornerPanels == null)
-            {
-                cornerPanels = PlayerCornerPanels.Create((RectTransform)transform, font, ShowDossier);
-            }
-
-            if (dossier == null)
-            {
-                dossier = OpponentDossierView.Create((RectTransform)transform, font, HideDossier);
-            }
-
-            if (eventFeed == null)
-            {
-                eventFeed = BoardEventFeed.Create((RectTransform)transform, font);
-            }
-
-            if (fieldInfo == null)
-            {
-                fieldInfo = BoardFieldInfoPanel.Create((RectTransform)transform, font);
-            }
-
-            if (tileTooltip == null)
-            {
-                tileTooltip = BoardTileTooltip.Create((RectTransform)transform, font);
-            }
-
-            if (roundBanner == null)
-            {
-                roundBanner = BoardRoundBanner.Create((RectTransform)transform, font);
-            }
-
-            if (pauseOverlay == null)
-            {
-                pauseOverlay = PauseOverlayView.Create(
-                    (RectTransform)transform,
-                    font,
-                    TogglePause);
-            }
+            cornerPanels.Bind(ShowDossier);
+            dossier.BindClose(HideDossier);
+            pauseOverlay.Bind(TogglePause);
+            CardTooltipHost.Register(cardTooltip);
         }
 
         /// <summary>把 <see cref="GameSettings"/> 里的表现项落到实际对象上（启动、改动、自动降档后都走这里）。</summary>
@@ -1140,7 +923,6 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
-            boardGameplay.SetPathLinesVisible(GameSettings.PathLinesVisible && !autoDegraded);
             boardGameplay.SetCameraFollow(GameSettings.CameraFollow);
         }
 
@@ -1155,7 +937,7 @@ namespace ProjectArtOfAll.Board
         }
 
         /// <summary>
-        /// S2 自动降档：连续 3 秒平均帧率低于 35 就关掉路径线并把卡槽收到 80%，
+        /// S2 自动降档：连续 3 秒平均帧率低于 35 就把卡槽收到 80%，
         /// 每个进程只降一次（降了之后不再尝试恢复，避免在临界帧率上来回抖）。
         /// </summary>
         private void TickAutoQuality()
@@ -1189,7 +971,7 @@ namespace ProjectArtOfAll.Board
             }
 
             autoDegraded = true;
-            Debug.Log("[Board] 自动降档：平均 " + Mathf.RoundToInt(fps) + " FPS → 关闭路径线、卡槽 80%。");
+            Debug.Log("[Board] 自动降档：平均 " + Mathf.RoundToInt(fps) + " FPS → 卡槽 80%。");
 
             if (cardBand != null)
             {
@@ -1197,7 +979,6 @@ namespace ProjectArtOfAll.Board
                 cardBand.ApplyScreenLayout();
             }
 
-            boardGameplay?.SetPathLinesVisible(false);
         }
 
         /// <summary>Esc 暂停（只遮输入；内核没有暂停态，重开走重载场景）。</summary>
@@ -1420,7 +1201,7 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
-            EnsureOverlayViews();
+            BindOverlayViews();
             if (eventView == null)
             {
                 return;
@@ -1567,7 +1348,7 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
-            EnsureOverlayViews();
+            BindOverlayViews();
             if (shopView == null)
             {
                 return;
@@ -1592,7 +1373,7 @@ namespace ProjectArtOfAll.Board
         }
 
         private Font HudFont =>
-            drawerHandleLabel != null ? drawerHandleLabel.font : null;
+            diceResult != null ? diceResult.font : null;
 
         /// <summary>给商店/奖励的整行挂上悬停详情（复用同一块画布上的工具提示）。</summary>
         private void BindHover(GameObject row, CardDefinition definition)

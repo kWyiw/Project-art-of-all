@@ -18,7 +18,11 @@ namespace ProjectArtOfAll.Flow
     /// </summary>
     public static class GameSession
     {
+        /// <summary>中转场景：根据本局选择加载 Map1 或 Map2。</summary>
         public const string MatchSceneName = "MainGame";
+
+        public const string Map1SceneName = "Map1";
+        public const string Map2SceneName = "Map2";
 
         /// <summary>主页面场景名（Build Settings 第 0 个）。</summary>
         public const string MenuSceneName = "StartMenu";
@@ -43,6 +47,9 @@ namespace ProjectArtOfAll.Flow
             get => MapCatalog.SelectedId;
             set => MapCatalog.SelectedId = value;
         }
+
+        /// <summary>当前选择对应的实体地图场景。</summary>
+        public static string SelectedMapSceneName => MapCatalog.Selected.SceneName;
 
         /// <summary>
         /// 主页面点模式卡：记住模式并进入准备房间场景。正常模式先把房间重置成

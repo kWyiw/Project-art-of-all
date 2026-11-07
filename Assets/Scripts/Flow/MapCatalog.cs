@@ -17,6 +17,7 @@ namespace ProjectArtOfAll.Flow
     {
         public BoardMapInfo(
             string id,
+            string sceneName,
             string displayName,
             string subtitle,
             string description,
@@ -24,6 +25,7 @@ namespace ProjectArtOfAll.Flow
             int tileCount)
         {
             Id = id ?? throw new ArgumentNullException(nameof(id));
+            SceneName = sceneName ?? throw new ArgumentNullException(nameof(sceneName));
             DisplayName = displayName ?? string.Empty;
             Subtitle = subtitle ?? string.Empty;
             Description = description ?? string.Empty;
@@ -32,6 +34,9 @@ namespace ProjectArtOfAll.Flow
         }
 
         public string Id { get; }
+
+        /// <summary>场景名。每张地图的实体内容只保留在自己的场景里。</summary>
+        public string SceneName { get; }
 
         public string DisplayName { get; }
 
@@ -43,7 +48,7 @@ namespace ProjectArtOfAll.Flow
 
         public int TileCount { get; }
 
-        /// <summary>True when the board has to be built at runtime instead of read from the scene.</summary>
+        /// <summary>True when the board's topology also needs its code-side definition.</summary>
         public bool IsGenerated => Kind != BoardMapKind.Classic;
     }
 
@@ -57,6 +62,7 @@ namespace ProjectArtOfAll.Flow
         {
             new BoardMapInfo(
                 ClassicId,
+                "Map1",
                 "经典广场",
                 "12 × 12 棋盘 · 68 格",
                 "四角各有一个家，8 个三岔口把棋盘切成环线；商店、奖励、怪物与传送门交错分布。",
@@ -64,6 +70,7 @@ namespace ProjectArtOfAll.Flow
                 68),
             new BoardMapInfo(
                 SweetRingId,
+                "Map2",
                 "甜点回廊",
                 "手绘方格环带 · 36 格",
                 "照着草图逐格复刻：11 × 9 的方格上摆出一圈环带，四个角各有一个家，左右两条侧环由三格拐角接回主环，紫色传送门两两相对。",

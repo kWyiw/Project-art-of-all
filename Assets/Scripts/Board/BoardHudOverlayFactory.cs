@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -56,8 +57,18 @@ namespace ProjectArtOfAll.Board
         public Text IgnoreLabel { get; }
     }
 
+    [Serializable]
     public sealed class BoardHudCardDrawerView
     {
+        [SerializeField] private GameObject overlay;
+        [SerializeField] private RectTransform panel;
+        [SerializeField] private Text title;
+        [SerializeField] private RectTransform content;
+        [SerializeField] private ScrollRect scroll;
+        [SerializeField] private Text empty;
+        [SerializeField] private Button closeButton;
+        [SerializeField] private Text closeLabel;
+
         public BoardHudCardDrawerView(
             GameObject overlay,
             RectTransform panel,
@@ -68,28 +79,37 @@ namespace ProjectArtOfAll.Board
             Button closeButton,
             Text closeLabel)
         {
-            Overlay = overlay;
-            Panel = panel;
-            Title = title;
-            Content = content;
-            Scroll = scroll;
-            Empty = empty;
-            CloseButton = closeButton;
-            CloseLabel = closeLabel;
+            this.overlay = overlay;
+            this.panel = panel;
+            this.title = title;
+            this.content = content;
+            this.scroll = scroll;
+            this.empty = empty;
+            this.closeButton = closeButton;
+            this.closeLabel = closeLabel;
         }
 
-        public GameObject Overlay { get; }
-        public RectTransform Panel { get; }
-        public Text Title { get; }
-        public RectTransform Content { get; }
-        public ScrollRect Scroll { get; }
-        public Text Empty { get; }
-        public Button CloseButton { get; }
-        public Text CloseLabel { get; }
+        public GameObject Overlay => overlay;
+        public RectTransform Panel => panel;
+        public Text Title => title;
+        public RectTransform Content => content;
+        public ScrollRect Scroll => scroll;
+        public Text Empty => empty;
+        public Button CloseButton => closeButton;
+        public Text CloseLabel => closeLabel;
     }
 
+    [Serializable]
     public sealed class BoardHudRewardChoiceView
     {
+        [SerializeField] private GameObject overlay;
+        [SerializeField] private Text title;
+        [SerializeField] private Text subtitle;
+        [SerializeField] private Button[] buttons;
+        [SerializeField] private Text[] names;
+        [SerializeField] private Text[] metas;
+        [SerializeField] private Text[] details;
+
         public BoardHudRewardChoiceView(
             GameObject overlay,
             Text title,
@@ -99,27 +119,39 @@ namespace ProjectArtOfAll.Board
             Text[] metas,
             Text[] details)
         {
-            Overlay = overlay;
-            Title = title;
-            Subtitle = subtitle;
-            Buttons = buttons;
-            Names = names;
-            Metas = metas;
-            Details = details;
+            this.overlay = overlay;
+            this.title = title;
+            this.subtitle = subtitle;
+            this.buttons = buttons;
+            this.names = names;
+            this.metas = metas;
+            this.details = details;
         }
 
-        public GameObject Overlay { get; }
-        public Text Title { get; }
-        public Text Subtitle { get; }
-        public Button[] Buttons { get; }
-        public Text[] Names { get; }
-        public Text[] Metas { get; }
-        public Text[] Details { get; }
+        public GameObject Overlay => overlay;
+        public Text Title => title;
+        public Text Subtitle => subtitle;
+        public Button[] Buttons => buttons;
+        public Text[] Names => names;
+        public Text[] Metas => metas;
+        public Text[] Details => details;
     }
 
     /// <summary>事件面板：标题 + 三个可选项 + 「走开」（R-EVT-002、R-EVT-003）。</summary>
+    [Serializable]
     public sealed class BoardHudEventView
     {
+        [SerializeField] private GameObject overlay;
+        [SerializeField] private Text title;
+        [SerializeField] private Text subtitle;
+        [SerializeField] private Button[] buttons;
+        [SerializeField] private Text[] names;
+        [SerializeField] private Text[] metas;
+        [SerializeField] private Text[] details;
+        [SerializeField] private Text[] costs;
+        [SerializeField] private Button leaveButton;
+        [SerializeField] private Text leaveLabel;
+
         public BoardHudEventView(
             GameObject overlay,
             Text title,
@@ -132,33 +164,48 @@ namespace ProjectArtOfAll.Board
             Button leaveButton,
             Text leaveLabel)
         {
-            Overlay = overlay;
-            Title = title;
-            Subtitle = subtitle;
-            Buttons = buttons;
-            Names = names;
-            Metas = metas;
-            Details = details;
-            Costs = costs;
-            LeaveButton = leaveButton;
-            LeaveLabel = leaveLabel;
+            this.overlay = overlay;
+            this.title = title;
+            this.subtitle = subtitle;
+            this.buttons = buttons;
+            this.names = names;
+            this.metas = metas;
+            this.details = details;
+            this.costs = costs;
+            this.leaveButton = leaveButton;
+            this.leaveLabel = leaveLabel;
         }
 
-        public GameObject Overlay { get; }
-        public Text Title { get; }
-        public Text Subtitle { get; }
-        public Button[] Buttons { get; }
-        public Text[] Names { get; }
-        public Text[] Metas { get; }
-        public Text[] Details { get; }
-        public Text[] Costs { get; }
-        public Button LeaveButton { get; }
-        public Text LeaveLabel { get; }
+        public GameObject Overlay => overlay;
+        public Text Title => title;
+        public Text Subtitle => subtitle;
+        public Button[] Buttons => buttons;
+        public Text[] Names => names;
+        public Text[] Metas => metas;
+        public Text[] Details => details;
+        public Text[] Costs => costs;
+        public Button LeaveButton => leaveButton;
+        public Text LeaveLabel => leaveLabel;
     }
 
     /// <summary>商店面板：3 张货、重掷一次、离开（R-ECO-004 / 规则书 §2.5）。</summary>
+    [Serializable]
     public sealed class BoardHudShopView
     {
+        [SerializeField] private GameObject overlay;
+        [SerializeField] private Text title;
+        [SerializeField] private Text subtitle;
+        [SerializeField] private Button[] buttons;
+        [SerializeField] private Text[] names;
+        [SerializeField] private Text[] metas;
+        [SerializeField] private Text[] details;
+        [SerializeField] private Text[] prices;
+        [SerializeField] private Button rerollButton;
+        [SerializeField] private Text rerollLabel;
+        [SerializeField] private Text rerollHint;
+        [SerializeField] private Button leaveButton;
+        [SerializeField] private Text leaveLabel;
+
         public BoardHudShopView(
             GameObject overlay,
             Text title,
@@ -174,38 +221,47 @@ namespace ProjectArtOfAll.Board
             Button leaveButton,
             Text leaveLabel)
         {
-            Overlay = overlay;
-            Title = title;
-            Subtitle = subtitle;
-            Buttons = buttons;
-            Names = names;
-            Metas = metas;
-            Details = details;
-            Prices = prices;
-            RerollButton = rerollButton;
-            RerollLabel = rerollLabel;
-            RerollHint = rerollHint;
-            LeaveButton = leaveButton;
-            LeaveLabel = leaveLabel;
+            this.overlay = overlay;
+            this.title = title;
+            this.subtitle = subtitle;
+            this.buttons = buttons;
+            this.names = names;
+            this.metas = metas;
+            this.details = details;
+            this.prices = prices;
+            this.rerollButton = rerollButton;
+            this.rerollLabel = rerollLabel;
+            this.rerollHint = rerollHint;
+            this.leaveButton = leaveButton;
+            this.leaveLabel = leaveLabel;
         }
 
-        public GameObject Overlay { get; }
-        public Text Title { get; }
-        public Text Subtitle { get; }
-        public Button[] Buttons { get; }
-        public Text[] Names { get; }
-        public Text[] Metas { get; }
-        public Text[] Details { get; }
-        public Text[] Prices { get; }
-        public Button RerollButton { get; }
-        public Text RerollLabel { get; }
-        public Text RerollHint { get; }
-        public Button LeaveButton { get; }
-        public Text LeaveLabel { get; }
+        public GameObject Overlay => overlay;
+        public Text Title => title;
+        public Text Subtitle => subtitle;
+        public Button[] Buttons => buttons;
+        public Text[] Names => names;
+        public Text[] Metas => metas;
+        public Text[] Details => details;
+        public Text[] Prices => prices;
+        public Button RerollButton => rerollButton;
+        public Text RerollLabel => rerollLabel;
+        public Text RerollHint => rerollHint;
+        public Button LeaveButton => leaveButton;
+        public Text LeaveLabel => leaveLabel;
     }
 
+    [Serializable]
     public sealed class BoardHudCombatResultView
     {
+        [SerializeField] private GameObject overlay;
+        [SerializeField] private RectTransform panel;
+        [SerializeField] private Text title;
+        [SerializeField] private Text subtitle;
+        [SerializeField] private Text body;
+        [SerializeField] private Button closeButton;
+        [SerializeField] private Text closeLabel;
+
         public BoardHudCombatResultView(
             GameObject overlay,
             RectTransform panel,
@@ -215,22 +271,22 @@ namespace ProjectArtOfAll.Board
             Button closeButton,
             Text closeLabel)
         {
-            Overlay = overlay;
-            Panel = panel;
-            Title = title;
-            Subtitle = subtitle;
-            Body = body;
-            CloseButton = closeButton;
-            CloseLabel = closeLabel;
+            this.overlay = overlay;
+            this.panel = panel;
+            this.title = title;
+            this.subtitle = subtitle;
+            this.body = body;
+            this.closeButton = closeButton;
+            this.closeLabel = closeLabel;
         }
 
-        public GameObject Overlay { get; }
-        public RectTransform Panel { get; }
-        public Text Title { get; }
-        public Text Subtitle { get; }
-        public Text Body { get; }
-        public Button CloseButton { get; }
-        public Text CloseLabel { get; }
+        public GameObject Overlay => overlay;
+        public RectTransform Panel => panel;
+        public Text Title => title;
+        public Text Subtitle => subtitle;
+        public Text Body => body;
+        public Button CloseButton => closeButton;
+        public Text CloseLabel => closeLabel;
     }
 
     public static class BoardHudOverlayFactory
@@ -1784,8 +1840,18 @@ namespace ProjectArtOfAll.Board
     }
 
     /// <summary>「经过自己的家」浮层持有的控件句柄。</summary>
+    [Serializable]
     public sealed class BoardHomeStopView
     {
+        [SerializeField] private GameObject overlay;
+        [SerializeField] private RectTransform panel;
+        [SerializeField] private Text title;
+        [SerializeField] private Text body;
+        [SerializeField] private Button stopButton;
+        [SerializeField] private Text stopLabel;
+        [SerializeField] private Button continueButton;
+        [SerializeField] private Text continueLabel;
+
         public BoardHomeStopView(
             GameObject overlay,
             RectTransform panel,
@@ -1796,23 +1862,23 @@ namespace ProjectArtOfAll.Board
             Button continueButton,
             Text continueLabel)
         {
-            Overlay = overlay;
-            Panel = panel;
-            Title = title;
-            Body = body;
-            StopButton = stopButton;
-            StopLabel = stopLabel;
-            ContinueButton = continueButton;
-            ContinueLabel = continueLabel;
+            this.overlay = overlay;
+            this.panel = panel;
+            this.title = title;
+            this.body = body;
+            this.stopButton = stopButton;
+            this.stopLabel = stopLabel;
+            this.continueButton = continueButton;
+            this.continueLabel = continueLabel;
         }
 
-        public GameObject Overlay { get; }
-        public RectTransform Panel { get; }
-        public Text Title { get; }
-        public Text Body { get; }
-        public Button StopButton { get; }
-        public Text StopLabel { get; }
-        public Button ContinueButton { get; }
-        public Text ContinueLabel { get; }
+        public GameObject Overlay => overlay;
+        public RectTransform Panel => panel;
+        public Text Title => title;
+        public Text Body => body;
+        public Button StopButton => stopButton;
+        public Text StopLabel => stopLabel;
+        public Button ContinueButton => continueButton;
+        public Text ContinueLabel => continueLabel;
     }
 }

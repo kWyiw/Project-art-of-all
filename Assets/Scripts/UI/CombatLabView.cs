@@ -67,17 +67,17 @@ namespace ProjectArtOfAll.UI
         private readonly List<GameObject> leftCells = new List<GameObject>();
         private readonly List<GameObject> rightCells = new List<GameObject>();
 
-        private Font font;
-        private RectTransform root;
-        private RectTransform leftDeckRow;
-        private RectTransform rightDeckRow;
-        private Text leftDeckLabel;
-        private Text rightDeckLabel;
-        private Text leftHealthLabel;
-        private Text rightHealthLabel;
-        private Text statusLabel;
-        private CombatPlaybackView playback;
-        private GameObject speedHighlight;
+        [SerializeField] private Font font;
+        [SerializeField] private RectTransform root;
+        [SerializeField] private RectTransform leftDeckRow;
+        [SerializeField] private RectTransform rightDeckRow;
+        [SerializeField] private Text leftDeckLabel;
+        [SerializeField] private Text rightDeckLabel;
+        [SerializeField] private Text leftHealthLabel;
+        [SerializeField] private Text rightHealthLabel;
+        [SerializeField] private Text statusLabel;
+        [SerializeField] private CombatPlaybackView playback;
+        [SerializeField] private GameObject speedHighlight;
         private int leftHealth = DefaultHealth;
         private int rightHealth = DefaultHealth;
         private float preferredSpeed = 2f;
@@ -105,6 +105,136 @@ namespace ProjectArtOfAll.UI
             view.root = rect;
             view.Build();
             return view;
+        }
+
+        private void Awake()
+        {
+            Bind();
+        }
+
+        public void Bind()
+        {
+            if (root == null)
+            {
+                root = transform as RectTransform;
+            }
+
+            if (font == null)
+            {
+                font = CardTooltipHost.CanvasRect(root) != null
+                    ? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")
+                    : null;
+            }
+
+            if (lane == null && font != null)
+            {
+                lane = new CardRowRenderer(font)
+                {
+                    RowWidth = DeckRowWidth,
+                    InBattle = true,
+                    TopInset = 0f
+                };
+                lane.Scale = lane.FitScale(LaneHeight);
+            }
+
+            BindButton("BackHome", BackToMainMenu);
+            BindButton("LeftMinus", () => AdjustHealth(true, -HealthStep));
+            BindButton("LeftPlus", () => AdjustHealth(true, HealthStep));
+            BindButton("RightMinus", () => AdjustHealth(false, -HealthStep));
+            BindButton("RightPlus", () => AdjustHealth(false, HealthStep));
+            BindButton("Speed1", () => SetSpeed(1f));
+            BindButton("Speed2", () => SetSpeed(2f));
+            BindButton("Speed4", () => SetSpeed(4f));
+            BindButton("Fight", StartBattle);
+            BindButton("Copy", CopyLeftToRight);
+            BindButton("Back", BackToMainMenu);
+            BindButton("Clear", () => ClearDeck(true), "LeftDeckPanel");
+            BindButton("Clear", () => ClearDeck(false), "RightDeckPanel");
+            BindCardLibrary();
+        }
+
+        private void BindButton(
+            string buttonName,
+            System.Action action,
+            string parentName = null)
+        {
+            Button[] buttons = GetComponentsInChildren<Button>(true);
+            for (int index = 0; index < buttons.Length; index++)
+            {
+                Button button = buttons[index];
+                if (button.gameObject.name != buttonName)
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(parentName) &&
+                    (button.transform.parent == null ||
+                     button.transform.parent.parent == null ||
+                     button.transform.parent.parent.gameObject.name != parentName))
+                {
+                    continue;
+                }
+
+                button.onClick.RemoveAllListeners();
+                button.onClick.AddListener(() => action?.Invoke());
+            }
+        }
+
+        private void BindCardLibrary()
+        {
+            Transform library = transform.Find("CardLibrary");
+            if (library == null)
+            {
+                return;
+            }
+
+            int index = 0;
+            foreach (Transform row in library)
+            {
+                if (!row.name.StartsWith("Card_"))
+                {
+                    continue;
+                }
+
+                string id = row.name.Substring("Card_".Length);
+                CardDefinition card = CardDatabase.Instance.Get(id);
+                if (card == null)
+                {
+                    continue;
+                }
+
+                CombatLabDragHandler drag = row.GetComponent<CombatLabDragHandler>();
+                if (drag != null)
+                {
+                    drag.Bind(this, card, true, true, index);
+                }
+
+                CardHoverTarget hover = row.GetComponent<CardHoverTarget>();
+                if (hover != null)
+                {
+                    hover.Bind(card, CardTooltipHost.CanvasRect(root), font, false);
+                }
+
+                BindRowButton(row, "Left", () => AddCard(card, true));
+                BindRowButton(row, "Right", () => AddCard(card, false));
+                index++;
+            }
+        }
+
+        private static void BindRowButton(
+            Transform row,
+            string name,
+            System.Action action)
+        {
+            Transform child = row.Find(name);
+            Button button = child == null ? null : child.GetComponent<Button>();
+            if (button == null)
+            {
+                return;
+            }
+
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() => action?.Invoke());
         }
 
         public void Show()
@@ -208,14 +338,12 @@ namespace ProjectArtOfAll.UI
                     () => AddCard(captured, false));
 
                 // 整行都可以按住往战斗栏里拖。
-                LabDragHandler drag = rowRect.gameObject.AddComponent<LabDragHandler>();
-                drag.View = this;
-                drag.Card = card;
-                drag.FromLibrary = true;
-                drag.FromLeft = true;
-                drag.Index = index;
+                CombatLabDragHandler drag =
+                    rowRect.gameObject.AddComponent<CombatLabDragHandler>();
+                drag.Bind(this, card, true, true, index);
 
-                CardHoverTarget hover = rowRect.gameObject.AddComponent<CardHoverTarget>();
+                CardHoverTarget hover =
+                    rowRect.gameObject.AddComponent<CardHoverTargetSceneView>();
                 hover.Bind(card, CardTooltipHost.CanvasRect(root), font, false);
             }
         }
@@ -456,12 +584,9 @@ namespace ProjectArtOfAll.UI
                 chip.name = "Chip_" + index;
                 x += width + lane.SlotGap;
 
-                LabDragHandler drag = chip.AddComponent<LabDragHandler>();
-                drag.View = this;
-                drag.Card = card;
-                drag.FromLibrary = false;
-                drag.FromLeft = isLeft;
-                drag.Index = index;
+                CombatLabDragHandler drag =
+                    chip.AddComponent<CombatLabDragHandler>();
+                drag.Bind(this, card, false, isLeft, index);
 
                 Button button = chip.AddComponent<Button>();
                 button.targetGraphic = chip.GetComponent<Image>();
@@ -605,7 +730,7 @@ namespace ProjectArtOfAll.UI
             return deck.Count;
         }
 
-        private void BeginDrag(
+        internal void BeginDrag(
             CardDefinition card,
             bool fromLibrary,
             bool fromLeft,
@@ -622,7 +747,7 @@ namespace ProjectArtOfAll.UI
             MoveGhostTo(eventData);
         }
 
-        private void DragTo(PointerEventData eventData)
+        internal void DragTo(PointerEventData eventData)
         {
             if (!dragging)
             {
@@ -632,7 +757,11 @@ namespace ProjectArtOfAll.UI
             MoveGhostTo(eventData);
         }
 
-        private void EndDrag(bool fromLibrary, bool fromLeft, int index, PointerEventData eventData)
+        internal void EndDrag(
+            bool fromLibrary,
+            bool fromLeft,
+            int index,
+            PointerEventData eventData)
         {
             if (!dragging)
             {
@@ -725,39 +854,6 @@ namespace ProjectArtOfAll.UI
         }
 
         /// <summary>卡牌库的一行和战斗栏里的卡牌都挂这个，交给 <see cref="CombatLabView"/> 处理落点。</summary>
-        private sealed class LabDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
-        {
-            public CombatLabView View;
-            public CardDefinition Card;
-            public bool FromLibrary;
-            public bool FromLeft;
-            public int Index;
-
-            public void OnBeginDrag(PointerEventData eventData)
-            {
-                if (View != null)
-                {
-                    View.BeginDrag(Card, FromLibrary, FromLeft, eventData);
-                }
-            }
-
-            public void OnDrag(PointerEventData eventData)
-            {
-                if (View != null)
-                {
-                    View.DragTo(eventData);
-                }
-            }
-
-            public void OnEndDrag(PointerEventData eventData)
-            {
-                if (View != null)
-                {
-                    View.EndDrag(FromLibrary, FromLeft, Index, eventData);
-                }
-            }
-        }
-
         // ------------------------------------------------------------------ 开打
 
         private void StartBattle()

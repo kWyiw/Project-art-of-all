@@ -11,7 +11,7 @@ namespace ProjectArtOfAll.Editor
 {
     internal static class CreatePatternBoard
     {
-        private const string MainGamePath = "Assets/Scenes/MainGame.unity";
+        private const string Map1Path = "Assets/Scenes/Map1.unity";
         private const string BoardRootName = "Board_GridLayout";
         private const string LegacyBoardRootName = "Board_28Tiles";
         private const string MaterialsFolder = "Assets/Materials";
@@ -43,7 +43,7 @@ namespace ProjectArtOfAll.Editor
             "############"
         };
 
-        [MenuItem("Tools/Project Art of All/Rebuild MainGame Pattern Board")]
+        [MenuItem("Tools/Project Art of All/Rebuild Map1 Classic Board")]
         private static void RebuildFromMenu()
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode ||
@@ -52,16 +52,16 @@ namespace ProjectArtOfAll.Editor
                 return;
             }
 
-            Scene scene = OpenMainGameScene();
+            Scene scene = OpenGameplayScene();
             BuildBoard(scene);
         }
 
-        private static Scene OpenMainGameScene()
+        private static Scene OpenGameplayScene()
         {
             Scene active = SceneManager.GetActiveScene();
-            return active.path == MainGamePath
+            return active.path == Map1Path
                 ? active
-                : EditorSceneManager.OpenScene(MainGamePath, OpenSceneMode.Single);
+                : EditorSceneManager.OpenScene(Map1Path, OpenSceneMode.Single);
         }
 
         private static void BuildBoard(Scene scene)
@@ -155,7 +155,7 @@ namespace ProjectArtOfAll.Editor
             Selection.activeGameObject = boardRoot;
             Debug.Log(
                 $"[Board] Built a {tileCount}-tile pattern on a " +
-                $"{GridSize}x{GridSize} grid in {MainGamePath}.");
+                $"{GridSize}x{GridSize} grid in {Map1Path}.");
         }
 
         private static void ConfigureCamera(Transform boardRoot)

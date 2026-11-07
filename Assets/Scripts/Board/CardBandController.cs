@@ -123,6 +123,39 @@ namespace ProjectArtOfAll.Board
             root.gameObject.AddComponent<CardBandLayoutDriver>().Bind(this);
         }
 
+        private CardBandController(
+            BoardGameplayController gameplay,
+            CardBandSceneView sceneView)
+        {
+            this.gameplay = gameplay;
+            root = sceneView.BandRoot;
+            bagRow = sceneView.BagRow;
+            battleRow = sceneView.BattleRow;
+            sellZone = sceneView.SellZone;
+            sellImage = sceneView.SellImage;
+            sellLabel = sceneView.SellLabel;
+            bagLabel = sceneView.BagLabel;
+            battleLabel = sceneView.BattleLabel;
+            battleCapacityLabel = sceneView.BattleCapacityLabel;
+            handleLabel = sceneView.HandleLabel;
+            font = sceneView.Font;
+
+            Button handleButton = handleLabel.GetComponentInParent<Button>();
+            if (handleButton != null)
+            {
+                handleButton.onClick.RemoveAllListeners();
+                handleButton.onClick.AddListener(ToggleCollapsed);
+            }
+
+            CardBandLayoutDriver driver = root.GetComponent<CardBandLayoutDriver>();
+            if (driver == null)
+            {
+                driver = root.gameObject.AddComponent<CardBandLayoutDriver>();
+            }
+
+            driver.Bind(this);
+        }
+
         public static CardBandController Create(BoardGameplayController gameplay, RectTransform parent, Font font)
         {
             GameObject rootObject = new GameObject("CardBand", typeof(RectTransform), typeof(Image));
@@ -137,6 +170,18 @@ namespace ProjectArtOfAll.Board
             background.color = new Color(0.03f, 0.05f, 0.06f, 0.94f);
             background.raycastTarget = false;
             return new CardBandController(gameplay, rect, font);
+        }
+
+        public static CardBandController Bind(
+            BoardGameplayController gameplay,
+            CardBandSceneView sceneView)
+        {
+            if (sceneView == null)
+            {
+                throw new System.ArgumentNullException(nameof(sceneView));
+            }
+
+            return new CardBandController(gameplay, sceneView);
         }
 
         /// <summary>掷骰子按钮：由 HUD 注进来，跟着带高一起挪到带上方右侧的空地。</summary>

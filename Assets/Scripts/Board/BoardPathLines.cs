@@ -5,7 +5,8 @@ using UnityEngine;
 namespace ProjectArtOfAll.Board
 {
     /// <summary>
-    /// M4 地图渲染：把内核的邻接关系画成可见的路径线。
+    /// M4 地图渲染工具：把内核的邻接关系画成可见路径线。
+    /// 当前棋盘明确不显示淡黄色标线，因此 BoardGameplayController 不再自动调用它。
     /// 只在相邻（正交相接）的瓦片之间连线，线贴在瓦片顶面之上，不参与任何规则判定。
     /// </summary>
     public static class BoardPathLines

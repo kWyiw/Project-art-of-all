@@ -11,7 +11,7 @@ namespace ProjectArtOfAll.Editor
 {
     internal static class CreateBoardGameplayUI
     {
-        private const string MainGamePath = "Assets/Scenes/MainGame.unity";
+        private const string Map1Path = "Assets/Scenes/Map1.unity";
         private const string CanvasName = "HUDCanvas";
         private const string HudRootName = "GameplayHUD";
         private const float SlotWidth = 86f;
@@ -26,7 +26,7 @@ namespace ProjectArtOfAll.Editor
                 return;
             }
 
-            Scene scene = OpenMainGameScene();
+            Scene scene = OpenGameplayScene();
             GameObject existing = GameObject.Find(HudRootName);
             if (existing != null)
             {
@@ -38,7 +38,7 @@ namespace ProjectArtOfAll.Editor
 
         public static void RebuildForAutomation()
         {
-            Scene scene = OpenMainGameScene();
+            Scene scene = OpenGameplayScene();
             GameObject existing = GameObject.Find(HudRootName);
             if (existing != null)
             {
@@ -50,12 +50,12 @@ namespace ProjectArtOfAll.Editor
             Debug.Log("[GameplayHUD] Automation rebuild completed.");
         }
 
-        private static Scene OpenMainGameScene()
+        private static Scene OpenGameplayScene()
         {
             Scene active = SceneManager.GetActiveScene();
-            return active.path == MainGamePath
+            return active.path == Map1Path
                 ? active
-                : EditorSceneManager.OpenScene(MainGamePath, OpenSceneMode.Single);
+                : EditorSceneManager.OpenScene(Map1Path, OpenSceneMode.Single);
         }
 
         private static void Build(Scene scene)
@@ -90,12 +90,6 @@ namespace ProjectArtOfAll.Editor
             Text matchStatus = CreateMatchStatus(
                 hudRoot.transform,
                 font);
-            GameObject drawerPanel = CreateDrawer(
-                hudRoot.transform,
-                font);
-            GameObject handle = CreateDrawerHandle(
-                hudRoot.transform,
-                font);
             GameObject dicePanel = CreateDicePanel(
                 hudRoot.transform,
                 font,
@@ -105,8 +99,6 @@ namespace ProjectArtOfAll.Editor
                 font,
                 out Button[] forkArrowButtons,
                 out Text[] forkArrowLabels);
-            GameObject cardDrawerScrim =
-                BoardHudOverlayFactory.CreateCardDrawerScrim(hudRoot.transform);
             BoardHudEncounterViews encounterViews =
                 BoardHudOverlayFactory.CreateEncounterOverlay(
                     hudRoot.transform,
@@ -114,12 +106,6 @@ namespace ProjectArtOfAll.Editor
 
             BoardHudController controller = hudRoot.GetComponent<BoardHudController>();
             SerializedObject serializedController = new SerializedObject(controller);
-            serializedController.FindProperty("drawerPanel").objectReferenceValue =
-                drawerPanel.GetComponent<RectTransform>();
-            serializedController.FindProperty("cardDrawerScrim").objectReferenceValue =
-                cardDrawerScrim.GetComponent<Image>();
-            serializedController.FindProperty("drawerHandleLabel").objectReferenceValue =
-                handle.GetComponentInChildren<Text>(true);
             serializedController.FindProperty("diceResult").objectReferenceValue =
                 diceResult;
             serializedController.FindProperty("matchStatus").objectReferenceValue =
@@ -154,16 +140,6 @@ namespace ProjectArtOfAll.Editor
                 encounterViews.AcceptButton;
             serializedController.FindProperty("encounterAcceptLabel").objectReferenceValue =
                 encounterViews.AcceptLabel;
-            serializedController.FindProperty("assemblyLabel").objectReferenceValue =
-                drawerPanel.transform.Find("AssemblyLabel").GetComponent<Text>();
-            serializedController.FindProperty("assemblyLockOverlay").objectReferenceValue =
-                drawerPanel.transform.Find("AssemblyLockHatch").GetComponent<RectTransform>();
-            serializedController.FindProperty("assemblyLockHatch").objectReferenceValue =
-                drawerPanel.transform.Find("AssemblyLockHatch").GetComponent<RawImage>();
-            serializedController.FindProperty("assemblySlotStartX").floatValue =
-                SlotStartX;
-            serializedController.FindProperty("assemblySlotWidth").floatValue =
-                SlotWidth;
             serializedController.ApplyModifiedPropertiesWithoutUndo();
             SetButtonArray(
                 serializedController.FindProperty("forkArrowButtons"),
@@ -172,21 +148,9 @@ namespace ProjectArtOfAll.Editor
                 serializedController.FindProperty("forkArrowLabels"),
                 forkArrowLabels);
             serializedController.ApplyModifiedPropertiesWithoutUndo();
-            controller.SetDrawerOpen(!Application.isPlaying);
-            controller.SetAssemblyLevel(1);
             controller.HideForkChoices();
             controller.HideEncounter();
 
-            int scrimIndex = cardDrawerScrim.transform.GetSiblingIndex();
-            int drawerIndex = drawerPanel.transform.GetSiblingIndex();
-            if (scrimIndex > drawerIndex)
-            {
-                cardDrawerScrim.transform.SetSiblingIndex(drawerIndex);
-            }
-
-            UnityEventTools.AddPersistentListener(
-                handle.GetComponent<Button>().onClick,
-                controller.ToggleDrawer);
             UnityEventTools.AddPersistentListener(
                 dicePanel.GetComponent<Button>().onClick,
                 controller.RollDice);

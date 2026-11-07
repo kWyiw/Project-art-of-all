@@ -25,11 +25,11 @@ namespace ProjectArtOfAll.Board
         private static readonly Color TextColor = new Color(0.90f, 0.91f, 0.87f, 1f);
         private static readonly Color MutedColor = new Color(0.66f, 0.68f, 0.66f, 1f);
 
-        private Text titleLabel;
-        private Text turnLabel;
-        private Text ruleLabel;
-        private Text normaLabel;
-        private Text hintLabel;
+        [SerializeField] private Text titleLabel;
+        [SerializeField] private Text turnLabel;
+        [SerializeField] private Text ruleLabel;
+        [SerializeField] private Text normaLabel;
+        [SerializeField] private Text hintLabel;
 
         public static BoardFieldInfoPanel Create(RectTransform parent, Font font)
         {
@@ -128,7 +128,7 @@ namespace ProjectArtOfAll.Board
     /// 地块悬停说明（§2.1）：不用碰撞体，把鼠标射线打到棋盘平面上，
     /// 再取最近的地块，因此场景板与运行时生成的板都能用。
     /// </summary>
-    public sealed class BoardTileTooltip : MonoBehaviour
+    public class BoardTileTooltip : MonoBehaviour
     {
         private const float MaxWidth = 340f;
         private const float PaddingX = 12f;
@@ -144,11 +144,11 @@ namespace ProjectArtOfAll.Board
         private static readonly Color TitleColor = new Color(0.97f, 0.94f, 0.86f, 1f);
         private static readonly Color BodyColor = new Color(0.90f, 0.88f, 0.82f, 1f);
 
-        private RectTransform root;
-        private RectTransform canvasRect;
-        private Text titleLabel;
-        private Text bodyLabel;
-        private CanvasGroup group;
+        [SerializeField] private RectTransform root;
+        [SerializeField] private RectTransform canvasRect;
+        [SerializeField] private Text titleLabel;
+        [SerializeField] private Text bodyLabel;
+        [SerializeField] private CanvasGroup group;
         private BoardGameplayController gameplay;
         private bool visible;
 
@@ -176,7 +176,8 @@ namespace ProjectArtOfAll.Board
             outline.effectColor = FrameColor;
             outline.effectDistance = new Vector2(1.5f, -1.5f);
 
-            BoardTileTooltip tooltip = rootObject.AddComponent<BoardTileTooltip>();
+            BoardTileTooltip tooltip =
+                rootObject.AddComponent<BoardTileTooltipSceneView>();
             tooltip.root = rect;
             tooltip.canvasRect = parent;
             tooltip.group = rootObject.GetComponent<CanvasGroup>();
@@ -424,7 +425,7 @@ namespace ProjectArtOfAll.Board
     /// <summary>
     /// 回合横幅（§2.1）：轮次变化时在中上位置弹出一次并淡出。
     /// </summary>
-    public sealed class BoardRoundBanner : MonoBehaviour
+    public class BoardRoundBanner : MonoBehaviour
     {
         private const float HoldSeconds = 1.1f;
         private const float FadeSeconds = 0.7f;
@@ -432,9 +433,9 @@ namespace ProjectArtOfAll.Board
         private static readonly Color TitleColor = new Color(0.96f, 0.80f, 0.42f, 1f);
         private static readonly Color SubColor = new Color(0.82f, 0.84f, 0.80f, 1f);
 
-        private Text titleLabel;
-        private Text subLabel;
-        private CanvasGroup group;
+        [SerializeField] private Text titleLabel;
+        [SerializeField] private Text subLabel;
+        [SerializeField] private CanvasGroup group;
         private float shownAt = -1f;
 
         public static BoardRoundBanner Create(RectTransform parent, Font font)
@@ -452,7 +453,8 @@ namespace ProjectArtOfAll.Board
             rect.anchoredPosition = new Vector2(0f, -66f);
             rect.sizeDelta = new Vector2(520f, 76f);
 
-            BoardRoundBanner banner = rootObject.AddComponent<BoardRoundBanner>();
+            BoardRoundBanner banner =
+                rootObject.AddComponent<BoardRoundBannerSceneView>();
             banner.group = rootObject.GetComponent<CanvasGroup>();
             banner.group.alpha = 0f;
             banner.group.blocksRaycasts = false;

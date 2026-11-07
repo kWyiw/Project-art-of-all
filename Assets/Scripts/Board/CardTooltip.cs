@@ -31,8 +31,8 @@ namespace ProjectArtOfAll.Board
         private static readonly Color BulletColor = new Color(0.92f, 0.69f, 0.27f, 0.95f);
         private static readonly Color DividerColor = new Color(0.85f, 0.63f, 0.25f, 0.32f);
 
-        private RectTransform root;
-        private Font font;
+        [SerializeField] private RectTransform root;
+        [SerializeField] private Font font;
         private readonly List<GameObject> generated = new List<GameObject>();
         private float cursorY;
         private float contentWidth;
@@ -478,6 +478,14 @@ namespace ProjectArtOfAll.Board
         private static RectTransform hostedCanvas;
         private static CardDefinition visibleCard;
 
+        public static void Register(CardTooltipView bakedView)
+        {
+            view = bakedView;
+            hostedCanvas = bakedView != null
+                ? bakedView.transform.parent as RectTransform
+                : null;
+        }
+
         /// <summary>扫到卡牌立即显示（原先的 0.35 秒悬停延迟按玩家要求去掉）。</summary>
         public static void Show(
             RectTransform canvas,
@@ -500,8 +508,13 @@ namespace ProjectArtOfAll.Board
 
             if (view == null)
             {
-                view = CardTooltipView.Create(canvas, font);
+                view = canvas.GetComponentInChildren<CardTooltipView>(true);
                 hostedCanvas = canvas;
+                if (view == null)
+                {
+                    Debug.LogError("[CardTooltip] Baked tooltip is missing.");
+                    return;
+                }
             }
 
             if (visibleCard == card && view.IsShown)
@@ -666,15 +679,15 @@ namespace ProjectArtOfAll.Board
     }
 
     /// <summary>给任意可悬停的卡牌补上「立刻看详情 + 牌面放大」：商店、奖励、模拟战斗都用它。</summary>
-    public sealed class CardHoverTarget : MonoBehaviour,
+    public class CardHoverTarget : MonoBehaviour,
         IPointerEnterHandler,
         IPointerExitHandler,
         IPointerMoveHandler
     {
         private CardDefinition card;
-        private RectTransform canvas;
-        private Font font;
-        private bool liftCard = true;
+        [SerializeField] private RectTransform canvas;
+        [SerializeField] private Font font;
+        [SerializeField] private bool liftCard = true;
         private bool hovering;
 
         public void Bind(

@@ -74,7 +74,6 @@ namespace ProjectArtOfAll.Board
         private BoardPlayerToken activeToken;
         private MapGraph graph;
         private MatchController match;
-        private GameObject pathLines;
         private BoardForkHighlight forkHighlight;
         private readonly List<BoardTileView> forkTargetTiles =
             new List<BoardTileView>();
@@ -112,24 +111,16 @@ namespace ProjectArtOfAll.Board
 
         private void Start()
         {
-            // 选地图页选中的是生成棋盘时，先把场景里的地块换成新布局，
-            // 再建 tile 索引与图——这样后面的所有逻辑（渲染、寻路、AI）都不用区分地图。
-            BoardMapDefinition generatedMap = BoardMapLibrary.For(GameSession.SelectedMapId);
-            if (generatedMap != null)
-            {
-                BoardMapBuilder.Build(this, generatedMap);
-            }
-
-            mapDisplayName = generatedMap != null
-                ? generatedMap.DisplayName
-                : MapCatalog.Selected.DisplayName;
+            // Map1 / Map2 already contain their baked boards. The shared definition is
+            // only used for shaped-board rules (force-straight cells and paired warps).
+            BoardMapDefinition bakedMapRules = BoardMapLibrary.For(GameSession.SelectedMapId);
+            mapDisplayName = MapCatalog.Selected.DisplayName;
 
             BuildSceneLookup();
-            // 生成棋盘自带连线（菱形环带不是方阵邻接），场景棋盘则用网格邻接。
-            graph = generatedMap != null
-                ? UnityMapGraphFactory.BuildFromDefinition(generatedMap)
+            // 甜点回廊带非默认连线/传送配对，仍从地图数据取规则；视觉地块来自 Map2。
+            graph = bakedMapRules != null
+                ? UnityMapGraphFactory.BuildFromDefinition(bakedMapRules)
                 : UnityMapGraphFactory.Build(tilesByNode.Values);
-            pathLines = BoardPathLines.Build(transform, graph, tilesByNode);
             forkHighlight = BoardForkHighlight.Create(transform);
             // 正常模式让真人先手（从主页面进来的第一回合就能操作）；
             // 无CPU测试模式没有固定真人，沿用准备室选的门。
@@ -187,19 +178,6 @@ namespace ProjectArtOfAll.Board
             // token == null 走的是 Unity 重载的 ==：棋子所在的场景已经卸载时这里为 true，
             // 不加这个判断就会去读 token.transform 并抛 MissingReferenceException。
             cameraController.SetFollowTarget(token.transform);
-        }
-
-        public void SetPathLinesVisible(bool visible)
-        {
-            if (this == null)
-            {
-                return;
-            }
-
-            if (pathLines != null)
-            {
-                pathLines.SetActive(visible);
-            }
         }
 
         /// <summary>人类席位；卡槽带始终显示这一位玩家的牌。</summary>
@@ -1509,7 +1487,6 @@ namespace ProjectArtOfAll.Board
             // 卡槽带永远只显示本地玩家自己的藏品：轮到别人时也不能变成别人的牌，
             // 这样玩家在自己的回合之外也能整理装配（R-TURN-002 免费动作）。
             hud.ShowCards(HumanPlayer);
-            hud.SetAssemblyLevel(player.Level);
             hud.RefreshPlayerPanels(match.State);
             hud.PumpEvents(match);
             hud.RefreshFieldInfo(match.State, mapDisplayName);

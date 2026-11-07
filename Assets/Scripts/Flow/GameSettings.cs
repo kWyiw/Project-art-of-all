@@ -15,14 +15,12 @@ namespace ProjectArtOfAll.Flow
         public const float MaximumCardScale = 1.25f;
 
         private const string CardScaleKey = "paoa.settings.cardScale";
-        private const string PathLinesKey = "paoa.settings.pathLines";
         private const string CameraFollowKey = "paoa.settings.cameraFollow";
         private const string AutoQualityKey = "paoa.settings.autoQuality";
         private const string CpuDifficultyKey = "paoa.settings.cpuDifficulty";
 
         private static bool loaded;
         private static float cardScale = 1f;
-        private static bool pathLinesVisible = true;
         private static bool cameraFollow = true;
         private static bool autoQuality = true;
         private static int cpuDifficulty = 1;
@@ -55,30 +53,6 @@ namespace ProjectArtOfAll.Flow
             }
         }
 
-        /// <summary>地图路径线显隐（纯表现）。</summary>
-        public static bool PathLinesVisible
-        {
-            get
-            {
-                EnsureLoaded();
-                return pathLinesVisible;
-            }
-
-            set
-            {
-                EnsureLoaded();
-                if (pathLinesVisible == value)
-                {
-                    return;
-                }
-
-                pathLinesVisible = value;
-                PlayerPrefs.SetInt(PathLinesKey, pathLinesVisible ? 1 : 0);
-                PlayerPrefs.Save();
-                Changed?.Invoke(nameof(PathLinesVisible));
-            }
-        }
-
         /// <summary>镜头是否跟随当前行动的棋子。</summary>
         public static bool CameraFollow
         {
@@ -103,7 +77,7 @@ namespace ProjectArtOfAll.Flow
             }
         }
 
-        /// <summary>掉帧时自动降档（关路径线、收卡槽）。关掉后画质就固定不动。</summary>
+        /// <summary>掉帧时自动降低卡槽尺寸。关掉后画质就固定不动。</summary>
         public static bool AutoQuality
         {
             get
@@ -189,7 +163,6 @@ namespace ProjectArtOfAll.Flow
                 PlayerPrefs.GetFloat(CardScaleKey, 1f),
                 MinimumCardScale,
                 MaximumCardScale);
-            pathLinesVisible = PlayerPrefs.GetInt(PathLinesKey, 1) != 0;
             cameraFollow = PlayerPrefs.GetInt(CameraFollowKey, 1) != 0;
             autoQuality = PlayerPrefs.GetInt(AutoQualityKey, 1) != 0;
             cpuDifficulty = Mathf.Clamp(PlayerPrefs.GetInt(CpuDifficultyKey, 1), 0, 2);
@@ -200,12 +173,10 @@ namespace ProjectArtOfAll.Flow
         {
             loaded = true;
             cardScale = 1f;
-            pathLinesVisible = true;
             cameraFollow = true;
             autoQuality = true;
             cpuDifficulty = 1;
             PlayerPrefs.SetFloat(CardScaleKey, cardScale);
-            PlayerPrefs.SetInt(PathLinesKey, 1);
             PlayerPrefs.SetInt(CameraFollowKey, 1);
             PlayerPrefs.SetInt(AutoQualityKey, 1);
             PlayerPrefs.SetInt(CpuDifficultyKey, cpuDifficulty);

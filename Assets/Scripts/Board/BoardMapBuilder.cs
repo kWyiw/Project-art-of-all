@@ -13,7 +13,8 @@ namespace ProjectArtOfAll.Board
     /// </summary>
     public static class BoardMapBuilder
     {
-        private const float TileSpacing = 1.62f;
+        public const float GridCellSize = 1.62f;
+        private const float GridCellHalfSize = GridCellSize * 0.5f;
         private const float TileHeight = 0.1f;
         private const string GeneratedRootName = "GeneratedBoard";
 
@@ -67,7 +68,9 @@ namespace ProjectArtOfAll.Board
 
             Transform root = new GameObject(GeneratedRootName).transform;
             root.SetParent(parent, false);
-            root.localPosition = Vector3.zero;
+            // The baked grid lines run through the cell boundaries. Shift generated
+            // tiles by half a cell so every tile sits in the centre of a grid cell.
+            root.localPosition = new Vector3(GridCellHalfSize, 0f, GridCellHalfSize);
             root.localRotation = Quaternion.Euler(0f, definition.RotationYDegrees, 0f);
             // 旋转 45° 的菱形环对角线比场景里那张方阵更长，整体缩一点才不会被
             // 固定机位的相机切掉顶点（两角正好是玩家的 home）。
@@ -139,7 +142,6 @@ namespace ProjectArtOfAll.Board
         private static float FitScale(BoardMapDefinition definition)
         {
             const float MaxRadius = 9.2f;
-            const float TileSpacing = 1.62f;
 
             float minRow = float.MaxValue;
             float maxRow = float.MinValue;
@@ -158,8 +160,8 @@ namespace ProjectArtOfAll.Board
             float radius = 0f;
             foreach (BoardMapCell cell in definition.Cells)
             {
-                float x = (cell.Column - centreColumn) * TileSpacing;
-                float z = (centreRow - cell.Row) * TileSpacing;
+                float x = (cell.Column - centreColumn) * GridCellSize;
+                float z = (centreRow - cell.Row) * GridCellSize;
                 radius = Mathf.Max(radius, Mathf.Sqrt(x * x + z * z));
             }
 
@@ -178,9 +180,9 @@ namespace ProjectArtOfAll.Board
             float centreColumn)
         {
             return new Vector3(
-                (column - centreColumn) * TileSpacing,
+                (column - centreColumn) * GridCellSize,
                 TileHeight,
-                (centreRow - row) * TileSpacing);
+                (centreRow - row) * GridCellSize);
         }
 
         private static Dictionary<int, Material> CaptureMaterials(BoardTileView[] tiles)
