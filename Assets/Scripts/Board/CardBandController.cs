@@ -297,8 +297,9 @@ namespace ProjectArtOfAll.Board
             float cardHeight = BaseCardHeight * scale;
             float top = HandleHeight + 12f;
             float rowWidth = root.rect.width;
-            float sellWidth = Mathf.Clamp(rowWidth * 0.09f, 56f, 92f);
-            float reserve = sellWidth + 14f;
+            float sellWidth = Mathf.Clamp(rowWidth * 0.10f, 64f, 108f);
+            // 出售区挂在两排的右边缘外侧，中间留一道缝，不压住最右一格。
+            float reserve = sellWidth + 26f;
 
             // 两排紧挨着：行名放到左侧专用列里，不再靠"中间空一行"来放标签。
             float labelColumn = 64f;
@@ -317,8 +318,12 @@ namespace ProjectArtOfAll.Board
             sell.anchorMin = new Vector2(1f, 0f);
             sell.anchorMax = new Vector2(1f, 1f);
             sell.pivot = new Vector2(1f, 0f);
-            sell.offsetMin = new Vector2(-sellWidth - 10f, 10f);
-            sell.offsetMax = new Vector2(-10f, -(HandleHeight + 10f));
+            sell.offsetMin = new Vector2(-sellWidth - 12f, 10f);
+            sell.offsetMax = new Vector2(-12f, -(HandleHeight + 10f));
+
+            // 两排共用同一个格宽（按最宽的 10 格算），这样上下两排的格子严格对齐，
+            // 拖动换位时的落点换算也只需要一个宽度。
+            slotWidth = CellWidthFor(bagRow.rect.width, 10);
         }
 
         private RectTransform CreateRow(RectTransform parent, string name)
@@ -554,14 +559,22 @@ namespace ProjectArtOfAll.Board
             rect.pivot = new Vector2(0.5f, 0.5f);
         }
 
-        /// <summary>单格宽度：跟着带子放大，但保证 10 格一定塞得进画布宽度。</summary>
-        private float SlotWidth
+        /// <summary>当前这一行的单格宽度，由 <see cref="CellWidthFor"/> 按行宽算出来后写入。</summary>
+        private float slotWidth = BaseSlotWidth;
+
+        private float SlotWidth => slotWidth;
+
+        /// <summary>
+        /// 单格宽度：跟着带子缩放，但一定让 cellCount 格塞得进这一行——
+        /// 行右侧已经给出售区留了位置，格子溢出就会压到出售区上。
+        /// </summary>
+        private float CellWidthFor(float rowWidth, int cellCount)
         {
-            get
-            {
-                float maxWidth = (Mathf.Max(320f, root.rect.width) - 48f) / 10f - BaseSlotGap * scale;
-                return Mathf.Max(48f, Mathf.Min(BaseSlotWidth * scale, maxWidth));
-            }
+            float available = Mathf.Max(160f, rowWidth - 32f);
+            float gap = SlotGap;
+            int cells = Mathf.Max(1, cellCount);
+            float fit = (available - gap * (cells - 1)) / cells;
+            return Mathf.Max(40f, Mathf.Min(BaseSlotWidth * scale, fit));
         }
 
         private float WidthOf(CardInstance card)
