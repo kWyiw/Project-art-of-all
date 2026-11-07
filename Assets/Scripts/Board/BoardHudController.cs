@@ -940,6 +940,37 @@ namespace ProjectArtOfAll.Board
                 }
             }
 
+            // 主场景里存着一份旧版遭遇战面板（还没有「无视 / 避开」这个出口）。
+            // 反序列化后 encounterOverlay 非空、但新字段 encounterIgnoreButton 为空，
+            // 这时整块重建一次，免得新按钮永远出不来。
+            if (encounterOverlay != null && encounterIgnoreButton == null)
+            {
+                if (Application.isPlaying)
+                {
+                    Destroy(encounterOverlay);
+                }
+                else
+                {
+                    DestroyImmediate(encounterOverlay);
+                }
+
+                encounterOverlay = null;
+                encounterPanel = null;
+                encounterTitle = null;
+                encounterSubtitle = null;
+                encounterAttackerName = null;
+                encounterAttackerStats = null;
+                encounterAttackerLoadout = null;
+                encounterDefenderName = null;
+                encounterDefenderStats = null;
+                encounterDefenderLoadout = null;
+                encounterStakes = null;
+                encounterAcceptButton = null;
+                encounterAcceptLabel = null;
+                encounterIgnoreLabel = null;
+                encounterButtonBound = false;
+            }
+
             if (encounterOverlay == null)
             {
                 BoardHudEncounterViews views =
