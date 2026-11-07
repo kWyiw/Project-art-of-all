@@ -182,6 +182,13 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
+            // 商店/结算这类浮层会在显示时提到最前；tooltip 跟着指针时要重新压回它们上面。
+            if (transform.parent != null
+                && transform.GetSiblingIndex() != transform.parent.childCount - 1)
+            {
+                transform.SetAsLastSibling();
+            }
+
             PlaceAt(screenPosition, canvas, root.sizeDelta.y, screenCamera);
         }
 

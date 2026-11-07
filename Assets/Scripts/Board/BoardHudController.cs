@@ -378,6 +378,8 @@ namespace ProjectArtOfAll.Board
             combatResultView.Subtitle.text = subtitle;
             combatResultView.Body.text = body;
             combatResultView.Overlay.SetActive(true);
+            // 卡槽带是懒建的，创建顺序在结算面板之后，不主动提上来就会被它盖住。
+            combatResultView.Overlay.transform.SetAsLastSibling();
         }
 
         public void HideCombatResult()
@@ -1214,6 +1216,7 @@ namespace ProjectArtOfAll.Board
             }
 
             rewardView.Overlay.SetActive(true);
+            rewardView.Overlay.transform.SetAsLastSibling();
         }
 
         public void HideRewardChoices()
