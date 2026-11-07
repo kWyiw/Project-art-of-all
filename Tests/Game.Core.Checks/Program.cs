@@ -41,6 +41,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckCardBandCommands();
                 CheckFreeActionsDuringAnotherTurn();
                 CheckSceneMapTeleport();
+            CheckOpeningGrant();
                 CheckFirstMoveFromHome();
                 CheckEarlyHomeStop();
                 CheckPassThroughOpponent();
@@ -771,7 +772,25 @@ namespace ProjectArtOfAll.Core.Checks
                 playerCount: 4);
             MatchController controller = new MatchController(graph, 90125UL);
             MatchPlayerState player = controller.State.CurrentPlayer;
-            Assert(player.OwnedCards.Count >= 2, "The starting loadout must contain cards.");
+            Assert(
+                player.OwnedCards.Count == 0,
+                "The opening hand must be empty; the seat is funded with shards instead.");
+            Assert(
+                player.Shards == MatchController.StartingShards,
+                "The opening grant must be " + MatchController.StartingShards.ToString() + " shards.");
+
+            // 开局不发牌了（R-SHOP-001）：这里手动塞几张，等价于在商店买到的牌。
+            for (int seeded = 0; seeded < 3; seeded++)
+            {
+                string cardId = seeded == 1 ? "nuclear_water" : "crowbar";
+                Assert(
+                    player.TryAddCard(
+                        new CardInstance(7000 + seeded, CardDatabase.Instance.Get(cardId)),
+                        equipIfPossible: true),
+                    "Seeding the opening loadout must succeed.");
+            }
+
+            Assert(player.OwnedCards.Count >= 2, "The seeded loadout must contain cards.");
 
             CardInstance battleCard = player.BattleCards[0];
             controller.Submit(new MoveCardCommand(player.Id, battleCard.Uid, toBattle: false, column: 0));
@@ -1207,6 +1226,56 @@ namespace ProjectArtOfAll.Core.Checks
         /// 的时候也能提交（本地玩家要能在别人回合里调整自己的装配）。掷骰这类回合行动
         /// 仍然只属于当前座位。
         /// </summary>
+        /// <summary>
+        /// 开局不再发牌（R-SHOP-001）：回归测试要验栏位/相邻这些东西，就自己往背包里塞几张，
+        /// 效果等同于在商店买到。返回塞进去的牌，方便调用方断言。
+        /// </summary>
+        private static List<CardInstance> SeedLoadout(
+            MatchPlayerState player,
+            int uidStart,
+            params string[] cardIds)
+        {
+            List<CardInstance> granted = new List<CardInstance>();
+            for (int index = 0; index < cardIds.Length; index++)
+            {
+                CardInstance card = new CardInstance(
+                    uidStart + index,
+                    CardDatabase.Instance.Get(cardIds[index]));
+                Assert(
+                    player.TryAddCard(card, equipIfPossible: true),
+                    "Seeding a card into the loadout must succeed.");
+                granted.Add(card);
+            }
+
+            return granted;
+        }
+
+        /// <summary>
+        /// R-ECO-008：开局不发牌，每个席位只拿 10 碎片。原来那几套起始卡牌
+        /// 已经搬去当怪物配置（`MonsterDecks`），不再是玩家开局手牌。
+        /// </summary>
+        private static void CheckOpeningGrant()
+        {
+            MatchController controller = new MatchController(CreateSceneMapGraph(), 20261102UL);
+            foreach (MatchPlayerState player in controller.State.Players)
+            {
+                Assert(
+                    player.OwnedCards.Count == 0,
+                    "Seat " + player.Id.ToString() + " must open with an empty loadout.");
+                Assert(
+                    player.BattleCards.Count == 0,
+                    "Seat " + player.Id.ToString() + " must open with an empty battle row.");
+                Assert(
+                    player.Shards == MatchController.StartingShards,
+                    "Seat " + player.Id.ToString() + " must open with "
+                        + MatchController.StartingShards.ToString() + " shards, had "
+                        + player.Shards.ToString() + ".");
+            }
+
+            Console.WriteLine(
+                "[opening] cards=0 shards=" + MatchController.StartingShards.ToString());
+        }
+
         private static void CheckFreeActionsDuringAnotherTurn()
         {
             MatchController controller = new MatchController(CreateM3Graph(), 5150UL);
@@ -1215,6 +1284,9 @@ namespace ProjectArtOfAll.Core.Checks
             Assert(
                 controller.State.Phase == MatchPhase.AwaitRoll,
                 "The match has to open on the roll phase for the free action test.");
+
+            // 开局不发牌：测试自己往背包里塞牌（等价于在商店买的）。
+            SeedLoadout(other, 8100, "crowbar", "nuclear_water");
 
             CardInstance equipped = other.BattleCards[0];
             controller.Submit(new MoveCardCommand(other.Id, equipped.Uid, toBattle: false, column: 3));
@@ -1755,9 +1827,13 @@ namespace ProjectArtOfAll.Core.Checks
             Assert(
                 player.CurrentNode == player.HomeNode,
                 "The early stop must leave the player on their own Home.");
+            // 开局有 10 碎片，停在自己的家会立刻弹出升级选择，所以这里可能是
+            // AwaitNorma（升级）而不是 AwaitRoll；两种都算"这一轮结束了"。
             Assert(
-                match.State.Phase == MatchPhase.AwaitRoll,
-                "An early stop must end the turn instead of waiting for more movement.");
+                match.State.Phase == MatchPhase.AwaitRoll ||
+                match.State.Phase == MatchPhase.AwaitNorma,
+                "An early stop must end the movement, phase was "
+                    + match.State.Phase.ToString() + ".");
 
             Console.WriteLine(
                 "[homestop] roll=" + rollValue.ToString()
@@ -1829,9 +1905,12 @@ namespace ProjectArtOfAll.Core.Checks
             Assert(
                 dodge.State.Players.Count(other => other.CurrentNode == 3) == 2,
                 "Avoiding must leave both players on the same tile.");
+            // 落地格是玩家 3 的家：避开后格子效果照常结算，可能停在 AwaitNorma / AwaitReward，
+            // 只要不再是「还在走」就说明这一轮结束了。
             Assert(
-                dodge.State.Phase == MatchPhase.AwaitRoll,
-                "Avoiding must end the turn instead of reopening the movement.");
+                dodge.State.Phase != MatchPhase.AwaitMove,
+                "Avoiding must end the turn instead of reopening the movement, phase was "
+                    + dodge.State.Phase.ToString() + ".");
 
             Console.WriteLine(
                 "[passthrough] walk-through stays open, landing on 3 fights player 4, avoid sticks");
@@ -1919,6 +1998,9 @@ namespace ProjectArtOfAll.Core.Checks
             Assert(broke != null, "Some seed must roll a 5 for the refusal probe.");
 
             MatchPlayerState poor = broke.State.CurrentPlayer;
+            // 开局现在有 10 碎片，最便宜的选项也付得起；这里把钱包清零，
+            // 专门去撞「付不起」这条分支（内核里是 internal set，测试程序集可见）。
+            poor.Shards = 0;
             broke.Submit(new MoveCommand(poor.Id, null));
             MatchEventOption paid = broke.CurrentEvent.Options[0];
             Assert(

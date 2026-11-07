@@ -23,6 +23,8 @@ namespace ProjectArtOfAll.Core.Match
         /// <summary>每 <see cref="GlobalGrantInterval"/> 轮全场发一次碎片，每人 <see cref="GlobalShardGrant"/> 点。</summary>
         public const int GlobalShardGrant = 5;
         public const int GlobalGrantInterval = 3;
+        /// <summary>开局每人的碎片。开局不发牌，只给这笔钱去买牌（R-SHOP-001）。</summary>
+        public const int StartingShards = 10;
 
         private readonly MapGraph graph;
         private readonly ulong seed;
@@ -1172,35 +1174,30 @@ namespace ProjectArtOfAll.Core.Match
 
             foreach (MapNode home in homes)
             {
-                State.AddPlayer(
+                MatchPlayerState player = State.AddPlayer(
                     $"Player {home.OwnerPlayerId + 1}",
                     home.Id,
                     CreateStarterDeck());
+                // 开局不发牌，只发碎片：先去商店买牌（R-SHOP-001）。
+                player.Shards = StartingShards;
             }
         }
 
-        private List<CardInstance> CreateStarterDeck()
+        /// <summary>
+        /// 开局手牌：空。原来的那几套初始卡牌搬去当怪物配置了（<see cref="MonsterDecks"/>）。
+        /// </summary>
+        private static List<CardInstance> CreateStarterDeck()
         {
-            return new List<CardInstance>
-            {
-                new CardInstance(nextCardUid++, cardCatalog.Get("crowbar")),
-                new CardInstance(nextCardUid++, cardCatalog.Get("nuclear_water")),
-                new CardInstance(nextCardUid++, cardCatalog.Get("hardtack"))
-            };
+            return new List<CardInstance>();
         }
 
         internal List<CardInstance> CreateEnemyDeck(int level, int uidStart)
         {
-            List<CardInstance> cards = new List<CardInstance>
+            IReadOnlyList<string> recipe = MonsterDecks.ForLevel(level);
+            List<CardInstance> cards = new List<CardInstance>(recipe.Count);
+            for (int index = 0; index < recipe.Count; index++)
             {
-                new CardInstance(uidStart, cardCatalog.Get("crowbar")),
-                new CardInstance(uidStart + 1, cardCatalog.Get("lighter")),
-                new CardInstance(uidStart + 2, cardCatalog.Get("hardtack"))
-            };
-
-            if (level >= 2)
-            {
-                cards.Add(new CardInstance(uidStart + 3, cardCatalog.Get("car_door")));
+                cards.Add(new CardInstance(uidStart + index, cardCatalog.Get(recipe[index])));
             }
 
             return cards;

@@ -79,7 +79,8 @@
 - **状态哈希包含四条流**：`MatchController.ComputeHash()` 把四个 `Pcg32.State` 一起折进 `StableHash`，回放/联机校验能发现随机流走偏。
 - **可复现开关**：`BoardGameplayController` 的 `useFixedSeed` + `matchSeed`（默认关闭、默认 0）；打开后用固定种子，暂停菜单底部会显示「本局种子 XXXX（固定）」，否则显示「重开本局会换种子」。日志 `[Board] match seed 0123456789ABCDEF (random)`。
 - **CPU 也有自己的种子**：`CpuBrain` 用 `MatchSeed.Derive(activeSeed, 0x43505500 + 玩家号)`，不再与对局随机纠缠。
-- **怪物牌组保持确定**：实测把怪物牌组也随机化（同一档位内随机抽牌）会把 1 级怪物战胜率从 92% 打到 26%，中位圈数从 10 拉到 12~14，属于数值改动，按「数值不擅自调整」的口径没有采纳，仍然按等级固定为 `crowbar` / `lighter` / `hardtack`（等级 ≥ 2 加 `car_door`）。要改需要先做一轮平衡验证。
+- **怪物牌组保持确定**：实测把怪物牌组也随机化（同一档位内随机抽牌）会把 1 级怪物战胜率从 92% 打到 26%，中位圈数从 10 拉到 12~14，属于数值改动，按「数值不擅自调整」的口径没有采纳，仍然按等级固定——现在这套配置集中在 `Assets/Game/Core/Cards/MonsterDecks.cs`（1 级打火队，2 级起拆车队），`MatchController.CreateEnemyDeck` 只按等级取表。
+- **开局不发牌**：`MatchController.CreateStarterDeck()` 返回空表、`CreatePlayers` 给每人 `StartingShards = 10`；原来发给玩家的起始套（撬棍 / 核废水 / 压缩饼干）作为 `MonsterDecks.ScavengerCards` 留给怪物配置。回归测试要验栏位、相邻、战斗数值时，用 `SeedLoadout(player, uid, ids...)` 往背包里塞牌，不再依赖开局手牌。
 - **回归**：`Tests/Game.Core.Checks` 的 `CheckRandomness()` 断言 512 个根种子互不相同、子流派生确定性且互不相同、同种子复现同一串骰子、换种子必换骰子序列、怪物牌组跨种子稳定且装得下；`Tools/MatchSim --brains` 500 局 `finished 500/500 stalls 0`、`median 10` 圈。
 
 ### 关于"用不用 Steamworks / 联机后端"
