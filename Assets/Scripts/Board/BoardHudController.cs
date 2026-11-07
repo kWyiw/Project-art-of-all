@@ -331,6 +331,7 @@ namespace ProjectArtOfAll.Board
             combatResultView.Subtitle.text = subtitle;
             combatResultView.Body.text = body;
             combatResultView.Overlay.SetActive(true);
+            FitModalAboveCardBand(combatResultView.Overlay);
             // 卡槽带是懒建的，创建顺序在结算面板之后，不主动提上来就会被它盖住。
             combatResultView.Overlay.transform.SetAsLastSibling();
         }
@@ -573,6 +574,7 @@ namespace ProjectArtOfAll.Board
 
             homeStopHandler = onChosen;
             homeStopView.Overlay.SetActive(true);
+            FitModalAboveCardBand(homeStopView.Overlay);
             homeStopView.Overlay.transform.SetAsLastSibling();
 
             homeStopView.StopButton.onClick.RemoveAllListeners();
@@ -653,6 +655,7 @@ namespace ProjectArtOfAll.Board
             encounterIgnoredHandler = onIgnored;
             encounterShownAt = Time.unscaledTime;
             encounterOverlay.SetActive(true);
+            FitModalAboveCardBand(encounterOverlay);
             encounterOverlay.transform.SetAsLastSibling();
             if (encounterPanel != null)
             {
@@ -739,6 +742,26 @@ namespace ProjectArtOfAll.Board
 
             HideForkChoices();
             return true;
+        }
+
+        /// <summary>
+        /// 局内弹窗只占卡槽带上方：遮罩不再铺到屏幕最底，卡槽带既看得见也拖得动（UI-2.5.4），
+        /// 面板则自己居中到剩下那块区域里。卡槽带高度随展开/收起和 UI 缩放变化，所以每次弹窗
+        /// 打开都重新量一遍。
+        /// </summary>
+        private void FitModalAboveCardBand(GameObject overlay)
+        {
+            RectTransform overlayRect = overlay != null ? overlay.transform as RectTransform : null;
+            if (overlayRect == null)
+            {
+                return;
+            }
+
+            // 按"展开后的带高"让位：弹窗开着时玩家把卡槽展开，也不该被弹窗压住。
+            float bandHeight = cardBand != null
+                ? Mathf.Max(0f, Mathf.Max(cardBand.CurrentBandHeight, cardBand.ExpandedBandHeight))
+                : 0f;
+            BoardHudOverlayFactory.FitAboveCardBand(overlay, bandHeight);
         }
 
         public void HideEncounter()
@@ -1185,6 +1208,7 @@ namespace ProjectArtOfAll.Board
             }
 
             rewardView.Overlay.SetActive(true);
+            FitModalAboveCardBand(rewardView.Overlay);
             rewardView.Overlay.transform.SetAsLastSibling();
         }
 
@@ -1261,6 +1285,7 @@ namespace ProjectArtOfAll.Board
             }
 
             eventView.Overlay.SetActive(true);
+            FitModalAboveCardBand(eventView.Overlay);
             eventView.Overlay.transform.SetAsLastSibling();
         }
 
@@ -1359,6 +1384,7 @@ namespace ProjectArtOfAll.Board
             shopLeaveHandler = onLeave;
             RenderShop(player, shop);
             shopView.Overlay.SetActive(true);
+            FitModalAboveCardBand(shopView.Overlay);
             shopView.Overlay.transform.SetAsLastSibling();
         }
 

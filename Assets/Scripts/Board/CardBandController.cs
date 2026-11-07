@@ -190,6 +190,22 @@ namespace ProjectArtOfAll.Board
         /// <summary>带子当前高度。</summary>
         public float CurrentBandHeight => root.rect.height;
 
+        /// <summary>
+        /// 展开后的带高。局内弹窗要按这个值让位：否则弹窗开着时一展开卡槽，
+        /// 带子就会顶到弹窗上。
+        /// </summary>
+        public float ExpandedBandHeight
+        {
+            get
+            {
+                RectTransform canvasRect = root.parent as RectTransform;
+                float canvasHeight = canvasRect != null && canvasRect.rect.height > 1f
+                    ? canvasRect.rect.height
+                    : Screen.height;
+                return Mathf.Clamp(canvasHeight * 0.42f, BaseBandHeight, 560f);
+            }
+        }
+
         /// <summary>设置面板里的「卡槽大小」，乘在自动算出的缩放上。</summary>
         public float UserScale { get; set; } = 1f;
 

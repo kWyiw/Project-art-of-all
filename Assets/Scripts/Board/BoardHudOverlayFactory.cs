@@ -680,6 +680,45 @@ namespace ProjectArtOfAll.Board
                 closeLabel);
         }
 
+        /// <summary>
+        /// 把一整块全屏弹窗压到 <paramref name="bandHeight"/> 以上的区域：遮罩不再盖住底部常驻的
+        /// 卡槽带，面板在剩下的区域里居中；面板比区域还高时按比例缩一点，免得顶出画布。
+        /// 卡槽带高度随展开/收起与 UI 缩放变化，所以每次弹窗打开都要重算。
+        /// </summary>
+        public static void FitAboveCardBand(GameObject overlay, float bandHeight)
+        {
+            RectTransform overlayRect = overlay != null ? overlay.transform as RectTransform : null;
+            if (overlayRect == null)
+            {
+                return;
+            }
+
+            overlayRect.offsetMin = new Vector2(
+                overlayRect.offsetMin.x,
+                Mathf.Max(0f, bandHeight));
+
+            if (overlayRect.childCount == 0)
+            {
+                return;
+            }
+
+            RectTransform panel = overlayRect.GetChild(0) as RectTransform;
+            if (panel == null)
+            {
+                return;
+            }
+
+            panel.anchorMin = new Vector2(0.5f, 0.5f);
+            panel.anchorMax = new Vector2(0.5f, 0.5f);
+            panel.pivot = new Vector2(0.5f, 0.5f);
+            panel.anchoredPosition = Vector2.zero;
+
+            float available = Mathf.Max(120f, overlayRect.rect.height - 16f);
+            float wanted = panel.sizeDelta.y;
+            float fit = wanted > available ? Mathf.Clamp(available / wanted, 0.55f, 1f) : 1f;
+            panel.localScale = Vector3.one * fit;
+        }
+
         public static BoardHudRewardChoiceView CreateRewardChoiceView(
             Transform parent,
             Font font)
