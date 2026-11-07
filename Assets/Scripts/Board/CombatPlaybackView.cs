@@ -26,9 +26,14 @@ namespace ProjectArtOfAll.Board
         private const float PopupSeconds = 0.8f;
         private const float Pad = 26f;
         private const float HeaderHeight = 34f;
-        private const float HealthHeight = 26f;
+        private const float HealthHeight = 34f;
         private const float ShieldHeight = 8f;
-        private const float StatusHeight = 18f;
+        private const float StatusHeight = 44f;
+        private const float MeterPillHeight = 34f;
+        private const float MeterPillGap = 6f;
+        private const float MeterTagWidth = 46f;
+        private const float MeterHealthWidth = 112f;
+        private const float MeterStatusWidth = 88f;
         private const float ControlsHeight = 44f;
         private const float BlockGap = 10f;
 
@@ -71,8 +76,20 @@ namespace ProjectArtOfAll.Board
             public RectTransform HealthFill;
             public RectTransform ShieldFill;
             public Text HealthLabel;
-            public Text ShieldLabel;
-            public Text StatusLabel;
+
+            // 血条旁的数字条（对照参考图：生命 + 护盾 / 中毒 / 灼烧 / 再生）。
+            public RectTransform MeterRow;
+            public Text MeterTag;
+            public Text MeterHealth;
+            public Image MeterHealthBack;
+            public Text MeterShield;
+            public Image MeterShieldBack;
+            public Text MeterPoison;
+            public Image MeterPoisonBack;
+            public Text MeterBurn;
+            public Image MeterBurnBack;
+            public Text MeterRegeneration;
+            public Image MeterRegenerationBack;
             public int NextBurnDecayTick = BurnDecayTicks;
             public readonly List<Chip> Chips = new List<Chip>();
             public readonly List<GameObject> Cells = new List<GameObject>();
@@ -427,19 +444,7 @@ namespace ProjectArtOfAll.Board
                 side.CardRow = row;
                 used += rowHeight + BlockGap;
 
-                side.StatusLabel = BoardHudOverlayFactory.CreateText(
-                    rootRect,
-                    "Status",
-                    string.Empty,
-                    font,
-                    16,
-                    FontStyle.Normal,
-                    Vector2.zero,
-                    new Vector2(innerWidth, StatusHeight),
-                    TextAnchor.UpperLeft);
-                AnchorTopLeft(side.StatusLabel.rectTransform, new Vector2(2f, -used));
-                side.StatusLabel.color = new Color(0.80f, 0.74f, 0.60f, 1f);
-                used += StatusHeight;
+                BuildMeterRow(side, rootRect, font, innerWidth, ref used);
 
                 RectTransform shield = MakeRect(
                     rootRect,
@@ -464,7 +469,7 @@ namespace ProjectArtOfAll.Board
                     "HealthLabel",
                     string.Empty,
                     font,
-                    20,
+                    18,
                     FontStyle.Bold,
                     Vector2.zero,
                     new Vector2(innerWidth - 16f, HealthHeight),
@@ -491,7 +496,7 @@ namespace ProjectArtOfAll.Board
                     "HealthLabel",
                     string.Empty,
                     font,
-                    20,
+                    18,
                     FontStyle.Bold,
                     Vector2.zero,
                     new Vector2(innerWidth - 16f, HealthHeight),
@@ -512,19 +517,7 @@ namespace ProjectArtOfAll.Board
                 side.ShieldFill = MakeFill(shield, "Fill", ShieldColor, innerWidth);
                 used += ShieldHeight;
 
-                side.StatusLabel = BoardHudOverlayFactory.CreateText(
-                    rootRect,
-                    "Status",
-                    string.Empty,
-                    font,
-                    16,
-                    FontStyle.Normal,
-                    Vector2.zero,
-                    new Vector2(innerWidth, StatusHeight),
-                    TextAnchor.UpperLeft);
-                AnchorTopLeft(side.StatusLabel.rectTransform, new Vector2(2f, -used));
-                side.StatusLabel.color = new Color(0.80f, 0.74f, 0.60f, 1f);
-                used += StatusHeight;
+                BuildMeterRow(side, rootRect, font, innerWidth, ref used);
 
                 RectTransform row = MakeRect(
                     rootRect,
@@ -549,28 +542,6 @@ namespace ProjectArtOfAll.Board
             Stretch(popup);
             side.PopupAnchor = popup;
 
-            side.ShieldLabel = BoardHudOverlayFactory.CreateText(
-                rootRect,
-                "ShieldLabel",
-                string.Empty,
-                font,
-                14,
-                FontStyle.Normal,
-                Vector2.zero,
-                new Vector2(innerWidth, ShieldHeight + 4f),
-                TextAnchor.UpperLeft);
-
-            // 护盾读数挂在盾条左侧，避免压住血条上的字。
-            if (isSelf)
-            {
-                AnchorBottomLeft(side.ShieldLabel.rectTransform, new Vector2(6f, HealthHeight + ShieldHeight + 2f));
-            }
-            else
-            {
-                AnchorTopLeft(side.ShieldLabel.rectTransform, new Vector2(6f, -(HealthHeight + 1f)));
-            }
-
-            side.ShieldLabel.color = ShieldColor;
             return side;
         }
 
@@ -804,6 +775,7 @@ namespace ProjectArtOfAll.Board
                 int healthDamage = Mathf.Max(0, damage.Amount - damage.ShieldAbsorbed);
                 target.Health = Mathf.Max(0, target.Health - healthDamage);
                 SpawnPopup(target, string.Concat("-", damage.Amount.ToString()), DamageColor);
+                SpawnMeterPopup(target, string.Concat("-", healthDamage.ToString()), DamageColor);
                 logLabel.text = string.Concat(
                     SidePrefix(SideOf(damage.SourcePlayerId) ?? target),
                     " → ",
@@ -830,6 +802,7 @@ namespace ProjectArtOfAll.Board
                 int healed = Mathf.Max(0, restored.ActualAmount);
                 side.Health = Mathf.Min(side.MaxHealth, side.Health + healed);
                 SpawnPopup(side, string.Concat("+", healed.ToString()), HealColor);
+                SpawnMeterPopup(side, string.Concat("+", healed.ToString()), HealColor);
                 logLabel.text = string.Concat(
                     SidePrefix(side),
                     " 恢复 ",
@@ -850,6 +823,7 @@ namespace ProjectArtOfAll.Board
 
                 side.Shield += shieldGain.Amount;
                 SpawnPopup(side, string.Concat("+", shieldGain.Amount.ToString(), " 盾"), ShieldColor);
+                SpawnMeterPopup(side, string.Concat("+", shieldGain.Amount.ToString(), " 盾"), ShieldColor);
                 logLabel.text = string.Concat(
                     SidePrefix(side),
                     " 获得 ",
@@ -979,6 +953,131 @@ namespace ProjectArtOfAll.Board
             }
         }
 
+        private static readonly Color MeterBack = new Color(0.09f, 0.10f, 0.11f, 0.92f);
+        private static readonly Color MeterHealthLow = new Color(0.42f, 0.10f, 0.09f, 0.95f);
+        private static readonly Color MeterPillIdle = new Color(0.11f, 0.11f, 0.11f, 0.65f);
+
+        /// <summary>血条旁的数字条：生命 + 护盾 / 中毒 / 灼烧 / 再生（对照参考图红圈）。</summary>
+        private void BuildMeterRow(
+            SideRuntime side,
+            RectTransform rootRect,
+            Font font,
+            float innerWidth,
+            ref float used)
+        {
+            RectTransform row = MakeRect(
+                rootRect,
+                "Meter",
+                Vector2.zero,
+                new Vector2(innerWidth, StatusHeight));
+            AnchorTopLeft(row, new Vector2(0f, -used));
+            row.GetComponent<Image>().color = MeterBack;
+            side.MeterRow = row;
+
+            side.MeterTag = BoardHudOverlayFactory.CreateText(
+                row,
+                "Tag",
+                side.IsSelf ? "自己" : "对手",
+                font,
+                16,
+                FontStyle.Bold,
+                Vector2.zero,
+                new Vector2(MeterTagWidth, StatusHeight),
+                TextAnchor.MiddleLeft);
+            AnchorTopLeft(side.MeterTag.rectTransform, new Vector2(10f, 0f));
+            side.MeterTag.color = MutedColor;
+
+            float x = MeterTagWidth + 18f;
+            float y = (StatusHeight - MeterPillHeight) * 0.5f;
+            side.MeterHealthBack = MakePill(row, "Health", x, y, MeterHealthWidth);
+            side.MeterHealth = PillText(
+                side.MeterHealthBack.transform, "Value", font, 28, InkColor);
+            x += MeterHealthWidth + MeterPillGap;
+
+            side.MeterShieldBack = MakePill(row, "Shield", x, y, MeterStatusWidth);
+            side.MeterShield = PillText(
+                side.MeterShieldBack.transform, "Value", font, 18, ShieldColor);
+            x += MeterStatusWidth + MeterPillGap;
+
+            side.MeterPoisonBack = MakePill(row, "Poison", x, y, MeterStatusWidth);
+            side.MeterPoison = PillText(
+                side.MeterPoisonBack.transform, "Value", font, 18, PoisonColor);
+            x += MeterStatusWidth + MeterPillGap;
+
+            side.MeterBurnBack = MakePill(row, "Burn", x, y, MeterStatusWidth);
+            side.MeterBurn = PillText(
+                side.MeterBurnBack.transform, "Value", font, 18, BurnColor);
+            x += MeterStatusWidth + MeterPillGap;
+
+            side.MeterRegenerationBack = MakePill(row, "Regeneration", x, y, MeterStatusWidth);
+            side.MeterRegeneration = PillText(
+                side.MeterRegenerationBack.transform, "Value", font, 18, RegenerationColor);
+
+            used += StatusHeight;
+        }
+
+        private static Image MakePill(
+            RectTransform parent,
+            string name,
+            float x,
+            float y,
+            float width)
+        {
+            RectTransform pill = MakeRect(
+                parent,
+                name,
+                Vector2.zero,
+                new Vector2(width, MeterPillHeight));
+            AnchorTopLeft(pill, new Vector2(x, -y));
+            Image image = pill.GetComponent<Image>();
+            image.color = MeterPillIdle;
+            return image;
+        }
+
+        private static Text PillText(
+            Transform parent,
+            string name,
+            Font font,
+            int size,
+            Color color)
+        {
+            Text text = BoardHudOverlayFactory.CreateText(
+                parent,
+                name,
+                "0",
+                font,
+                size,
+                FontStyle.Bold,
+                Vector2.zero,
+                new Vector2(0f, 0f),
+                TextAnchor.MiddleCenter);
+            Stretch(text.rectTransform);
+            text.color = color;
+            text.raycastTarget = false;
+            return text;
+        }
+
+        private static void SetMeterPill(
+            Image back,
+            Text label,
+            string name,
+            int value,
+            Color color)
+        {
+            if (back != null)
+            {
+                back.color = value > 0
+                    ? new Color(color.r * 0.30f, color.g * 0.30f, color.b * 0.30f, 0.95f)
+                    : MeterPillIdle;
+            }
+
+            if (label != null)
+            {
+                label.text = string.Concat(name, " ", value.ToString());
+                label.color = value > 0 ? color : IdleStatusColor;
+            }
+        }
+
         private void RefreshMeters()
         {
             RefreshMeter(selfSide);
@@ -997,37 +1096,33 @@ namespace ProjectArtOfAll.Board
                 : Mathf.Clamp01(side.Health / (float)side.MaxHealth);
             side.HealthFill.sizeDelta = new Vector2(side.HealthWidth * healthFraction, 0f);
 
-            string tag = side.IsSelf ? "自己" : "对手";
             side.HealthLabel.text = string.Concat(
-                tag,
-                "　生命 ",
                 side.Health.ToString(),
                 " / ",
                 side.MaxHealth.ToString());
 
+            if (side.MeterHealth != null)
+            {
+                float ratio = side.MaxHealth <= 0
+                    ? 0f
+                    : side.Health / (float)side.MaxHealth;
+                side.MeterHealth.text = side.Health.ToString();
+                side.MeterHealthBack.color = ratio <= 0.3f ? MeterHealthLow : HealthBack;
+            }
+
+            SetMeterPill(side.MeterShieldBack, side.MeterShield, "护盾", side.Shield, ShieldColor);
+            SetMeterPill(side.MeterPoisonBack, side.MeterPoison, "中毒", side.Poison, PoisonColor);
+            SetMeterPill(side.MeterBurnBack, side.MeterBurn, "灼烧", side.Burn, BurnColor);
+            SetMeterPill(
+                side.MeterRegenerationBack,
+                side.MeterRegeneration,
+                "再生",
+                side.Regeneration,
+                RegenerationColor);
+
             float shieldFraction = Mathf.Clamp01(
                 side.Shield / (float)Mathf.Max(1, side.MaxHealth));
             side.ShieldFill.sizeDelta = new Vector2(side.HealthWidth * shieldFraction, 0f);
-
-            List<string> statuses = new List<string>
-            {
-                StatusText("中毒", side.Poison, PoisonColor),
-                StatusText("灼烧", side.Burn, BurnColor),
-                StatusText("再生", side.Regeneration, RegenerationColor)
-            };
-
-            if (side.Shield > 0)
-            {
-                statuses.Add(string.Concat("护盾 ", side.Shield.ToString()));
-            }
-
-            side.StatusLabel.text = string.Join("   ", statuses);
-            if (side.ShieldLabel != null)
-            {
-                side.ShieldLabel.text = side.Shield > 0
-                    ? string.Concat("护盾 ", side.Shield.ToString())
-                    : string.Empty;
-            }
         }
 
         private static string StatusText(string label, int layers, Color color)
@@ -1234,6 +1329,34 @@ namespace ProjectArtOfAll.Board
             popup.rectTransform.anchoredPosition = new Vector2(
                 UnityEngine.Random.Range(-90f, 90f),
                 UnityEngine.Random.Range(-10f, 10f));
+            StartCoroutine(FloatPopup(popup));
+        }
+
+        /// <summary>血条旁的增减跳字（参考图里生命数字上的 +75 / -48）。</summary>
+        private void SpawnMeterPopup(SideRuntime side, string content, Color color)
+        {
+            if (side == null || side.MeterRow == null)
+            {
+                return;
+            }
+
+            Text popup = BoardHudOverlayFactory.CreateText(
+                side.MeterRow,
+                "MeterDelta",
+                content,
+                BoardHudOverlayFactory.CreateFont(),
+                28,
+                FontStyle.Bold,
+                Vector2.zero,
+                new Vector2(140f, 34f),
+                TextAnchor.MiddleCenter);
+            popup.color = color;
+            popup.raycastTarget = false;
+            RectTransform rect = popup.rectTransform;
+            rect.anchorMin = new Vector2(1f, 0.5f);
+            rect.anchorMax = new Vector2(1f, 0.5f);
+            rect.pivot = new Vector2(1f, 0.5f);
+            rect.anchoredPosition = new Vector2(-10f, 0f);
             StartCoroutine(FloatPopup(popup));
         }
 
