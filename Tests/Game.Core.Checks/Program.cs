@@ -44,6 +44,8 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckFirstMoveFromHome();
                 CheckEarlyHomeStop();
                 CheckPassThroughOpponent();
+                CheckMatchEvent();
+                CheckCombatBonus();
                 CheckStraightOnlyAndPrediction();
                 CheckShopTile();
                 CheckCpuAi();
@@ -375,8 +377,8 @@ namespace ProjectArtOfAll.Core.Checks
         private static void CheckCardDatabase()
         {
             CardDatabase catalog = CardDatabase.Instance;
-            Assert(catalog.All.Count == 30,
-                "The catalog must contain all thirty cards of the first set.");
+            Assert(catalog.All.Count == 31,
+                "The catalog must contain all thirty-one cards of the first set.");
             Assert(catalog.Get("crowbar").CooldownTicks == 180,
                 "Crowbar must use a 180-tick cooldown.");
             Assert(catalog.Get("crowbar").SlotSize == 1,
@@ -389,7 +391,7 @@ namespace ProjectArtOfAll.Core.Checks
                 "A pure aura card must never cast on its own.");
             Assert(catalog.Get("crowbar").IsActive,
                 "A card with a cooldown and effects must cast on its own.");
-            Assert(catalog.All.Select(card => card.Id).Distinct().Count() == 30,
+            Assert(catalog.All.Select(card => card.Id).Distinct().Count() == 31,
                 "Card ids must be unique.");
 
             // 这些是摆在战斗栏里的装备（食物相当于带回复的防具），不是一次性消耗品：
@@ -1812,6 +1814,157 @@ namespace ProjectArtOfAll.Core.Checks
                 "The landing fight must be against the player standing on that tile.");
 
             Console.WriteLine("[passthrough] walk-through stays open, landing on 3 fights player 4");
+        }
+
+        /// <summary>
+        /// 事件格（R-EVT-001..003）：停上去开一次三选一，付不起的选项被拒绝，「走开」什么都不拿就结束回合。
+        /// </summary>
+        private static void CheckMatchEvent()
+        {
+            // 8 格环：0..3 四个家、4 空地、5 事件格（奇数号 → 神秘饮料）、6..7 空地。
+            // 玩家 0 掷 5 从家出发，正好停在事件格上。
+            MapNode[] nodes = new MapNode[8];
+            for (int index = 0; index < nodes.Length; index++)
+            {
+                bool isHome = index < 4;
+                bool isEvent = index == 5;
+                nodes[index] = new MapNode(
+                    index,
+                    isHome ? TileType.Home : isEvent ? TileType.Event : TileType.Neutral,
+                    isHome ? index : -1,
+                    (index + 1) % nodes.Length);
+            }
+
+            MapGraph graph = MapGraph.Create(nodes, playerCount: 4);
+
+            // 1) 选「打包带走」：免费获得神秘饮料。
+            MatchController take = FindRollingController(graph, 5);
+            Assert(take != null, "Some seed must roll a 5 for the event probe.");
+
+            MatchPlayerState taker = take.State.CurrentPlayer;
+            int shardsBefore = taker.Shards;
+            take.Submit(new MoveCommand(taker.Id, null));
+            Assert(
+                take.State.Phase == MatchPhase.AwaitEvent,
+                "Landing on an event tile must open the event, phase was "
+                    + take.State.Phase.ToString() + ".");
+            Assert(take.CurrentEvent != null, "An open event must expose its session.");
+            Assert(
+                take.CurrentEvent.Definition.Kind == MatchEventKind.MysteryDrink,
+                "An odd event node id must resolve to the mystery drink.");
+            Assert(
+                take.CurrentEvent.Options.Count == 3,
+                "The mystery drink must offer three choices.");
+            Assert(
+                take.Events.History.OfType<EventOfferedEvent>().Any(
+                    offered => offered.PlayerId == taker.Id && offered.NodeId == 5),
+                "Opening an event must publish EventOfferedEvent.");
+
+            take.Submit(new EventChoiceCommand(taker.Id, 1));
+            Assert(
+                taker.OwnedCards.Any(
+                    card => card.Definition.Id == MatchEventCatalog.MysteryDrinkCardId),
+                "Taking the mystery drink must put it in the bag.");
+            Assert(
+                take.Events.History.OfType<CardAddedEvent>().Any(
+                    added => added.PlayerId == taker.Id
+                        && added.CardId == MatchEventCatalog.MysteryDrinkCardId
+                        && added.Source == "Event"),
+                "A granted card must be reported as an event reward.");
+            Assert(taker.Shards == shardsBefore, "The free option must not cost shards.");
+            Assert(
+                take.State.Phase == MatchPhase.AwaitRoll,
+                "Resolving an event must hand the turn to the next seat.");
+            Assert(take.CurrentEvent == null, "A resolved event must be cleared.");
+
+            // 2) 走开：什么都不拿，回合照常结束。
+            MatchController leave = FindRollingController(graph, 5);
+            Assert(leave != null, "Some seed must roll a 5 for the walk-away probe.");
+
+            MatchPlayerState leaver = leave.State.CurrentPlayer;
+            int leaveShards = leaver.Shards;
+            leave.Submit(new MoveCommand(leaver.Id, null));
+            leave.Submit(new EventChoiceCommand(leaver.Id, -1));
+            Assert(
+                !leave.Events.History.OfType<CardAddedEvent>().Any(
+                    added => added.PlayerId == leaver.Id),
+                "Walking away must not grant anything.");
+            Assert(leaver.Shards == leaveShards, "Walking away must not cost shards.");
+            Assert(leave.State.Phase == MatchPhase.AwaitRoll, "Walking away must end the turn.");
+            Assert(leave.CurrentEvent == null, "Walking away must clear the event.");
+
+            // 3) 付不起的选项被拒绝，事件仍然开着。
+            MatchController broke = FindRollingController(graph, 5);
+            Assert(broke != null, "Some seed must roll a 5 for the refusal probe.");
+
+            MatchPlayerState poor = broke.State.CurrentPlayer;
+            broke.Submit(new MoveCommand(poor.Id, null));
+            MatchEventOption paid = broke.CurrentEvent.Options[0];
+            Assert(
+                paid.ShardCost > poor.Shards,
+                "The probe expects the first mystery-drink option to be unaffordable.");
+            bool refused = false;
+            try
+            {
+                broke.Submit(new EventChoiceCommand(poor.Id, 0));
+            }
+            catch (InvalidOperationException)
+            {
+                refused = true;
+            }
+
+            Assert(refused, "An unaffordable event option must be refused.");
+            Assert(
+                broke.State.Phase == MatchPhase.AwaitEvent,
+                "A refused option must leave the event open.");
+            broke.Submit(new EventChoiceCommand(poor.Id, -1));
+
+            Console.WriteLine(
+                "[event] mystery drink granted, walk-away and unaffordable options verified");
+        }
+
+        /// <summary>
+        /// 事件给的战斗增益（神秘饮料，R-EVT-002）：护盾百分比在开局真的折成护盾，
+        /// 且只作用于拿到增益的一方。这里直接走战斗层的公开 API。
+        /// </summary>
+        private static void CheckCombatBonus()
+        {
+            CardDefinition crowbar = CardDatabase.Instance.Get("crowbar");
+            CombatBonus bonus = new CombatBonus(50, 2, 3);
+            int maxHealth = BattleConfig.GetMaxHealth(1);
+
+            BattleSnapshot battle = new BattleSnapshot(
+                new CombatantSnapshot(
+                    0,
+                    1,
+                    new[] { new CardInstance(1, crowbar) },
+                    null,
+                    bonus),
+                new CombatantSnapshot(
+                    1,
+                    1,
+                    new[] { new CardInstance(2, crowbar) }));
+
+            CombatSimulation simulation = new CombatSimulation(battle, 777UL);
+
+            Assert(
+                bonus.ShieldFor(maxHealth) == maxHealth / 2,
+                "The shield bonus must scale with maximum health.");
+            Assert(
+                simulation.Events.History.OfType<ShieldGainedEvent>().Any(
+                    gained => gained.PlayerId == 0 && gained.Amount == maxHealth / 2),
+                "A starting shield bonus must be granted when the battle begins.");
+            Assert(
+                !simulation.Events.History.OfType<ShieldGainedEvent>().Any(
+                    gained => gained.PlayerId == 1),
+                "The opponent must not inherit the player's shield bonus.");
+
+            CombatResult result = simulation.RunToCompletion();
+            Assert(result != null, "A battle with a starting shield must still finish.");
+
+            Console.WriteLine(
+                "[combatbonus] shield=" + (maxHealth / 2).ToString()
+                + " of " + maxHealth.ToString());
         }
 
         private static MatchController FindRollingController(MapGraph graph, int roll)

@@ -34,6 +34,8 @@ namespace ProjectArtOfAll.Core.Match
 
         public int ShopLeaves { get; internal set; }
 
+        public int Events { get; internal set; }
+
         public int NormaShard { get; internal set; }
 
         public int NormaWins { get; internal set; }
@@ -203,6 +205,9 @@ namespace ProjectArtOfAll.Core.Match
                 case CpuAction.ShopLeave:
                     seat.ShopLeaves++;
                     break;
+                case CpuAction.ChooseEvent:
+                    seat.Events++;
+                    break;
                 case CpuAction.SetNorma:
                     if (decision.Norma == NormaType.Shard)
                     {
@@ -255,6 +260,10 @@ namespace ProjectArtOfAll.Core.Match
 
                 case CpuAction.EquipCard:
                     controller.Submit(new EquipCardCommand(playerId, decision.CardUid));
+                    break;
+
+                case CpuAction.ChooseEvent:
+                    controller.Submit(new EventChoiceCommand(playerId, decision.Index));
                     break;
 
                 default:
@@ -329,6 +338,9 @@ namespace ProjectArtOfAll.Core.Match
                     break;
                 case MatchPhase.AwaitShop:
                     controller.Submit(new ShopActionCommand(playerId, ShopActionType.Leave));
+                    break;
+                case MatchPhase.AwaitEvent:
+                    controller.Submit(new EventChoiceCommand(playerId, -1));
                     break;
             }
         }

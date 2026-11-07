@@ -117,6 +117,45 @@ namespace ProjectArtOfAll.Board
         public Text[] Details { get; }
     }
 
+    /// <summary>事件面板：标题 + 三个可选项 + 「走开」（R-EVT-002、R-EVT-003）。</summary>
+    public sealed class BoardHudEventView
+    {
+        public BoardHudEventView(
+            GameObject overlay,
+            Text title,
+            Text subtitle,
+            Button[] buttons,
+            Text[] names,
+            Text[] metas,
+            Text[] details,
+            Text[] costs,
+            Button leaveButton,
+            Text leaveLabel)
+        {
+            Overlay = overlay;
+            Title = title;
+            Subtitle = subtitle;
+            Buttons = buttons;
+            Names = names;
+            Metas = metas;
+            Details = details;
+            Costs = costs;
+            LeaveButton = leaveButton;
+            LeaveLabel = leaveLabel;
+        }
+
+        public GameObject Overlay { get; }
+        public Text Title { get; }
+        public Text Subtitle { get; }
+        public Button[] Buttons { get; }
+        public Text[] Names { get; }
+        public Text[] Metas { get; }
+        public Text[] Details { get; }
+        public Text[] Costs { get; }
+        public Button LeaveButton { get; }
+        public Text LeaveLabel { get; }
+    }
+
     /// <summary>商店面板：3 张货、重掷一次、离开（R-ECO-004 / 规则书 §2.5）。</summary>
     public sealed class BoardHudShopView
     {
@@ -763,6 +802,203 @@ namespace ProjectArtOfAll.Board
                 names,
                 metas,
                 details);
+        }
+
+        /// <summary>事件面板：标题 + 三个可选项 + 「走开」（R-EVT-002、R-EVT-003）。</summary>
+        public static BoardHudEventView CreateEventView(Transform parent, Font font)
+        {
+            const int optionCount = 3;
+
+            GameObject overlay = new GameObject(
+                "EventOverlay",
+                typeof(RectTransform),
+                typeof(Image));
+            overlay.transform.SetParent(parent, false);
+            Stretch(overlay.GetComponent<RectTransform>());
+
+            Image overlayImage = overlay.GetComponent<Image>();
+            overlayImage.color = new Color(0.01f, 0.018f, 0.022f, 0.82f);
+            overlayImage.raycastTarget = true;
+
+            GameObject panelObject = new GameObject(
+                "EventPanel",
+                typeof(RectTransform),
+                typeof(Image),
+                typeof(Outline));
+            panelObject.transform.SetParent(overlay.transform, false);
+
+            RectTransform panel = panelObject.GetComponent<RectTransform>();
+            panel.anchorMin = new Vector2(0.5f, 0.5f);
+            panel.anchorMax = new Vector2(0.5f, 0.5f);
+            panel.pivot = new Vector2(0.5f, 0.5f);
+            panel.anchoredPosition = Vector2.zero;
+            panel.sizeDelta = new Vector2(840f, 580f);
+
+            Image panelImage = panelObject.GetComponent<Image>();
+            panelImage.color = new Color(0.048f, 0.078f, 0.09f, 0.99f);
+            panelImage.raycastTarget = true;
+
+            Outline panelOutline = panelObject.GetComponent<Outline>();
+            panelOutline.effectColor = new Color(0.86f, 0.68f, 0.35f, 0.72f);
+            panelOutline.effectDistance = new Vector2(2f, -2f);
+
+            CreateBar(
+                panel,
+                "BrassRule",
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0f, 5f),
+                new Vector2(0f, 0f),
+                new Color(0.92f, 0.69f, 0.27f, 1f));
+
+            Text title = CreateText(
+                panel,
+                "Title",
+                "事件",
+                font,
+                30,
+                FontStyle.Bold,
+                new Vector2(34f, -24f),
+                new Vector2(772f, 40f),
+                TextAnchor.UpperLeft);
+            title.color = new Color(0.96f, 0.88f, 0.69f, 1f);
+
+            Text subtitle = CreateText(
+                panel,
+                "Subtitle",
+                "",
+                font,
+                17,
+                FontStyle.Normal,
+                new Vector2(34f, -66f),
+                new Vector2(772f, 26f),
+                TextAnchor.UpperLeft);
+            subtitle.color = new Color(0.72f, 0.7f, 0.64f, 1f);
+            subtitle.horizontalOverflow = HorizontalWrapMode.Wrap;
+            subtitle.verticalOverflow = VerticalWrapMode.Overflow;
+
+            Button[] buttons = new Button[optionCount];
+            Text[] names = new Text[optionCount];
+            Text[] metas = new Text[optionCount];
+            Text[] details = new Text[optionCount];
+            Text[] costs = new Text[optionCount];
+
+            for (int index = 0; index < optionCount; index++)
+            {
+                GameObject optionObject = new GameObject(
+                    "EventOption" + index.ToString(),
+                    typeof(RectTransform),
+                    typeof(Image),
+                    typeof(Button),
+                    typeof(Outline));
+                optionObject.transform.SetParent(panel, false);
+
+                RectTransform option = optionObject.GetComponent<RectTransform>();
+                option.anchorMin = new Vector2(0f, 1f);
+                option.anchorMax = new Vector2(0f, 1f);
+                option.pivot = new Vector2(0f, 1f);
+                option.anchoredPosition = new Vector2(34f, -104f - (index * 128f));
+                option.sizeDelta = new Vector2(772f, 120f);
+
+                Image optionImage = optionObject.GetComponent<Image>();
+                optionImage.color = new Color(0.07f, 0.11f, 0.125f, 1f);
+
+                Outline optionOutline = optionObject.GetComponent<Outline>();
+                optionOutline.effectColor = new Color(0.86f, 0.68f, 0.35f, 0.42f);
+                optionOutline.effectDistance = new Vector2(1f, -1f);
+
+                Button button = optionObject.GetComponent<Button>();
+                ColorBlock colors = button.colors;
+                colors.normalColor = Color.white;
+                colors.highlightedColor = new Color(1.16f, 1.12f, 1.02f, 1f);
+                colors.pressedColor = new Color(0.86f, 0.8f, 0.68f, 1f);
+                colors.disabledColor = new Color(0.42f, 0.42f, 0.42f, 0.6f);
+                button.colors = colors;
+
+                CreateBar(
+                    option,
+                    "Accent",
+                    new Vector2(0f, 0f),
+                    new Vector2(0f, 1f),
+                    new Vector2(0f, 0f),
+                    new Vector2(6f, 0f),
+                    new Color(0.92f, 0.69f, 0.27f, 0.9f));
+
+                names[index] = CreateText(
+                    option,
+                    "Name",
+                    "-",
+                    font,
+                    24,
+                    FontStyle.Bold,
+                    new Vector2(26f, -14f),
+                    new Vector2(430f, 32f),
+                    TextAnchor.UpperLeft);
+                names[index].color = new Color(0.96f, 0.92f, 0.82f, 1f);
+
+                metas[index] = CreateText(
+                    option,
+                    "Meta",
+                    "-",
+                    font,
+                    15,
+                    FontStyle.Normal,
+                    new Vector2(26f, -50f),
+                    new Vector2(440f, 22f),
+                    TextAnchor.UpperLeft);
+                metas[index].color = new Color(0.72f, 0.7f, 0.64f, 1f);
+
+                details[index] = CreateText(
+                    option,
+                    "Detail",
+                    "-",
+                    font,
+                    15,
+                    FontStyle.Normal,
+                    new Vector2(26f, -76f),
+                    new Vector2(560f, 40f),
+                    TextAnchor.UpperLeft);
+                details[index].color = new Color(0.88f, 0.86f, 0.8f, 1f);
+                details[index].horizontalOverflow = HorizontalWrapMode.Wrap;
+                details[index].verticalOverflow = VerticalWrapMode.Overflow;
+
+                costs[index] = CreateText(
+                    option,
+                    "Cost",
+                    "-",
+                    font,
+                    17,
+                    FontStyle.Bold,
+                    new Vector2(604f, -14f),
+                    new Vector2(144f, 28f),
+                    TextAnchor.UpperRight);
+                costs[index].color = new Color(0.92f, 0.69f, 0.27f, 1f);
+
+                buttons[index] = button;
+            }
+
+            Button leaveButton = CreateButton(
+                panel,
+                "LeaveButton",
+                "走开",
+                font,
+                new Vector2(646f, -504f),
+                new Vector2(160f, 48f),
+                out Text leaveLabel);
+            leaveButton.GetComponent<Image>().color = new Color(0.22f, 0.24f, 0.25f, 1f);
+
+            overlay.SetActive(false);
+            return new BoardHudEventView(
+                overlay,
+                title,
+                subtitle,
+                buttons,
+                names,
+                metas,
+                details,
+                costs,
+                leaveButton,
+                leaveLabel);
         }
 
         /// <summary>商店面板。3 张货 + 重掷 + 离开，价格与刷新规则取自规则书 §2.5。</summary>

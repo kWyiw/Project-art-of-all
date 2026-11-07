@@ -88,6 +88,7 @@ namespace ProjectArtOfAll.Core.Cards
         {
             const CardScope battle = CardScope.BattleOnly;
             const CardScope both = CardScope.BagAndBattle;
+            const CardScope bag = CardScope.BagOnly;
 
             return new[]
             {
@@ -315,6 +316,19 @@ namespace ProjectArtOfAll.Core.Cards
                             EffectOp.DealDamage,
                             EffectAmount.ValueDice(6),
                             EffectTarget.Enemy)
+                    }),
+
+                // 事件「神秘饮料」打包带走的那瓶：装上战斗栏则开局回 8 点生命，也可以直接卖掉换碎片（R-EVT-002）。
+                Card(
+                    "mystery_drink", "神秘饮料", 2, 0, CardTag.Food, 8, both,
+                    passives: new[]
+                    {
+                        new PassiveDefinition(
+                            PassiveTrigger.BattleStart,
+                            new CardEffect(
+                                EffectOp.Heal,
+                                EffectAmount.Flat(8),
+                                EffectTarget.Self))
                     })
             };
         }

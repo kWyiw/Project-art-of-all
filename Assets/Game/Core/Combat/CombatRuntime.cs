@@ -11,6 +11,10 @@ namespace ProjectArtOfAll.Core.Combat
             Snapshot = snapshot;
             MaximumHealth = snapshot.MaxHealth;
             Health = MaximumHealth;
+            // 事件给的增益（R-EVT-003）：开战先按最大生命值百分比给盾，之后每张牌伤害/格挡各加点。
+            Shield = snapshot.Bonus.ShieldFor(MaximumHealth);
+            DamageBonus = snapshot.Bonus.DamageBonus;
+            BlockBonus = snapshot.Bonus.BlockBonus;
             Cards = snapshot.BattleSlots
                 .Select(slot => new CombatCardRuntime(slot.Card, slot.Column))
                 .ToList();
@@ -24,6 +28,12 @@ namespace ProjectArtOfAll.Core.Combat
         public int Poison { get; set; }
         public int Burn { get; set; }
         public int Regeneration { get; set; }
+
+        /// <summary>事件增益：本场战斗所有伤害 +N。</summary>
+        public int DamageBonus { get; }
+
+        /// <summary>事件增益：本场战斗所有格挡 +N。</summary>
+        public int BlockBonus { get; }
 
         /// <summary>特种橡胶: every shield this side gains is +N.</summary>
         public int ShieldBonus { get; set; }

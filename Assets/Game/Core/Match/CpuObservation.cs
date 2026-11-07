@@ -229,6 +229,10 @@ namespace ProjectArtOfAll.Core.Match
 
         public IReadOnlyList<ShopOffer> ShopOffers { get; private set; } = Array.Empty<ShopOffer>();
 
+        /// <summary>Options of the event the seat is standing on; empty outside AwaitEvent.</summary>
+        public IReadOnlyList<MatchEventOption> EventOptions { get; private set; } =
+            Array.Empty<MatchEventOption>();
+
         public CpuTile TileOf(int nodeId)
         {
             CpuTile tile;
@@ -384,6 +388,11 @@ namespace ProjectArtOfAll.Core.Match
             {
                 observation.ShopOffers = controller.CurrentShop.Offers.ToArray();
                 observation.ShopRerollUsed = controller.CurrentShop.RerollUsed;
+            }
+
+            if (state.Phase == MatchPhase.AwaitEvent && controller.CurrentEvent != null)
+            {
+                observation.EventOptions = controller.CurrentEvent.Options;
             }
 
             if (state.Phase == MatchPhase.AwaitMove && state.LastRoll > 0)

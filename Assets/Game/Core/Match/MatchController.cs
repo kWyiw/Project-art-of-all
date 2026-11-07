@@ -42,11 +42,15 @@ namespace ProjectArtOfAll.Core.Match
         /// <summary>每场战斗的种子。</summary>
         private readonly Pcg32 combatRandom;
 
+        /// <summary>事件选项里抽牌。</summary>
+        private readonly Pcg32 eventRandom;
+
         // 同一个 seed 配不同的 sequence 就是 PCG 的独立子流（sequence 决定 increment）。
         private const ulong DiceStream = 0x4D41544348UL;
         private const ulong ShopStream = DiceStream + 1UL;
         private const ulong RewardStream = DiceStream + 2UL;
         private const ulong CombatStream = DiceStream + 3UL;
+        private const ulong EventStream = DiceStream + 4UL;
         private readonly GameEventBus eventBus = new GameEventBus();
         private readonly ICardCatalog cardCatalog = CardDatabase.Instance;
         private readonly List<MovementCandidate> currentCandidates =
@@ -70,6 +74,7 @@ namespace ProjectArtOfAll.Core.Match
             shopRandom = new Pcg32(seed, ShopStream);
             rewardRandom = new Pcg32(seed, RewardStream);
             combatRandom = new Pcg32(seed, CombatStream);
+            eventRandom = new Pcg32(seed, EventStream);
             State = new MatchState(graph, seed);
             State.CurrentPlayerIndex = ((startingPlayerId % 4) + 4) % 4;
             CreatePlayers();
@@ -86,6 +91,9 @@ namespace ProjectArtOfAll.Core.Match
         public IReadOnlyList<CardDefinition> CurrentRewardChoices =>
             currentRewardChoices;
         public ShopSession CurrentShop { get; private set; }
+
+        /// <summary>当前打开的事件（R-EVT-001）；不在事件格上时为 null。</summary>
+        public MatchEventSession CurrentEvent { get; private set; }
         public CombatResult LastCombatResult { get; private set; }
         public bool IsFinished => State.Phase == MatchPhase.Finished;
 
@@ -118,6 +126,9 @@ namespace ProjectArtOfAll.Core.Match
                 case ShopActionCommand shop:
                     HandleShopAction(shop);
                     break;
+                case EventChoiceCommand eventChoice:
+                    HandleEventChoice(eventChoice);
+                    break;
                 case SellCardCommand sell:
                     HandleSell(sell);
                     break;
@@ -145,6 +156,7 @@ namespace ProjectArtOfAll.Core.Match
             randomState = StableHash.Add(randomState, shopRandom.State);
             randomState = StableHash.Add(randomState, rewardRandom.State);
             randomState = StableHash.Add(randomState, combatRandom.State);
+            randomState = StableHash.Add(randomState, eventRandom.State);
             ulong hash = State.ComputeHash(randomState);
 
             foreach (CardDefinition definition in currentRewardChoices)
@@ -161,6 +173,12 @@ namespace ProjectArtOfAll.Core.Match
                     hash = Util.StableHash.Add(hash, offer.Price);
                     hash = Util.StableHash.Add(hash, offer.IsAvailable ? 1L : 0L);
                 }
+            }
+
+            if (CurrentEvent != null)
+            {
+                hash = Util.StableHash.Add(hash, CurrentEvent.Definition.Id);
+                hash = Util.StableHash.Add(hash, CurrentEvent.NodeId);
             }
 
             return hash;
@@ -256,6 +274,7 @@ namespace ProjectArtOfAll.Core.Match
             if (State.Phase != MatchPhase.AwaitNorma &&
                 State.Phase != MatchPhase.AwaitReward &&
                 State.Phase != MatchPhase.AwaitShop &&
+                State.Phase != MatchPhase.AwaitEvent &&
                 State.Phase != MatchPhase.Finished)
             {
                 EndCurrentTurn();
@@ -590,8 +609,10 @@ namespace ProjectArtOfAll.Core.Match
                 case TileType.Shop:
                     BeginShop(player);
                     break;
-                case TileType.Neutral:
                 case TileType.Event:
+                    BeginEvent(player, arrival);
+                    break;
+                case TileType.Neutral:
                 case TileType.Warp:
                     break;
             }
@@ -622,6 +643,130 @@ namespace ProjectArtOfAll.Core.Match
             currentRewardChoices.Clear();
             CurrentShop = new ShopSession(CreateShopOffers());
             State.Phase = MatchPhase.AwaitShop;
+        }
+
+        /// <summary>
+        /// 停在事件格：按节点号挑一个事件打开（R-EVT-002），等玩家选项。
+        /// </summary>
+        private void BeginEvent(MatchPlayerState player, MapNode arrival)
+        {
+            currentRewardChoices.Clear();
+            CurrentShop = null;
+            MatchEventKind kind = MatchEventCatalog.KindForNode(arrival.Id);
+            CurrentEvent = new MatchEventSession(arrival.Id, MatchEventCatalog.Get(kind));
+            State.Phase = MatchPhase.AwaitEvent;
+            Publish(new EventOfferedEvent(player.Id, CurrentEvent.Definition.Id, arrival.Id));
+        }
+
+        private void HandleEventChoice(EventChoiceCommand command)
+        {
+            ValidateCurrentPlayer(command.PlayerId);
+            if (State.Phase != MatchPhase.AwaitEvent || CurrentEvent == null)
+            {
+                throw new InvalidOperationException(
+                    $"EventChoiceCommand is invalid during phase {State.Phase}.");
+            }
+
+            MatchPlayerState player = State.CurrentPlayer;
+            int index = command.OptionIndex;
+            if (index < 0)
+            {
+                // 走开：不花钱也不拿东西，永远可用，保证碎片不足时不会卡住。
+                FinishEvent(player, -1, 0);
+                return;
+            }
+
+            if (index >= CurrentEvent.Options.Count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(command.OptionIndex));
+            }
+
+            MatchEventOption option = CurrentEvent.Options[index];
+            if (option.ShardCost > player.Shards)
+            {
+                throw new InvalidOperationException("Not enough Shards.");
+            }
+
+            if (option.CardWidth > 0 &&
+                player.OwnedCardWidth + option.CardWidth > LoadoutRules.BagCapacity)
+            {
+                throw new InvalidOperationException(
+                    "The event reward does not fit in the player's Bag.");
+            }
+
+            if (option.ShardCost > 0)
+            {
+                AddShards(player, -option.ShardCost);
+            }
+
+            ApplyEventOption(player, option);
+            FinishEvent(player, index, option.ShardCost);
+        }
+
+        private void ApplyEventOption(MatchPlayerState player, MatchEventOption option)
+        {
+            switch (option.Effect)
+            {
+                case EventEffectType.RandomCards:
+                    GrantRandomEventCards(player, option);
+                    break;
+                case EventEffectType.GainCard:
+                    GrantEventCard(player, option.CardId);
+                    break;
+                case EventEffectType.BattleShield:
+                    player.AddBattleModifier(
+                        new BattleModifier(option.Amount, 0, 0, option.Battles));
+                    break;
+                case EventEffectType.BattlePower:
+                    player.AddBattleModifier(
+                        new BattleModifier(0, option.Amount, option.Amount, option.Battles));
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        $"Event effect {option.Effect} is not handled.");
+            }
+        }
+
+        private void GrantRandomEventCards(MatchPlayerState player, MatchEventOption option)
+        {
+            List<CardDefinition> pool = cardCatalog.All
+                .Where(
+                    definition =>
+                        definition.SlotSize == option.SlotSize &&
+                        definition.Id != MatchEventCatalog.MysteryDrinkCardId)
+                .ToList();
+            if (pool.Count == 0)
+            {
+                return;
+            }
+
+            Shuffle(pool, eventRandom);
+            for (int i = 0; i < option.Count; i++)
+            {
+                // 池子比要的少时允许重复，保证「3 张 1c」的承诺一定能兑现。
+                GrantEventCard(player, pool[i % pool.Count].Id);
+            }
+        }
+
+        private void GrantEventCard(MatchPlayerState player, string cardId)
+        {
+            CardDefinition definition = cardCatalog.Get(cardId);
+            CardInstance card = new CardInstance(nextCardUid++, definition);
+            if (!player.TryAddCard(card, equipIfPossible: true))
+            {
+                throw new InvalidOperationException(
+                    "The event reward does not fit in the player's Bag.");
+            }
+
+            Publish(new CardAddedEvent(player.Id, card.Uid, definition.Id, "Event"));
+        }
+
+        private void FinishEvent(MatchPlayerState player, int optionIndex, int shardCost)
+        {
+            string eventId = CurrentEvent != null ? CurrentEvent.Definition.Id : string.Empty;
+            CurrentEvent = null;
+            Publish(new EventResolvedEvent(player.Id, eventId, optionIndex, shardCost));
+            EndCurrentTurn();
         }
 
         private void BuyShopOffer(MatchPlayerState player, int offerIndex)
@@ -693,6 +838,8 @@ namespace ProjectArtOfAll.Core.Match
             Pcg32 source)
         {
             List<CardDefinition> pool = cardCatalog.All.ToList();
+            pool.RemoveAll(
+                definition => MatchEventCatalog.IsEventOnlyCard(definition.Id));
             Shuffle(pool, source);
             return pool.Take(Math.Min(count, pool.Count)).ToArray();
         }
@@ -810,7 +957,8 @@ namespace ProjectArtOfAll.Core.Match
                 right.Id,
                 leftLevel,
                 rightLevel,
-                right.BattleCards);
+                right.BattleCards,
+                right);
         }
 
         private CombatResult RunCombat(
@@ -818,16 +966,26 @@ namespace ProjectArtOfAll.Core.Match
             int rightPlayerId,
             int leftLevel,
             int rightLevel,
-            IEnumerable<CardInstance> rightCards)
+            IEnumerable<CardInstance> rightCards,
+            MatchPlayerState rightPlayer = null)
         {
             CombatantSnapshot leftSnapshot = new CombatantSnapshot(
                 left.Id,
                 leftLevel,
-                left.BattleSlots);
-            CombatantSnapshot rightSnapshot = new CombatantSnapshot(
-                rightPlayerId,
-                rightLevel,
-                rightCards);
+                left.BattleSlots,
+                null,
+                ToCombatBonus(left.CombinedBattleModifier()));
+            CombatantSnapshot rightSnapshot = rightPlayer != null
+                ? new CombatantSnapshot(
+                    rightPlayerId,
+                    rightLevel,
+                    rightPlayer.BattleSlots,
+                    null,
+                    ToCombatBonus(rightPlayer.CombinedBattleModifier()))
+                : new CombatantSnapshot(
+                    rightPlayerId,
+                    rightLevel,
+                    rightCards);
             BattleSnapshot battle = new BattleSnapshot(
                 leftSnapshot,
                 rightSnapshot);
@@ -836,7 +994,19 @@ namespace ProjectArtOfAll.Core.Match
                 NextCombatSeed());
             CombatResult result = simulation.RunToCompletion();
             LastCombatResult = result;
+
+            // 事件增益按「场」计数（R-EVT-003）：打完就从两边各消耗一场。
+            left.ConsumeBattleModifiers();
+            rightPlayer?.ConsumeBattleModifiers();
             return result;
+        }
+
+        private static CombatBonus ToCombatBonus(BattleModifier modifier)
+        {
+            return new CombatBonus(
+                modifier.ShieldPercent,
+                modifier.DamageBonus,
+                modifier.BlockBonus);
         }
 
         private ulong NextCombatSeed()
@@ -918,6 +1088,7 @@ namespace ProjectArtOfAll.Core.Match
             currentCandidates.Clear();
             currentRewardChoices.Clear();
             CurrentShop = null;
+            CurrentEvent = null;
             PublishTurnStarted();
         }
 

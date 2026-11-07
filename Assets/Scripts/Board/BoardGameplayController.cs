@@ -96,6 +96,7 @@ namespace ProjectArtOfAll.Board
         private bool awaitingFork;
         private bool awaitingRewardChoice;
         private bool awaitingShop;
+        private bool awaitingEvent;
         private bool awaitingEncounterAcceptance;
 
         /// <summary>真人席位数：正常模式固定 0；无CPU测试模式为 -1（表示"当前行动者"）。</summary>
@@ -777,7 +778,7 @@ namespace ProjectArtOfAll.Board
 
         private void ResolveDeferredCorePhase()
         {
-            if (awaitingRewardChoice || awaitingShop)
+            if (awaitingRewardChoice || awaitingShop || awaitingEvent)
             {
                 return;
             }
@@ -830,6 +831,20 @@ namespace ProjectArtOfAll.Board
 
                         match.Submit(new ShopActionCommand(player.Id, ShopActionType.Leave));
                         continue;
+                    case MatchPhase.AwaitEvent:
+                        if (hud != null &&
+                            IsHumanSeat(player) &&
+                            match.CurrentEvent != null)
+                        {
+                            awaitingEvent = true;
+                            hud.SetDiceInteractable(false);
+                            hud.ShowEvent(player, match.CurrentEvent, OnEventChosen);
+                            return;
+                        }
+
+                        int eventIndex = FindFirstAffordableEventOption(player);
+                        match.Submit(new EventChoiceCommand(player.Id, eventIndex));
+                        continue;
                     default:
                         return;
                 }
@@ -866,6 +881,93 @@ namespace ProjectArtOfAll.Board
                 (player.Id + 1).ToString(),
                 " 获得 ",
                 chosenName));
+        }
+
+        /// <summary>事件选项回调：-1 是「走开」，其余是选项下标（R-EVT-002）。</summary>
+        private void OnEventChosen(int index)
+        {
+            if (!awaitingEvent ||
+                match == null ||
+                match.State.Phase != MatchPhase.AwaitEvent ||
+                match.CurrentEvent == null)
+            {
+                return;
+            }
+
+            MatchPlayerState player = match.State.CurrentPlayer;
+            MatchEventSession session = match.CurrentEvent;
+            string eventTitle = session.Definition.Title;
+
+            if (index >= 0)
+            {
+                if (index >= session.Options.Count)
+                {
+                    return;
+                }
+
+                MatchEventOption option = session.Options[index];
+                if (option.ShardCost > player.Shards ||
+                    player.OwnedCardWidth + option.CardWidth > LoadoutRules.BagCapacity)
+                {
+                    return;
+                }
+            }
+
+            awaitingEvent = false;
+            hud?.HideEvent();
+
+            try
+            {
+                match.Submit(new EventChoiceCommand(player.Id, index));
+            }
+            catch (InvalidOperationException exception)
+            {
+                hud?.SetMatchStatus(string.Concat("事件结算失败：", exception.Message));
+                FinishDeferredPhase(null);
+                return;
+            }
+
+            string message = index < 0
+                ? string.Concat("玩家 ", (player.Id + 1).ToString(), " 离开了「", eventTitle, "」")
+                : string.Concat(
+                    "玩家 ",
+                    (player.Id + 1).ToString(),
+                    " 在「",
+                    eventTitle,
+                    "」选择「",
+                    session.Options[index].Label,
+                    "」");
+            FinishDeferredPhase(message);
+        }
+
+        /// <summary>CPU 与兜底：挑最便宜的可行选项；都不行就「走开」。</summary>
+        private int FindFirstAffordableEventOption(MatchPlayerState player)
+        {
+            if (match.CurrentEvent == null)
+            {
+                return -1;
+            }
+
+            int bestIndex = -1;
+            int bestPrice = int.MaxValue;
+            IReadOnlyList<MatchEventOption> options = match.CurrentEvent.Options;
+            for (int index = 0; index < options.Count; index++)
+            {
+                MatchEventOption option = options[index];
+                if (option.ShardCost > player.Shards ||
+                    player.OwnedCardWidth + option.CardWidth > LoadoutRules.BagCapacity)
+                {
+                    continue;
+                }
+
+                if (option.ShardCost < bestPrice)
+                {
+                    bestPrice = option.ShardCost;
+                    bestIndex = index;
+                }
+            }
+
+            return bestIndex;
         }
 
         private void OnShopBuy(int offerIndex)
@@ -993,7 +1095,9 @@ namespace ProjectArtOfAll.Board
         private void FinishDeferredPhase(string message)
         {
             awaitingShop = false;
+            awaitingEvent = false;
             hud?.HideShop();
+            hud?.HideEvent();
             ResolveDeferredCorePhase();
             isMoving = false;
             automaticTurn = false;

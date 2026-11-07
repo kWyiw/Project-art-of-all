@@ -67,6 +67,9 @@ namespace ProjectArtOfAll.Core.Match
                     case MatchPhase.AwaitShop:
                         HandleShop(controller, player);
                         break;
+                    case MatchPhase.AwaitEvent:
+                        ChooseEvent(controller, player);
+                        break;
                 }
 
                 if (controller.State.TurnNumber != turnBeforeAction ||
@@ -233,6 +236,34 @@ namespace ProjectArtOfAll.Core.Match
 
             controller.Submit(
                 new ChooseRewardCommand(player.Id, selectedIndex));
+        }
+
+        /// <summary>Buys the cheapest affordable option that still fits the bag.</summary>
+        private static void ChooseEvent(
+            MatchController controller,
+            MatchPlayerState player)
+        {
+            MatchEventSession session = controller.CurrentEvent;
+            int bestIndex = -1;
+            int bestPrice = int.MaxValue;
+
+            for (int index = 0; index < session.Options.Count; index++)
+            {
+                MatchEventOption option = session.Options[index];
+                if (option.ShardCost > player.Shards ||
+                    player.OwnedCardWidth + option.CardWidth > LoadoutRules.BagCapacity)
+                {
+                    continue;
+                }
+
+                if (option.ShardCost < bestPrice)
+                {
+                    bestPrice = option.ShardCost;
+                    bestIndex = index;
+                }
+            }
+
+            controller.Submit(new EventChoiceCommand(player.Id, bestIndex));
         }
 
         private static void HandleShop(

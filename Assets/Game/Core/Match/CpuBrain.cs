@@ -17,7 +17,8 @@ namespace ProjectArtOfAll.Core.Match
         ShopBuy = 4,
         ShopReroll = 5,
         ShopLeave = 6,
-        EquipCard = 7
+        EquipCard = 7,
+        ChooseEvent = 8
     }
 
     /// <summary>One decision. The CPU never mutates state; it only produces this.</summary>
@@ -103,6 +104,19 @@ namespace ProjectArtOfAll.Core.Match
             return new CpuDecision(CpuAction.EquipCard, -1, null, NormaType.Shard, -1, cardUid, reason);
         }
 
+        /// <summary>Picks an event option; -1 walks away from the event.</summary>
+        public static CpuDecision ChooseEvent(int optionIndex, string reason)
+        {
+            return new CpuDecision(
+                CpuAction.ChooseEvent,
+                -1,
+                null,
+                NormaType.Shard,
+                optionIndex,
+                -1,
+                reason);
+        }
+
         public override string ToString()
         {
             return Action + " " + Reason;
@@ -176,6 +190,9 @@ namespace ProjectArtOfAll.Core.Match
 
                 case MatchPhase.AwaitShop:
                     return ChooseShopAction(observation);
+
+                case MatchPhase.AwaitEvent:
+                    return ChooseEventOption(observation);
 
                 default:
                     return CpuDecision.Roll("对局已结束");
@@ -399,6 +416,11 @@ namespace ProjectArtOfAll.Core.Match
                              * Personality.Economy;
                     break;
 
+                case TileType.Event:
+                    score += (observation.Shards >= 6 ? 5.5 : observation.Shards >= 3 ? 3.0 : 0.5)
+                             * (Personality.Economy + Personality.Growth) * 0.5;
+                    break;
+
                 case TileType.Monster:
                     score += ScoreMonster(observation, tile, false);
                     break;
@@ -420,6 +442,58 @@ namespace ProjectArtOfAll.Core.Match
             }
 
             return score;
+        }
+
+        /// <summary>
+        /// Events sell cards or one-shot battle buffs for Shards. Skip anything unaffordable or
+        /// that cannot fit the bag; walk away (option -1) when nothing beats the Shard cost.
+        /// </summary>
+        private CpuDecision ChooseEventOption(CpuObservation observation)
+        {
+            int bagRoom = observation.BagCapacity - observation.OwnedWidth;
+            int bestIndex = -1;
+            double bestScore = 0.0;
+
+            for (int index = 0; index < observation.EventOptions.Count; index++)
+            {
+                MatchEventOption option = observation.EventOptions[index];
+                if (option.ShardCost > observation.Shards || option.CardWidth > bagRoom)
+                {
+                    continue;
+                }
+
+                double value;
+                switch (option.Effect)
+                {
+                    case EventEffectType.RandomCards:
+                        value = (6.0 + (option.SlotSize * 3.5)) * option.Count
+                                * Personality.Growth;
+                        break;
+                    case EventEffectType.GainCard:
+                        value = 10.0 * Personality.Growth;
+                        break;
+                    case EventEffectType.BattleShield:
+                        value = option.Amount * 0.16 * option.Battles * Personality.Caution;
+                        break;
+                    case EventEffectType.BattlePower:
+                        value = option.Amount * 4.0 * option.Battles * Personality.Aggression;
+                        break;
+                    default:
+                        value = 0.0;
+                        break;
+                }
+
+                double score = value - (option.ShardCost * 1.2);
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestIndex = index;
+                }
+            }
+
+            return bestIndex >= 0
+                ? CpuDecision.ChooseEvent(bestIndex, "接过委托")
+                : CpuDecision.ChooseEvent(-1, "走开");
         }
 
         private double UpgradeWorth(CpuObservation observation)

@@ -83,6 +83,9 @@ namespace ProjectArtOfAll.Board
         private Action shopRerollHandler;
         private Action shopLeaveHandler;
         private Action<int> rewardChoiceHandler;
+        private BoardHudEventView eventView;
+        private Action<int> eventChoiceHandler;
+        private MatchEventSession shownEvent;
         private MatchPlayerState cachedPlayer;
         private MatchState cachedState;
         private int humanPlayerId = -1;
@@ -1001,6 +1004,20 @@ namespace ProjectArtOfAll.Board
                 shopView.LeaveButton.onClick.AddListener(OnShopLeave);
             }
 
+            if (eventView == null)
+            {
+                eventView = BoardHudOverlayFactory.CreateEventView(transform, font);
+                for (int index = 0; index < eventView.Buttons.Length; index++)
+                {
+                    int captured = index;
+                    eventView.Buttons[index].onClick.AddListener(
+                        () => OnEventOptionChosen(captured));
+                }
+
+                eventView.LeaveButton.onClick.AddListener(
+                    () => OnEventOptionChosen(-1));
+            }
+
             if (combatResultView == null)
             {
                 combatResultView =
@@ -1343,6 +1360,141 @@ namespace ProjectArtOfAll.Board
 
             rewardView.Overlay.SetActive(true);
             rewardView.Overlay.transform.SetAsLastSibling();
+        }
+
+        /// <summary>
+        /// 事件面板（R-EVT-002）：列出三个选项与「走开」。付不起或背包装不下的选项置灰。
+        /// </summary>
+        public void ShowEvent(
+            MatchPlayerState player,
+            MatchEventSession session,
+            Action<int> onChosen)
+        {
+            if (!Application.isPlaying || player == null || session == null)
+            {
+                return;
+            }
+
+            EnsureOverlayViews();
+            if (eventView == null)
+            {
+                return;
+            }
+
+            shownEvent = session;
+            eventChoiceHandler = onChosen;
+
+            MatchEventDefinition definition = session.Definition;
+            eventView.Title.text = definition.Title;
+            eventView.Subtitle.text = string.Concat(
+                definition.Description,
+                "  ·  碎片 ",
+                player.Shards.ToString(),
+                "  ·  背包 ",
+                player.OwnedCardWidth.ToString(),
+                "/",
+                LoadoutRules.BagCapacity.ToString(),
+                "c");
+
+            for (int index = 0; index < eventView.Buttons.Length; index++)
+            {
+                bool visible = index < definition.Options.Count;
+                eventView.Buttons[index].gameObject.SetActive(visible);
+                if (!visible)
+                {
+                    continue;
+                }
+
+                MatchEventOption option = definition.Options[index];
+                bool affordable = player.Shards >= option.ShardCost;
+                bool fits = player.OwnedCardWidth + option.CardWidth <=
+                    LoadoutRules.BagCapacity;
+
+                eventView.Names[index].text = option.Label;
+                eventView.Metas[index].text = option.Description;
+                eventView.Details[index].text = DescribeEventOption(option);
+                eventView.Costs[index].text = affordable
+                    ? (option.ShardCost == 0
+                        ? "免费"
+                        : string.Concat("-", option.ShardCost.ToString(), " 碎片"))
+                    : string.Concat("差 ", (option.ShardCost - player.Shards).ToString(), " 碎片");
+                eventView.Costs[index].color = affordable
+                    ? new Color(0.92f, 0.69f, 0.27f, 1f)
+                    : new Color(0.86f, 0.44f, 0.40f, 1f);
+
+                if (option.CardWidth > 0 && !fits)
+                {
+                    eventView.Metas[index].text = string.Concat(
+                        option.Description,
+                        "  ·  背包装不下（需要 ",
+                        option.CardWidth.ToString(),
+                        "c）");
+                }
+
+                eventView.Buttons[index].interactable = affordable && fits;
+            }
+
+            eventView.Overlay.SetActive(true);
+            eventView.Overlay.transform.SetAsLastSibling();
+        }
+
+        public void HideEvent()
+        {
+            if (eventView != null)
+            {
+                eventView.Overlay.SetActive(false);
+            }
+
+            CardTooltipHost.Hide();
+            shownEvent = null;
+            eventChoiceHandler = null;
+        }
+
+        /// <summary>选项 -1 表示「走开」。</summary>
+        private void OnEventOptionChosen(int index)
+        {
+            Action<int> handler = eventChoiceHandler;
+            if (handler == null)
+            {
+                return;
+            }
+
+            eventChoiceHandler = null;
+            handler(index);
+        }
+
+        /// <summary>选项效果的短说明；事件面板与离线预览共用同一份文案。</summary>
+        public static string DescribeEventOption(MatchEventOption option)
+        {
+            switch (option.Effect)
+            {
+                case EventEffectType.RandomCards:
+                    return string.Concat(
+                        "随机 ",
+                        option.Count.ToString(),
+                        " 张 ",
+                        option.SlotSize.ToString(),
+                        "c 牌（不重复）");
+                case EventEffectType.GainCard:
+                    return "获得「神秘饮料」：2c 牌，战斗开始回复 8 生命，也可卖出换 8 碎片";
+                case EventEffectType.BattleShield:
+                    return string.Concat(
+                        "下一场战斗开局获得",
+                        option.Amount.ToString(),
+                        "% 最大生命的护盾（",
+                        option.Battles.ToString(),
+                        " 场）");
+                case EventEffectType.BattlePower:
+                    return string.Concat(
+                        "接下来的 ",
+                        option.Battles.ToString(),
+                        " 场战斗：伤害 +",
+                        option.Amount.ToString(),
+                        "、格挡 +",
+                        option.Amount.ToString());
+                default:
+                    return string.Empty;
+            }
         }
 
         public void HideRewardChoices()

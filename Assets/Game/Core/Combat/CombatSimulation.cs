@@ -44,6 +44,17 @@ namespace ProjectArtOfAll.Core.Combat
 
             eventBus.Publish(0L, new CombatStartedEvent(seed));
 
+            // 事件增益里「开战即得护盾」的部分（R-EVT-003）先结算，再跑战斗开始被动。
+            if (left.Shield > 0)
+            {
+                eventBus.Publish(0L, new ShieldGainedEvent(left.PlayerId, left.Shield));
+            }
+
+            if (right.Shield > 0)
+            {
+                eventBus.Publish(0L, new ShieldGainedEvent(right.PlayerId, right.Shield));
+            }
+
             TriggerPassives(left, null, PassiveTrigger.BattleStart, CardTag.None);
             TriggerPassives(right, null, PassiveTrigger.BattleStart, CardTag.None);
         }

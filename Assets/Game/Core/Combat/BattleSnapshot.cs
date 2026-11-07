@@ -12,8 +12,9 @@ namespace ProjectArtOfAll.Core.Combat
             int playerId,
             int level,
             IEnumerable<CardInstance> battleCards,
-            int? maxHealth = null)
-            : this(playerId, level, CardSlotRules.Unpack(battleCards), maxHealth)
+            int? maxHealth = null,
+            CombatBonus? bonus = null)
+            : this(playerId, level, CardSlotRules.Unpack(battleCards), maxHealth, bonus)
         {
         }
 
@@ -24,7 +25,8 @@ namespace ProjectArtOfAll.Core.Combat
             int playerId,
             int level,
             IEnumerable<CardSlot> battleSlots,
-            int? maxHealth = null)
+            int? maxHealth = null,
+            CombatBonus? bonus = null)
         {
             if (playerId < 0)
             {
@@ -85,6 +87,7 @@ namespace ProjectArtOfAll.Core.Combat
             PlayerId = playerId;
             Level = level;
             MaxHealth = maxHealth ?? defaultHealth;
+            Bonus = bonus ?? default(CombatBonus);
             BattleSlots = Array.AsReadOnly(
                 slots.OrderBy(slot => slot.Column).ToArray());
             BattleCards = Array.AsReadOnly(
@@ -98,6 +101,11 @@ namespace ProjectArtOfAll.Core.Combat
 
         /// <summary>本场最大生命值。默认按等级取（100/150/200/250/300），模拟模式可以自己填。</summary>
         public int MaxHealth { get; }
+
+        /// <summary>
+        /// 事件给的临时战斗增益（R-EVT-003）。战斗开始时结算护盾，之后每次伤害/格挡各加一次。
+        /// </summary>
+        public CombatBonus Bonus { get; }
 
         /// <summary>战斗栏的占位（按列排序，中间可能有空列）。</summary>
         public IReadOnlyList<CardSlot> BattleSlots { get; }
@@ -121,6 +129,38 @@ namespace ProjectArtOfAll.Core.Combat
 
         public CombatantSnapshot Left { get; }
         public CombatantSnapshot Right { get; }
+    }
+
+    /// <summary>
+    /// 事件给的临时战斗增益（R-EVT-003）：战斗开始时按最大生命值的百分比给护盾，
+    /// 之后每张牌造成的伤害与获得的格挡各加一份固定值。
+    /// </summary>
+    public readonly struct CombatBonus
+    {
+        public CombatBonus(int shieldPercent, int damageBonus, int blockBonus)
+        {
+            ShieldPercent = shieldPercent < 0 ? 0 : shieldPercent;
+            DamageBonus = damageBonus < 0 ? 0 : damageBonus;
+            BlockBonus = blockBonus < 0 ? 0 : blockBonus;
+        }
+
+        public int ShieldPercent { get; }
+
+        public int DamageBonus { get; }
+
+        public int BlockBonus { get; }
+
+        public bool IsNone => ShieldPercent == 0 && DamageBonus == 0 && BlockBonus == 0;
+
+        public int ShieldFor(int maximumHealth)
+        {
+            if (ShieldPercent <= 0 || maximumHealth <= 0)
+            {
+                return 0;
+            }
+
+            return maximumHealth * ShieldPercent / 100;
+        }
     }
 
     public static class BattleConfig

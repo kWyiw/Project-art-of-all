@@ -80,11 +80,17 @@ namespace ProjectArtOfAll.Core.Combat
             switch (effect.Operation)
             {
                 case EffectOp.DealDamage:
-                    simulation.ApplyDamage(owner.PlayerId, target, amount, ignoresShield: false);
+                    // 事件增益（R-EVT-003）：本场战斗的伤害加成只加在牌造成的伤害上，
+                    // 中毒/灼烧的周期结算不加。
+                    simulation.ApplyDamage(
+                        owner.PlayerId,
+                        target,
+                        amount + owner.DamageBonus,
+                        ignoresShield: false);
                     break;
 
                 case EffectOp.GainShield:
-                    simulation.GainShield(owner, target, amount);
+                    simulation.GainShield(owner, target, amount + owner.BlockBonus);
                     break;
 
                 case EffectOp.ApplyPoison:

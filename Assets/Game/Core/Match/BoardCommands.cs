@@ -118,4 +118,21 @@ namespace ProjectArtOfAll.Core.Match
         public int PlayerId { get; }
         public int CardUid { get; }
     }
+
+    /// <summary>
+    /// 事件格上的选择（R-EVT-001）。<see cref="OptionIndex"/> 取 -1 表示不参与、
+    /// 直接走完这一轮，所以碎片不够时永远有出路。
+    /// </summary>
+    public sealed class EventChoiceCommand : IMatchCommand
+    {
+        public EventChoiceCommand(int playerId, int optionIndex)
+        {
+            PlayerId = playerId;
+            OptionIndex = optionIndex;
+        }
+
+        public int PlayerId { get; }
+
+        public int OptionIndex { get; }
+    }
 }

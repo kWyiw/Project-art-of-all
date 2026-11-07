@@ -10,6 +10,9 @@ namespace ProjectArtOfAll.Core.Match
     {
         private readonly PlayerCardCollection cards;
 
+        /// <summary>还在倒计数的战斗增益（事件给的，见 <see cref="BattleModifier"/>）。</summary>
+        private readonly List<BattleModifier> battleModifiers = new List<BattleModifier>();
+
         internal MatchPlayerState(
             int id,
             string name,
@@ -79,6 +82,55 @@ namespace ProjectArtOfAll.Core.Match
                    NormaRules.MeetsThreshold(Level, Norma, Shards, Wins);
         }
 
+        /// <summary>事件给的临时战斗增益（R-EVT-003），按剩余场次从多到少排列。</summary>
+        public IReadOnlyList<BattleModifier> BattleModifiers => battleModifiers;
+
+        /// <summary>
+        /// 把还生效的增益合成一份：护盾百分比、伤害、格挡逐项相加。
+        /// 没有增益时返回全零的一份（场次留 1，方便直接塞进战斗快照）。
+        /// </summary>
+        internal BattleModifier CombinedBattleModifier()
+        {
+            int shieldPercent = 0;
+            int damageBonus = 0;
+            int blockBonus = 0;
+            foreach (BattleModifier modifier in battleModifiers)
+            {
+                shieldPercent += modifier.ShieldPercent;
+                damageBonus += modifier.DamageBonus;
+                blockBonus += modifier.BlockBonus;
+            }
+
+            return new BattleModifier(shieldPercent, damageBonus, blockBonus, 1);
+        }
+
+        internal void AddBattleModifier(BattleModifier modifier)
+        {
+            if (modifier.IsExpired)
+            {
+                return;
+            }
+
+            battleModifiers.Add(modifier);
+        }
+
+        /// <summary>每打完一场战斗，所有增益的剩余场次各减一，归零的丢掉。</summary>
+        internal void ConsumeBattleModifiers()
+        {
+            for (int i = battleModifiers.Count - 1; i >= 0; i--)
+            {
+                BattleModifier next = battleModifiers[i].Consume();
+                if (next.IsExpired)
+                {
+                    battleModifiers.RemoveAt(i);
+                }
+                else
+                {
+                    battleModifiers[i] = next;
+                }
+            }
+        }
+
         internal ulong AddToHash(ulong hash)
         {
             hash = StableHash.Add(hash, Id);
@@ -89,6 +141,14 @@ namespace ProjectArtOfAll.Core.Match
             hash = StableHash.Add(hash, Shards);
             hash = StableHash.Add(hash, Wins);
             hash = StableHash.Add(hash, (long)Norma);
+
+            foreach (BattleModifier modifier in battleModifiers)
+            {
+                hash = StableHash.Add(hash, modifier.ShieldPercent);
+                hash = StableHash.Add(hash, modifier.DamageBonus);
+                hash = StableHash.Add(hash, modifier.BlockBonus);
+                hash = StableHash.Add(hash, modifier.BattlesRemaining);
+            }
 
             return cards.AddToHash(hash);
         }

@@ -251,4 +251,40 @@ namespace ProjectArtOfAll.Core.Match
 
         public int TriggeredByPlayerId { get; }
     }
+
+    /// <summary>玩家停在事件格，事件面板打开（R-EVT-001）。</summary>
+    public sealed class EventOfferedEvent : GameEvent
+    {
+        public EventOfferedEvent(int playerId, string eventId, int nodeId)
+        {
+            PlayerId = playerId;
+            EventId = eventId;
+            NodeId = nodeId;
+        }
+
+        public int PlayerId { get; }
+        public string EventId { get; }
+        public int NodeId { get; }
+    }
+
+    /// <summary>事件选项结算完成；<see cref="OptionIndex"/> 为 -1 表示直接走开。</summary>
+    public sealed class EventResolvedEvent : GameEvent
+    {
+        public EventResolvedEvent(
+            int playerId,
+            string eventId,
+            int optionIndex,
+            int shardCost)
+        {
+            PlayerId = playerId;
+            EventId = eventId;
+            OptionIndex = optionIndex;
+            ShardCost = shardCost;
+        }
+
+        public int PlayerId { get; }
+        public string EventId { get; }
+        public int OptionIndex { get; }
+        public int ShardCost { get; }
+    }
 }
