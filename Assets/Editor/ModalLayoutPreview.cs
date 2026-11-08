@@ -18,15 +18,21 @@ public static class ModalLayoutPreview
     [UnityEditor.MenuItem("Tools/Preview Modal Layout")]
     public static void RenderFromMenu()
     {
-        Render();
+        Render("_tmp/modal_layout_expanded.png", ExpandedBandHeight, false);
+        Render("_tmp/modal_layout_collapsed.png", CollapsedBandHeight, true);
     }
 
     public static void RenderBatch()
     {
-        Render();
+        Render("_tmp/modal_layout_expanded.png", ExpandedBandHeight, false);
+        Render("_tmp/modal_layout_collapsed.png", CollapsedBandHeight, true);
     }
 
-    private static void Render()
+    private const float CollapsedBandHeight = 42f;
+
+    private static float ExpandedBandHeight => Mathf.Clamp(Height * 0.42f, 272f, 560f);
+
+    private static void Render(string path, float bandHeight, bool collapsed)
     {
         GameObject cameraObject = new GameObject("PreviewCamera", typeof(Camera));
         Camera camera = cameraObject.GetComponent<Camera>();
@@ -70,7 +76,6 @@ public static class ModalLayoutPreview
 
         // 卡槽带：宽度取 ApplyScreenLayout 的同一个公式，高度取"展开后"的值。
         float bandWidth = Mathf.Clamp(Width * 0.78f, 720f, 1560f);
-        float bandHeight = Mathf.Clamp(Height * 0.42f, 272f, 560f);
         GameObject band = new GameObject("FakeCardBand", typeof(RectTransform), typeof(Image));
         band.transform.SetParent(canvasRect, false);
         band.layer = UiLayer;
@@ -91,7 +96,9 @@ public static class ModalLayoutPreview
         bandLabel.font = font;
         bandLabel.fontSize = 20;
         bandLabel.fontStyle = FontStyle.Normal;
-        bandLabel.text = "卡槽带（这里必须保持看得见、拖得动）";
+        bandLabel.text = collapsed
+            ? "卡槽带（已收起：弹窗回到接近居中）"
+            : "卡槽带（展开：弹窗被抬到带子上方）";
         bandLabel.color = new Color(0.94f, 0.93f, 0.88f, 1f);
         bandLabel.alignment = TextAnchor.UpperLeft;
         bandLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -118,7 +125,6 @@ public static class ModalLayoutPreview
         texture.Apply();
         RenderTexture.active = previous;
 
-        string path = "_tmp/modal_layout_preview.png";
         string directory = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
         {

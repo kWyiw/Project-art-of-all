@@ -51,6 +51,8 @@ namespace ProjectArtOfAll.Board
         [SerializeField] private BoardHudShopView shopView;
         [SerializeField] private BoardHudEventView eventView;
         [SerializeField] private BoardHudCombatResultView combatResultView;
+
+        private float lastFittedBandHeight = -1f;
         [SerializeField] private PlayerCornerPanels cornerPanels;
         [SerializeField] private OpponentDossierView dossier;
         [SerializeField] private PauseOverlayView pauseOverlay;
@@ -134,6 +136,8 @@ namespace ProjectArtOfAll.Board
             {
                 TogglePause();
             }
+
+            RefreshModalFit();
 
             TickAutoQuality();
 
@@ -746,8 +750,8 @@ namespace ProjectArtOfAll.Board
 
         /// <summary>
         /// 局内弹窗只占卡槽带上方：遮罩不再铺到屏幕最底，卡槽带既看得见也拖得动（UI-2.5.4），
-        /// 面板则自己居中到剩下那块区域里。卡槽带高度随展开/收起和 UI 缩放变化，所以每次弹窗
-        /// 打开都重新量一遍。
+        /// 面板自己居中到剩下那块区域里。卡槽带展开时让出整条带高，收起时只让出小把手的高度。
+        /// 带高随时会变（玩家展开/收起、界面缩放），所以 <see cref="RefreshModalFit"/> 每帧复查。
         /// </summary>
         private void FitModalAboveCardBand(GameObject overlay)
         {
@@ -757,11 +761,68 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
-            // 按"展开后的带高"让位：弹窗开着时玩家把卡槽展开，也不该被弹窗压住。
-            float bandHeight = cardBand != null
-                ? Mathf.Max(0f, Mathf.Max(cardBand.CurrentBandHeight, cardBand.ExpandedBandHeight))
-                : 0f;
+            float bandHeight = CurrentCardBandHeight();
             BoardHudOverlayFactory.FitAboveCardBand(overlay, bandHeight);
+            lastFittedBandHeight = bandHeight;
+        }
+
+        private float CurrentCardBandHeight()
+        {
+            return cardBand != null ? Mathf.Max(0f, cardBand.CurrentBandHeight) : 0f;
+        }
+
+        /// <summary>弹窗开着时卡槽带被展开或收起，已经打开的弹窗要跟着挪位置。</summary>
+        private void RefreshModalFit()
+        {
+            float bandHeight = CurrentCardBandHeight();
+            if (Mathf.Abs(bandHeight - lastFittedBandHeight) < 0.5f)
+            {
+                return;
+            }
+
+            lastFittedBandHeight = bandHeight;
+            foreach (GameObject overlay in ActiveModalOverlays())
+            {
+                BoardHudOverlayFactory.FitAboveCardBand(overlay, bandHeight);
+            }
+        }
+
+        private IEnumerable<GameObject> ActiveModalOverlays()
+        {
+            if (IsOverlayActive(encounterOverlay))
+            {
+                yield return encounterOverlay;
+            }
+
+            if (homeStopView != null && IsOverlayActive(homeStopView.Overlay))
+            {
+                yield return homeStopView.Overlay;
+            }
+
+            if (rewardView != null && IsOverlayActive(rewardView.Overlay))
+            {
+                yield return rewardView.Overlay;
+            }
+
+            if (shopView != null && IsOverlayActive(shopView.Overlay))
+            {
+                yield return shopView.Overlay;
+            }
+
+            if (eventView != null && IsOverlayActive(eventView.Overlay))
+            {
+                yield return eventView.Overlay;
+            }
+
+            if (combatResultView != null && IsOverlayActive(combatResultView.Overlay))
+            {
+                yield return combatResultView.Overlay;
+            }
+        }
+
+        private static bool IsOverlayActive(GameObject overlay)
+        {
+            return overlay != null && overlay.activeSelf;
         }
 
         public void HideEncounter()
