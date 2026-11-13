@@ -627,9 +627,7 @@ namespace ProjectArtOfAll.Core.Match
                 CreateRandomDefinitions(RewardChoiceCount, rewardRandom));
 
             bool canTakeAtLeastOne = currentRewardChoices.Any(
-                definition =>
-                    player.OwnedCardWidth + definition.SlotSize <=
-                    LoadoutRules.BagCapacity);
+                definition => LoadoutRules.FitsInBag(player.BagCardWidth, definition.SlotSize));
             if (!canTakeAtLeastOne)
             {
                 currentRewardChoices.Clear();
@@ -690,7 +688,7 @@ namespace ProjectArtOfAll.Core.Match
             }
 
             if (option.CardWidth > 0 &&
-                player.OwnedCardWidth + option.CardWidth > LoadoutRules.BagCapacity)
+                !LoadoutRules.FitsInBag(player.BagCardWidth, option.CardWidth))
             {
                 throw new InvalidOperationException(
                     "The event reward does not fit in the player's Bag.");

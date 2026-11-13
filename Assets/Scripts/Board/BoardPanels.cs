@@ -153,7 +153,7 @@ namespace ProjectArtOfAll.Board
                 int capacity = player.Level >= 6 ? 10 : LoadoutRules.GetBattleCapacity(player.Level);
                 slot.Loadout.text = string.Concat(
                     "装配 ", player.BattleCardWidth.ToString(), "/", capacity.ToString(), "c",
-                    "  ·  背包 ", player.OwnedCardWidth.ToString(), "/",
+                    "  ·  背包 ", player.BagCardWidth.ToString(), "/",
                     LoadoutRules.BagCapacity.ToString(), "c");
             }
         }

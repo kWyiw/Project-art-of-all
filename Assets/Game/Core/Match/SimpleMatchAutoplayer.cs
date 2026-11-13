@@ -221,7 +221,7 @@ namespace ProjectArtOfAll.Core.Match
             for (int index = 0; index < controller.CurrentRewardChoices.Count; index++)
             {
                 int size = controller.CurrentRewardChoices[index].SlotSize;
-                if (player.OwnedCardWidth + size <= LoadoutRules.BagCapacity)
+                if (player.BagCardWidth + size <= LoadoutRules.BagCapacity)
                 {
                     selectedIndex = index;
                     break;
@@ -251,7 +251,7 @@ namespace ProjectArtOfAll.Core.Match
             {
                 MatchEventOption option = session.Options[index];
                 if (option.ShardCost > player.Shards ||
-                    player.OwnedCardWidth + option.CardWidth > LoadoutRules.BagCapacity)
+                    player.BagCardWidth + option.CardWidth > LoadoutRules.BagCapacity)
                 {
                     continue;
                 }
@@ -287,7 +287,7 @@ namespace ProjectArtOfAll.Core.Match
                 }
 
                 if (spendableShards < offer.Price ||
-                    player.OwnedCardWidth + offer.Definition.SlotSize >
+                    player.BagCardWidth + offer.Definition.SlotSize >
                     LoadoutRules.BagCapacity)
                 {
                     continue;

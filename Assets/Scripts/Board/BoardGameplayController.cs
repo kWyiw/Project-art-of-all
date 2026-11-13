@@ -871,7 +871,7 @@ namespace ProjectArtOfAll.Board
             }
 
             int size = match.CurrentRewardChoices[index].SlotSize;
-            if (player.OwnedCardWidth + size > LoadoutRules.BagCapacity)
+            if (!LoadoutRules.FitsInBag(player.BagCardWidth, size))
             {
                 return;
             }
@@ -911,7 +911,7 @@ namespace ProjectArtOfAll.Board
 
                 MatchEventOption option = session.Options[index];
                 if (option.ShardCost > player.Shards ||
-                    player.OwnedCardWidth + option.CardWidth > LoadoutRules.BagCapacity)
+                    !LoadoutRules.FitsInBag(player.BagCardWidth, option.CardWidth))
                 {
                     return;
                 }
@@ -959,7 +959,7 @@ namespace ProjectArtOfAll.Board
             {
                 MatchEventOption option = options[index];
                 if (option.ShardCost > player.Shards ||
-                    player.OwnedCardWidth + option.CardWidth > LoadoutRules.BagCapacity)
+                    !LoadoutRules.FitsInBag(player.BagCardWidth, option.CardWidth))
                 {
                     continue;
                 }
@@ -993,8 +993,7 @@ namespace ProjectArtOfAll.Board
             ShopOffer offer = match.CurrentShop.Offers[offerIndex];
             if (!offer.IsAvailable ||
                 player.Shards < offer.Price ||
-                player.OwnedCardWidth + offer.Definition.SlotSize >
-                    LoadoutRules.BagCapacity)
+                !LoadoutRules.FitsInBag(player.BagCardWidth, offer.Definition.SlotSize))
             {
                 return;
             }
@@ -1125,7 +1124,7 @@ namespace ProjectArtOfAll.Board
             for (int index = 0; index < match.CurrentRewardChoices.Count; index++)
             {
                 int size = match.CurrentRewardChoices[index].SlotSize;
-                if (player.OwnedCardWidth + size <= LoadoutRules.BagCapacity)
+                if (LoadoutRules.FitsInBag(player.BagCardWidth, size))
                 {
                     return index;
                 }
@@ -1477,7 +1476,7 @@ namespace ProjectArtOfAll.Board
                 $"回合 {match.State.TurnNumber}  ·  轮次 {match.State.RoundNumber}  ·  " +
                 $"玩家 {player.Id + 1}  ·  碎片 {player.Shards}  ·  胜场 {player.Wins}  ·  " +
                 $"装配 {player.BattleCardWidth}/{battleCapacity}c  ·  " +
-                $"仓库 {player.OwnedCardWidth}/{LoadoutRules.BagCapacity}c";
+                $"背包 {player.BagCardWidth}/{LoadoutRules.BagCapacity}c";
             if (!string.IsNullOrWhiteSpace(action))
             {
                 status += $"  ·  {action}";

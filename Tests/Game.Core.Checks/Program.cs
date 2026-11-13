@@ -39,6 +39,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckRewardChoice();
                 CheckWarpTeleport();
                 CheckCardBandCommands();
+                CheckBagCapacity();
                 CheckFreeActionsDuringAnotherTurn();
                 CheckSceneMapTeleport();
             CheckOpeningGrant();
@@ -896,6 +897,52 @@ namespace ProjectArtOfAll.Core.Checks
             Assert(!soldTwice, "A sold card cannot be sold again.");
             Console.WriteLine(
                 $"[sell] value={valueBefore} shards={player.Shards}");
+        }
+
+        /// <summary>
+        /// 背包容量只算背包这一排（CJ-5.1 / CJ-6.2）：装到战斗栏上的牌不占背包空间。
+        /// 旧版本用「全部持有宽度」去卡背包，4 级以后满装备的玩家背包明明是空的，
+        /// 商店和奖励却一律提示「装不下」。
+        /// </summary>
+        private static void CheckBagCapacity()
+        {
+            Assert(LoadoutRules.FitsInBag(0, 3), "An empty bag must fit a 3c card.");
+            Assert(LoadoutRules.FitsInBag(7, 3), "A bag holding 7c must still fit a 3c card.");
+            Assert(!LoadoutRules.FitsInBag(8, 3), "A bag holding 8c must reject a 3c card.");
+            Assert(!LoadoutRules.FitsInBag(10, 1), "A full bag must reject any card.");
+            Assert(LoadoutRules.FitsInBag(10, 0), "A zero-width effect must never be blocked.");
+
+            List<CardInstance> cards = new List<CardInstance>();
+            for (int index = 0; index < 5; index++)
+            {
+                cards.Add(new CardInstance(
+                    8500 + index,
+                    CardDatabase.Instance.Get("car_door")));
+            }
+
+            PlayerCardCollection collection = new PlayerCardCollection(
+                cards,
+                LoadoutRules.GetBattleCapacity(4));
+            Assert(collection.BattleWidth == 10, "Five 2c cards must fill a level-4 battle row.");
+            Assert(collection.BagWidth == 0, "With every card equipped the bag must be empty.");
+            Assert(
+                collection.OwnedWidth == collection.BagWidth + collection.BattleWidth,
+                "Owned width must be the sum of the two rows.");
+
+            Assert(
+                collection.TryAddCard(new CardInstance(
+                    8600,
+                    CardDatabase.Instance.Get("crowbar"))),
+                "A full battle row must not block a card from an empty bag.");
+            Assert(collection.BagWidth == 1, "The new card must occupy one column of the bag.");
+
+            Assert(
+                collection.TryAddCard(new CardInstance(
+                    8601,
+                    CardDatabase.Instance.Get("car_door"))),
+                "The bag must keep accepting cards until its own 10c is used.");
+            Console.WriteLine(
+                $"[bagspace] bag={collection.BagWidth} battle={collection.BattleWidth}");
         }
 
         private static void CheckRewardChoice()

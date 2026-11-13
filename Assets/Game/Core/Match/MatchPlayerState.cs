@@ -76,6 +76,9 @@ namespace ProjectArtOfAll.Core.Match
         public int OwnedCardWidth => cards.OwnedWidth;
         public int BattleCardWidth => cards.BattleWidth;
 
+        /// <summary>背包这一排已占的宽度；背包容量校验只看这个值（CJ-5.1 / CJ-6.2）。</summary>
+        public int BagCardWidth => cards.BagWidth;
+
         public bool MeetsCurrentNorma()
         {
             return Level >= 6 ||

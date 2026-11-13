@@ -35,6 +35,26 @@ namespace ProjectArtOfAll.Core.Cards
         public const int BagCapacity = 10;
 
         /// <summary>
+        /// CJ-5.1 / CJ-6.2：背包这一排固定 10c，战斗栏的宽度另算（CJ-5.2）。所以判断
+        /// “背包还放不放得下”只看 <paramref name="bagWidth"/>——装到战斗栏上的牌不占背包容量，
+        /// 否则 4 级以后满装备的玩家会连一张奖励牌都拿不了。
+        /// </summary>
+        public static bool FitsInBag(int bagWidth, int cardSize)
+        {
+            if (cardSize <= 0)
+            {
+                return true;
+            }
+
+            if (cardSize > 3)
+            {
+                return false;
+            }
+
+            return bagWidth + cardSize <= BagCapacity;
+        }
+
+        /// <summary>
         /// CJ-5.2: battle capacity is 4/6/8/10/10c for levels 1 through 5.
         /// Level 6 never enters combat.
         /// </summary>

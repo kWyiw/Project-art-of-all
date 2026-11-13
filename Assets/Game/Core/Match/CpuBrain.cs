@@ -302,7 +302,7 @@ namespace ProjectArtOfAll.Core.Match
             for (int i = 0; i < observation.RewardChoices.Count; i++)
             {
                 CardDefinition definition = observation.RewardChoices[i];
-                bool fits = observation.OwnedWidth + definition.SlotSize <= observation.BagCapacity;
+                bool fits = observation.BagWidth + definition.SlotSize <= observation.BagCapacity;
                 double score = EstimateCardValue(definition) + (fits ? 3.0 : -25.0);
                 score = ApplyNoise(score);
                 if (score > bestScore)
@@ -338,7 +338,7 @@ namespace ProjectArtOfAll.Core.Match
                     continue;
                 }
 
-                if (observation.OwnedWidth + offer.Definition.SlotSize > observation.BagCapacity)
+                if (observation.BagWidth + offer.Definition.SlotSize > observation.BagCapacity)
                 {
                     continue;
                 }
@@ -404,7 +404,7 @@ namespace ProjectArtOfAll.Core.Match
 
                 case TileType.Reward:
                     score += (6.5 * Personality.Economy) + (3.0 * Personality.Growth);
-                    if (observation.OwnedWidth >= observation.BagCapacity)
+                    if (observation.BagWidth >= observation.BagCapacity)
                     {
                         score -= 9.0;
                     }
@@ -450,7 +450,7 @@ namespace ProjectArtOfAll.Core.Match
         /// </summary>
         private CpuDecision ChooseEventOption(CpuObservation observation)
         {
-            int bagRoom = observation.BagCapacity - observation.OwnedWidth;
+            int bagRoom = observation.BagCapacity - observation.BagWidth;
             int bestIndex = -1;
             double bestScore = 0.0;
 

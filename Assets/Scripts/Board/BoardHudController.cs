@@ -427,7 +427,7 @@ namespace ProjectArtOfAll.Board
                 top,
                 string.Concat(
                     "背包 ",
-                    cachedPlayer.OwnedCardWidth.ToString(),
+                    cachedPlayer.BagCardWidth.ToString(),
                     "/",
                     LoadoutRules.BagCapacity.ToString(),
                     "c"),
@@ -1238,7 +1238,7 @@ namespace ProjectArtOfAll.Board
                 " · 选一张");
             rewardView.Subtitle.text = string.Concat(
                 "免费获得 · 背包 ",
-                player.OwnedCardWidth.ToString(),
+                player.BagCardWidth.ToString(),
                 "/",
                 LoadoutRules.BagCapacity.ToString(),
                 "c · 装不下的牌会置灰（R-TILE-006、R-ECO-006）");
@@ -1253,8 +1253,7 @@ namespace ProjectArtOfAll.Board
                 }
 
                 CardDefinition definition = choices[index];
-                bool fits = player.OwnedCardWidth + definition.SlotSize <=
-                    LoadoutRules.BagCapacity;
+                bool fits = LoadoutRules.FitsInBag(player.BagCardWidth, definition.SlotSize);
                 rewardView.Names[index].text = definition.DisplayName;
                 rewardView.Metas[index].text = fits
                     ? CardText.Meta(definition)
@@ -1302,7 +1301,7 @@ namespace ProjectArtOfAll.Board
                 "  ·  碎片 ",
                 player.Shards.ToString(),
                 "  ·  背包 ",
-                player.OwnedCardWidth.ToString(),
+                player.BagCardWidth.ToString(),
                 "/",
                 LoadoutRules.BagCapacity.ToString(),
                 "c");
@@ -1318,8 +1317,7 @@ namespace ProjectArtOfAll.Board
 
                 MatchEventOption option = definition.Options[index];
                 bool affordable = player.Shards >= option.ShardCost;
-                bool fits = player.OwnedCardWidth + option.CardWidth <=
-                    LoadoutRules.BagCapacity;
+                bool fits = LoadoutRules.FitsInBag(player.BagCardWidth, option.CardWidth);
 
                 eventView.Names[index].text = option.Label;
                 eventView.Metas[index].text = option.Description;
@@ -1490,7 +1488,7 @@ namespace ProjectArtOfAll.Board
                 "持有 ",
                 player.Shards.ToString(),
                 " 碎片 · 背包 ",
-                player.OwnedCardWidth.ToString(),
+                player.BagCardWidth.ToString(),
                 "/",
                 LoadoutRules.BagCapacity.ToString(),
                 "c · 价格 1c=2 / 2c=4 / 3c=8 碎片 · 每次停留刷新一次（§2.5）");
@@ -1506,8 +1504,7 @@ namespace ProjectArtOfAll.Board
 
                 ShopOffer offer = shop.Offers[index];
                 CardDefinition definition = offer.Definition;
-                bool fits = player.OwnedCardWidth + definition.SlotSize <=
-                    LoadoutRules.BagCapacity;
+                bool fits = LoadoutRules.FitsInBag(player.BagCardWidth, definition.SlotSize);
                 bool canPay = player.Shards >= offer.Price;
                 bool purchasable = offer.IsAvailable && fits && canPay;
 

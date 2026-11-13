@@ -98,6 +98,9 @@ namespace ProjectArtOfAll.Core.Match
 
         public int BattleWidth => battleSlots.Sum(slot => slot.Card.Definition.SlotSize);
 
+        /// <summary>背包这一排已占的宽度（不含战斗栏）。</summary>
+        public int BagWidth => bagSlots.Sum(slot => slot.Card.Definition.SlotSize);
+
         public bool TryAddCard(CardInstance card)
         {
             return TryAddCardAt(card, -1);
@@ -112,7 +115,7 @@ namespace ProjectArtOfAll.Core.Match
             }
 
             if (OwnedCards.Any(existing => existing.Uid == card.Uid) ||
-                OwnedWidth + card.Definition.SlotSize > LoadoutRules.BagCapacity)
+                !LoadoutRules.FitsInBag(BagWidth, card.Definition.SlotSize))
             {
                 return false;
             }

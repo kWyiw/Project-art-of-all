@@ -320,7 +320,7 @@ namespace ProjectArtOfAll.Core.Match
                 BattleWidth = self.BattleCardWidth,
                 BattleCapacity = self.Level >= 6 ? 10 : LoadoutRules.GetBattleCapacity(self.Level),
                 OwnedWidth = self.OwnedCardWidth,
-                BagWidth = self.OwnedCardWidth - self.BattleCardWidth,
+                BagWidth = self.BagCardWidth,
                 BagCapacity = LoadoutRules.BagCapacity,
                 ShardThreshold = NormaRules.GetThreshold(self.Level, NormaType.Shard),
                 WinThreshold = NormaRules.GetThreshold(self.Level, NormaType.Wins),
@@ -354,7 +354,7 @@ namespace ProjectArtOfAll.Core.Match
                     player.CurrentNode,
                     player.Norma,
                     player.BattleCardWidth,
-                    player.OwnedCardWidth - player.BattleCardWidth,
+                    player.BagCardWidth,
                     player.OwnedCards.Count - player.BattleCards.Count,
                     player.BattleCards.Select(card => card.Definition));
                 opponents.Add(opponent);
