@@ -359,6 +359,29 @@ namespace ProjectArtOfAll.Core.Cards
         /// <summary>设计稿原文的逐行描述；表里没有的牌返回空数组。</summary>
         public static IReadOnlyList<string> Lines(CardDefinition card)
         {
+            IReadOnlyList<string> raw = RawLines(card);
+            if (raw.Count == 0)
+            {
+                return raw;
+            }
+
+            // 设计稿里整行以「（」开头的括注是写给我看的解释（举例子、规则示例、词条补充），
+            // 不摆到玩家读的正文里；词条含义由悬停窗底部的词条区负责。
+            List<string> kept = new List<string>(raw.Count);
+            for (int index = 0; index < raw.Count; index++)
+            {
+                if (!IsExplanation(raw[index]))
+                {
+                    kept.Add(raw[index]);
+                }
+            }
+
+            return kept.Count > 0 ? kept : raw;
+        }
+
+        /// <summary>设计稿原文的完整行（含解释性括注），供核对表与断言使用。</summary>
+        public static IReadOnlyList<string> RawLines(CardDefinition card)
+        {
             if (card == null)
             {
                 return Empty;
@@ -367,6 +390,11 @@ namespace ProjectArtOfAll.Core.Cards
             string baseId = string.IsNullOrEmpty(card.BaseId) ? card.Id : card.BaseId;
             Dictionary<string, string[]> table = card.IsUpgraded ? UpgradedLines : BaseLines;
             return table.TryGetValue(baseId, out string[] lines) ? lines : Empty;
+        }
+
+        private static bool IsExplanation(string line)
+        {
+            return line.Length > 0 && line[0] == '（';
         }
 
         /// <summary>设计稿原文（多行）；表里没有的牌返回空串。</summary>

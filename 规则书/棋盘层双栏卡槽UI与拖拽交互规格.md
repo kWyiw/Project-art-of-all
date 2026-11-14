@@ -344,7 +344,7 @@ CanPlace(card, zone, index):
 └───────────────────────────────┘
 ```
 
-**UI-6.2.1** 排版四段：**标题行（中文名 + 右上角 `Nc` 徽标 + 英文名灰字）→ 数值行（`CardText.Meta` + 价值 + 生效范围）→ 效果行（垫一层浅色内框，逐行照抄设计稿原文）→ 词条解释**。效果行**不做任何简化或改写**：`Assets/Game/Core/Cards/CardDesignText.cs` 里按卡 id 存 `卡牌设计稿/第一套卡牌.txt` 的原文，`/` 表示升级后的数值（基础版取前段、升级版取后段），换行保留成子项，末行若是 `（关键词：…）` 这样的括注也原样显示。词条解释只用灰字，在效果行出现过的关键词逐条给出、最多 2 条，**已经在括号里解释过的跳过**（`CardTooltipText` 的 `ExplainedInBody`）。颜色由关键词表统一给出（实现见 `Assets/Scripts/Board/CardTooltip.cs`）。
+**UI-6.2.1** 排版四段：**标题行（中文名 + 右上角 `Nc` 徽标 + 英文名灰字）→ 数值行（`CardText.Meta` + 价值 + 生效范围）→ 效果行（垫一层浅色内框，逐行照抄设计稿原文）→ 词条解释**。效果行**不做任何简化或改写**：`Assets/Game/Core/Cards/CardDesignText.cs` 里按卡 id 存 `卡牌设计稿/第一套卡牌.txt` 的原文，`/` 表示升级后的数值（基础版取前段、升级版取后段），换行保留成子项。**整行以 `（` 开头的括注是写给实现者的解释（举例子、规则示例、词条补充），不进玩家读的正文**（`CardDesignText.Lines` 会滤掉，原文留在 `RawLines` 供核对表使用）；词条含义由末尾的词条区负责解释。词条解释只用灰字，在效果行出现过的关键词逐条给出、最多 4 条（`CardTooltipText` 的 `ExplainedInBody` 跳过正文里已经直接解释过的词）。颜色由关键词表统一给出（实现见 `Assets/Scripts/Board/CardTooltip.cs`）。
 **UI-6.2.2** 跟随指针偏移 16px（实现为 40/32），靠近屏幕右/下边时翻转到另一侧；tooltip 没有延迟也没有淡入（UI-6.1.2 已经改成扫到即显示）。已经弹出的面板在同一张牌上只挪位置不重建；tooltip 挂到所在画布的根 `RectTransform` 上，商店、奖励选择、模拟战斗、卡槽带共用同一实例。
 **UI-6.2.3** 拖拽中**不显示** tooltip（否则跟着卡飞、互相遮挡）。
 
@@ -361,7 +361,7 @@ CanPlace(card, zone, index):
 | 生效状态 | `IsActiveInCurrentContext`（背包牌是否 `BagAndBattle`） |
 
 **UI-6.3.2** 效果行用 `{0}` 占位符渲染数值，例如 `"中毒 {value}"` + `value=16`。**新增一张牌不需要改 UI 代码**——这条是防止"卡越做越多、tooltip 写死的地方越来越多"的唯一办法。
-**UI-6.3.3** 第一套卡牌（35 张基础 + 33 张升级版）的效果行**不走 `CardDefinition` 拼装，而是直接读设计稿原文**（`CardDesignText`），因为设计稿里有示例段与括注，拼装版本读起来会丢信息。`CardText.Description` = 设计稿原文 + `BoardNote`（棋盘层被动，如「出售时给最左侧的食物 +1 永久修正」）；只有设计稿里没有的自定义牌（`mystery_drink`）才回退到 `CardText.GeneratedDescription` 的自动拼装。数据驱动那条规则仍然成立：自动拼装路径依旧是「新增一张牌不改 UI 代码」。
+**UI-6.3.3** 第一套卡牌（35 张基础 + 33 张升级版）的效果行**不走 `CardDefinition` 拼装，而是直接读设计稿原文**（`CardDesignText`），因为设计稿里的措辞就是玩家该看到的版本，拼装会改写措辞。设计稿中以「（」开头的整行是写给实现者的解释，`CardDesignText.Lines` 不输出它们（`RawLines` 保留原文）。`CardText.Description` = 设计稿原文 + `BoardNote`（棋盘层被动，如「出售时给最左侧的食物 +1 永久修正」）；只有设计稿里没有的自定义牌（`mystery_drink`）才回退到 `CardText.GeneratedDescription` 的自动拼装。数据驱动那条规则仍然成立：自动拼装路径依旧是「新增一张牌不改 UI 代码」。
 
 ### 6.4 状态标（战斗中）
 

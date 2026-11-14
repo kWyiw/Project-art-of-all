@@ -171,10 +171,10 @@ namespace ProjectArtOfAll.Board
                 }
             }
 
-            if (glossary.Count > 2)
+            if (glossary.Count > 4)
             {
-                // 规格书 UI-6.2.1：词条解释最多 2 条，其余交给详情面板。
-                glossary = glossary.GetRange(0, 2);
+                // 规格书 UI-6.2.1：词条解释最多 4 条（设计稿的括注不再进正文，词条区负责解释）。
+                glossary = glossary.GetRange(0, 4);
             }
 
             if (glossary.Count > 0)

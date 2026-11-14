@@ -322,10 +322,19 @@ namespace ProjectArtOfAll.Core.Checks
                    CardText.Description(lighterPlus).Contains("1d6"),
                 "Design text must resolve the slash per card tier.");
 
+            // 设计稿里整行以「（」开头的括注是写给实现者的解释（举例子、规则示例），
+            // 不进玩家看的正文；词条含义交给悬停窗底部的词条区。
             CardDefinition cocoon = CardDatabase.Instance.Get("nuclear_water");
-            Assert(CardDesignText.Lines(cocoon).Count == 2 &&
-                   CardDesignText.Lines(cocoon)[1].StartsWith("（中毒：", StringComparison.Ordinal),
-                "Design notes in parentheses must survive verbatim.");
+            Assert(CardDesignText.RawLines(cocoon).Count == 2 &&
+                   CardDesignText.RawLines(cocoon)[1].StartsWith("（中毒：", StringComparison.Ordinal),
+                "The design notes must still be kept verbatim in the raw table.");
+            Assert(CardDesignText.Lines(cocoon).Count == 1 &&
+                   !CardText.Description(cocoon).Contains("（", StringComparison.Ordinal),
+                "Explanatory parenthetical lines must not reach the player-facing text.");
+
+            CardDefinition campfireCard = CardDatabase.Instance.Get("campfire");
+            Assert(!CardText.Description(campfireCard).Contains("例如你上场的牌是", StringComparison.Ordinal),
+                "Worked examples from the design document must not be printed.");
 
             CardDefinition passiveCard = CardDatabase.Instance.Get("whetstone");
             Assert(CardText.Cooldown(passiveCard) == "被动",
@@ -420,6 +429,14 @@ namespace ProjectArtOfAll.Core.Checks
                 "The shop / reward pool must never list upgraded cards.");
             Assert(catalog.AllDefinitions.Count == 68,
                 "Every upgradable base card must ship its upgraded twin.");
+
+            // 商店 / 奖励的随机池直接取 catalog.All，只滤掉事件专属牌；任何新牌掉队都会在这里炸。
+            foreach (CardDefinition card in catalog.All)
+            {
+                bool excluded = MatchEventCatalog.IsEventOnlyCard(card.Id);
+                Assert(!excluded || card.Id == MatchEventCatalog.MysteryDrinkCardId,
+                    $"Only the event card may stay out of the shop / reward pool (got {card.Id}).");
+            }
             Assert(catalog.Get("crowbar").CooldownTicks == 180,
                 "Crowbar must use a 180-tick cooldown.");
             Assert(catalog.Get("crowbar").SlotSize == 1,

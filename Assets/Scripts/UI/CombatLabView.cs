@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using ProjectArtOfAll.Board;
@@ -183,8 +184,27 @@ namespace ProjectArtOfAll.UI
         private void BindCardLibrary()
         {
             Transform library = transform.Find("CardLibrary");
+
+            // 场景里烤进去的卡牌库可能是旧卡表：卡表一旦增删，烤进去的行就凑不齐，
+            // 新牌在模拟战斗里直接缺席。这里发现对不上就按数据库重建。
+            if (library != null && !LibraryMatchesCatalog(library))
+            {
+                if (Application.isPlaying)
+                {
+                    Destroy(library.gameObject);
+                }
+                else
+                {
+                    DestroyImmediate(library.gameObject);
+                }
+
+                BuildCardLibrary();
+                return;
+            }
+
             if (library == null)
             {
+                BuildCardLibrary();
                 return;
             }
 
@@ -219,6 +239,35 @@ namespace ProjectArtOfAll.UI
                 BindRowButton(row, "Right", () => AddCard(card, false));
                 index++;
             }
+        }
+
+        /// <summary>场景里烤的卡牌库是否正好覆盖当前卡表（按 id 一一对应）。</summary>
+        private static bool LibraryMatchesCatalog(Transform library)
+        {
+            HashSet<string> present = new HashSet<string>(StringComparer.Ordinal);
+            foreach (Transform row in library)
+            {
+                if (row.name.StartsWith("Card_", StringComparison.Ordinal))
+                {
+                    present.Add(row.name.Substring("Card_".Length));
+                }
+            }
+
+            IReadOnlyList<CardDefinition> cards = CardDatabase.Instance.All;
+            if (present.Count != cards.Count)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < cards.Count; index++)
+            {
+                if (!present.Contains(cards[index].Id))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static void BindRowButton(
@@ -289,21 +338,24 @@ namespace ProjectArtOfAll.UI
 
         private void BuildCardLibrary()
         {
-            RectTransform panel = CreatePanel("CardLibrary", 40f, 118f, 560f, 880f);
-
-            AddText(panel, "Header", "卡牌库", 20f, 14f, 300f, 32f,
-                24, FontStyle.Bold, TextAnchor.MiddleLeft, Brass);
-            AddText(panel, "Sub", "直接拖进战斗栏，或用「左」「右」按钮快速加入；同一张可以重复拿",
-                20f, 46f, 520f, 24f, 14, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
-
             List<CardDefinition> cards = CardDatabase.Instance.All
                 .OrderBy(card => card.SlotSize)
                 .ThenBy(card => card.DisplayName)
                 .ToList();
 
-            const float rowHeight = 50f;
+            // 行数由卡表决定：35 张牌两列排下去要 18 行，写死高度会把最后几张挤出面板。
+            const float rowHeight = 46f;
             const float columnWidth = 262f;
-            float listTop = 82f;
+            const float listTop = 78f;
+            int rows = Mathf.Max(1, (cards.Count + 1) / 2);
+            float panelHeight = listTop + rows * rowHeight + 16f;
+
+            RectTransform panel = CreatePanel("CardLibrary", 40f, 118f, 560f, panelHeight);
+
+            AddText(panel, "Header", "卡牌库", 20f, 14f, 300f, 32f,
+                24, FontStyle.Bold, TextAnchor.MiddleLeft, Brass);
+            AddText(panel, "Sub", "直接拖进战斗栏，或用「左」「右」按钮快速加入；同一张可以重复拿",
+                20f, 46f, 520f, 24f, 14, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
 
             for (int index = 0; index < cards.Count; index++)
             {
