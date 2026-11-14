@@ -298,8 +298,8 @@ namespace ProjectArtOfAll.Core.Checks
                 "Crowbar must read as a 3-second active card.");
             Assert(CardText.Meta(crowbar) == "1c · 3 秒 · 武器 · 工具",
                 "Crowbar meta line must carry size, cooldown and both tags.");
-            Assert(CardText.Description(crowbar).Contains("伤害"),
-                "Crowbar must describe its damage.");
+            Assert(CardText.Description(crowbar).Contains("主动：造成1D6伤害。"),
+                "Crowbar must quote the design text verbatim.");
 
             CardDefinition snake = CardDatabase.Instance.Get("ouroboros");
             Assert(CardText.Description(snake).Contains("100") &&
@@ -307,12 +307,25 @@ namespace ProjectArtOfAll.Core.Checks
                 "自噬之蛇 must read as a +100 value aura.");
 
             CardDefinition fire = CardDatabase.Instance.Get("campfire");
-            Assert(CardText.Description(fire).Contains("光环"),
-                "Campfire must describe its aura.");
+            Assert(CardText.Description(fire).Contains("多重释放"),
+                "Campfire must quote its design text (multi-cast aura).");
 
             CardDefinition tape = CardDatabase.Instance.Get("duct_tape");
             Assert(CardText.Description(tape).Contains("被动"),
                 "Duct tape must describe its passive.");
+
+            // 卡面不写效果，正文只在悬停窗里显示：设计稿原文逐行照抄，升级版取斜杠后的数值。
+            CardDefinition lighterBase = CardDatabase.Instance.Get("lighter");
+            CardDefinition lighterPlus = CardDatabase.Instance.Get("lighter+");
+            Assert(CardDesignText.Lines(lighterBase).Count == 1 &&
+                   CardText.Description(lighterBase).Contains("1D4") &&
+                   CardText.Description(lighterPlus).Contains("1d6"),
+                "Design text must resolve the slash per card tier.");
+
+            CardDefinition cocoon = CardDatabase.Instance.Get("nuclear_water");
+            Assert(CardDesignText.Lines(cocoon).Count == 2 &&
+                   CardDesignText.Lines(cocoon)[1].StartsWith("（中毒：", StringComparison.Ordinal),
+                "Design notes in parentheses must survive verbatim.");
 
             CardDefinition passiveCard = CardDatabase.Instance.Get("whetstone");
             Assert(CardText.Cooldown(passiveCard) == "被动",
@@ -1009,8 +1022,9 @@ namespace ProjectArtOfAll.Core.Checks
                 "A second 打火机 must fuse into the one you already own.");
             Assert(first.Definition.Id == "lighter+" && first.Definition.DisplayName == "打火机+",
                 "The fused card must become 打火机+.");
-            Assert(CardText.Description(first.Definition).Contains("1d6") &&
-                   CardText.Description(lighter).Contains("1d4"),
+            Assert(
+                CardText.Description(first.Definition).Contains("1d6", StringComparison.OrdinalIgnoreCase) &&
+                CardText.Description(lighter).Contains("1d4", StringComparison.OrdinalIgnoreCase),
                 "打火机+ must burn harder than 打火机 (1d4 -> 1d6).");
 
             CardUpgradedEvent upgradedEvent = controller.Events.History

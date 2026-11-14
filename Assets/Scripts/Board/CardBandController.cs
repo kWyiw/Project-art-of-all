@@ -660,17 +660,17 @@ namespace ProjectArtOfAll.Board
                 TextAnchor.UpperLeft);
             meta.color = inBattle ? Brass : MutedColor;
 
-            Text body = BoardHudOverlayFactory.CreateText(
+            // 卡面不写效果：完整效果只在悬停信息窗里显示（CardTooltip 用设计稿原文）。
+            BoardHudOverlayFactory.CreateText(
                 widget.transform,
                 "Body",
-                CardText.Description(card.Definition),
+                string.Empty,
                 font,
                 Mathf.Max(10, fontSize - 5),
                 FontStyle.Normal,
                 new Vector2(10f, -(8f + fontSize * 2f + 22f)),
                 new Vector2(width - 20f, CardHeight - fontSize * 2f - 46f),
                 TextAnchor.UpperLeft);
-            body.color = new Color(0.80f, 0.81f, 0.78f, 1f);
 
             CardBandDragHandler drag = widget.AddComponent<CardBandDragHandler>();
             drag.Bind(this, card, inBattle);

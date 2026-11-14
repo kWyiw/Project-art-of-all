@@ -12,8 +12,8 @@ using UnityEngine.UI;
 /// </summary>
 public static class CardTooltipPreview
 {
-    private const int Width = 900;
-    private const int Height = 760;
+    private const int Width = 1000;
+    private const int Height = 820;
     private const int UiLayer = 5;
 
     [MenuItem("Tools/Preview Card Tooltip")]
@@ -29,6 +29,8 @@ public static class CardTooltipPreview
         Render("_tmp/tooltip_preview_weapon.png", "shredder");
         Render("_tmp/tooltip_preview_board.png", "fortune_cookie");
         Render("_tmp/tooltip_preview_upgraded.png", "lighter+");
+        Render("_tmp/tooltip_preview_long.png", "campfire");
+        Render("_tmp/tooltip_preview_molotov.png", "molotov");
     }
 
     private static void Render(string path, string cardId)

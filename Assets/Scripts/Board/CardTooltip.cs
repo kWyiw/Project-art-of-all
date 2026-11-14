@@ -15,7 +15,8 @@ namespace ProjectArtOfAll.Board
     /// </summary>
     public sealed class CardTooltipView : MonoBehaviour
     {
-        private const float PanelWidth = 736f;
+        // 设计稿原文有长句（火堆的举例段），窄面板会把「）」这类收尾符号挤成孤行，所以给到 860。
+        private const float PanelWidth = 860f;
         private const float PaddingX = 32f;
         private const float PaddingTop = 28f;
         private const float PaddingBottom = 28f;
@@ -98,75 +99,78 @@ namespace ProjectArtOfAll.Board
             AddText("Meta", meta, 24, MetaColor, FontStyle.Normal, 0f,
                 contentWidth, 0f, TextAnchor.UpperLeft);
 
-            bool hasEffects = card.ActiveEffects != null && card.ActiveEffects.Count > 0;
-            List<string> passiveRows = new List<string>();
-            if (card.Passives != null)
+            List<string> bodyRows = new List<string>();
+            IReadOnlyList<string> designLines = CardDesignText.Lines(card);
+            if (designLines.Count > 0)
             {
-                foreach (PassiveDefinition passive in card.Passives)
+                // 设计稿原文逐行照抄：不缩写、不改口径（斜杠前的数值是基础版、斜杠后是升级版）。
+                bodyRows.AddRange(designLines);
+            }
+            else
+            {
+                // 事件专属牌等没有设计稿原文的牌：按效果数据拼出正文。
+                if (card.ActiveEffects != null)
                 {
-                    // Sold-scope passives are restated in board-layer terms by CardText.BoardNote.
-                    if (passive.Trigger == PassiveTrigger.CardSold)
+                    foreach (CardEffect effect in card.ActiveEffects)
                     {
-                        continue;
+                        bodyRows.Add(CardText.Effect(effect));
                     }
-
-                    passiveRows.Add(CardText.Passive(passive));
                 }
-            }
 
-            string boardNote = CardText.BoardNote(card);
-            bool hasBoardNote = !string.IsNullOrEmpty(boardNote);
-            bool hasPassives = (card.Auras != null && card.Auras.Count > 0) || passiveRows.Count > 0;
-
-            float effectsTop = cursorY;
-
-            if (hasEffects)
-            {
-                cursorY += 16f;
-                foreach (CardEffect effect in card.ActiveEffects)
-                {
-                    AddBulletRow(CardTooltipText.Colorize(CardText.Effect(effect)));
-                }
-            }
-
-            if (hasPassives)
-            {
-                cursorY += hasEffects ? 12f : 16f;
                 if (card.Auras != null)
                 {
                     foreach (AuraDefinition aura in card.Auras)
                     {
-                        AddBulletRow(CardTooltipText.Colorize(
-                            string.Concat("光环 · ", CardText.Aura(aura))));
+                        bodyRows.Add(string.Concat("光环 · ", CardText.Aura(aura)));
                     }
                 }
 
-                foreach (string passiveRow in passiveRows)
+                if (card.Passives != null)
                 {
-                    AddBulletRow(CardTooltipText.Colorize(
-                        string.Concat("被动 · ", passiveRow)));
+                    foreach (PassiveDefinition passive in card.Passives)
+                    {
+                        if (passive.Trigger == PassiveTrigger.CardSold)
+                        {
+                            continue;
+                        }
+
+                        bodyRows.Add(string.Concat("被动 · ", CardText.Passive(passive)));
+                    }
                 }
+
+                bodyRows.Add(CardText.BoardNote(card));
             }
 
-            if (hasBoardNote)
-            {
-                cursorY += (hasEffects || hasPassives) ? 12f : 16f;
-                AddBulletRow(CardTooltipText.Colorize(boardNote));
-            }
+            bodyRows.RemoveAll(string.IsNullOrEmpty);
 
-            if (hasEffects || hasPassives || hasBoardNote)
+            float effectsTop = cursorY;
+            if (bodyRows.Count > 0)
             {
+                cursorY += 16f;
+                foreach (string row in bodyRows)
+                {
+                    AddBulletRow(CardTooltipText.Colorize(row));
+                }
+
                 AddInnerBox(effectsTop + 4f, cursorY - 8f);
             }
-
-            if (!hasEffects && !hasPassives && !hasBoardNote)
+            else
             {
                 AddDivider(12f);
                 AddText("Plain", "这张牌没有触发效果。", 26, BodyColor, FontStyle.Normal, 0f,
                     contentWidth, 16f, TextAnchor.UpperLeft);
             }
 
-            List<string> glossary = CardTooltipText.Glossary(card);
+            // 设计稿正文里已经用括号解释过的词条不再重复解释。
+            List<string> glossary = new List<string>();
+            foreach (string line in CardTooltipText.Glossary(card))
+            {
+                if (!ExplainedInBody(bodyRows, line))
+                {
+                    glossary.Add(line);
+                }
+            }
+
             if (glossary.Count > 2)
             {
                 // 规格书 UI-6.2.1：词条解释最多 2 条，其余交给详情面板。
@@ -282,16 +286,46 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
-            BoardHudOverlayFactory.CreateBar(
+            float top = cursorY;
+            Text text = AddText("Row", content, 26, BodyColor, FontStyle.Normal, 10f,
+                contentWidth - 32f, 24f, TextAnchor.UpperLeft);
+            if (text == null)
+            {
+                return;
+            }
+
+            // 正文可能折行，左侧的色条要跟着文字高度走。
+            float barBottom = Mathf.Max(top + 8f + 20f, cursorY - 8f);
+            generated.Add(BoardHudOverlayFactory.CreateBar(
                 transform,
                 "Bullet",
                 new Vector2(0f, 1f),
                 new Vector2(0f, 1f),
-                new Vector2(PaddingX, -(cursorY + 8f)),
-                new Vector2(PaddingX + 6f, -(cursorY + 34f)),
-                BulletColor);
-            AddText("Row", content, 26, BodyColor, FontStyle.Normal, 10f,
-                contentWidth - 32f, 24f, TextAnchor.UpperLeft);
+                new Vector2(PaddingX, -(top + 8f)),
+                new Vector2(PaddingX + 6f, -barBottom),
+                BulletColor));
+        }
+
+        /// <summary>正文里已经用括号解释过这个关键词时，末尾的词条表不再重复。</summary>
+        private static bool ExplainedInBody(List<string> bodyRows, string glossaryLine)
+        {
+            int colon = glossaryLine.IndexOf('：');
+            string keyword = colon > 0 ? glossaryLine.Substring(0, colon) : glossaryLine;
+            if (keyword.Length == 0)
+            {
+                return false;
+            }
+
+            foreach (string row in bodyRows)
+            {
+                int paren = row.IndexOf('（');
+                if (paren >= 0 && row.IndexOf(keyword, paren) >= 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private Text AddText(

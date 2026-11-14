@@ -343,8 +343,18 @@ namespace ProjectArtOfAll.Core.Cards
             }
         }
 
-        /// <summary>效果正文，逗号分隔；没有效果时返回空串。</summary>
+        /// <summary>
+        /// 效果正文：优先用设计稿原文（<see cref="CardDesignText"/>，多行）；表里没有的牌
+        /// （事件专属牌）退回按效果数据拼出来的单行文案。
+        /// </summary>
         public static string Description(CardDefinition card)
+        {
+            string design = CardDesignText.Description(card);
+            return design.Length > 0 ? design : GeneratedDescription(card);
+        }
+
+        /// <summary>按效果数据拼出来的一行正文，只用于兜底。</summary>
+        public static string GeneratedDescription(CardDefinition card)
         {
             if (card == null)
             {
