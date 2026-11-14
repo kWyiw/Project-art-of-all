@@ -171,8 +171,7 @@ namespace ProjectArtOfAll.Board
                         row,
                         column,
                         Parse(code),
-                        code == 'H' ? HomeOwnerFor(row, column) : -1,
-                        IsStraightOnly(row, column)));
+                        code == 'H' ? HomeOwnerFor(row, column) : -1));
                 }
             }
 
@@ -217,31 +216,6 @@ namespace ProjectArtOfAll.Board
                 teleports,
                 edges,
                 1f);
-        }
-
-        /// <summary>
-        /// 这四块地虽然有三条连线，但不再算岔路口，只能直行：从它们右拐会把人带回
-        /// 顺时针方向，而棋盘约定只能逆时针推进（R-MAP-002）。
-        /// </summary>
-        private static readonly MapCell[] StraightOnlyCells =
-        {
-            new MapCell(2, 4),
-            new MapCell(3, 7),
-            new MapCell(5, 3),
-            new MapCell(6, 6),
-        };
-
-        private static bool IsStraightOnly(int row, int column)
-        {
-            foreach (MapCell cell in StraightOnlyCells)
-            {
-                if (cell.Row == row && cell.Column == column)
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         /// <summary>The four home squares own one seat each, in the order the sketch numbers them.</summary>

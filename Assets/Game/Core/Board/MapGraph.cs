@@ -83,43 +83,77 @@ namespace ProjectArtOfAll.Core.Board
         }
 
         /// <summary>
-        /// Edges a player may take when arriving at <paramref name="nodeId"/> from
-        /// <paramref name="previousNodeId"/>. Walking straight back the way you came is
-        /// not a choice (R-MOVE-001); at a dead end the only edge is still returned.
-        /// </summary>
-        /// <summary>
         /// Where a player may go after arriving at <paramref name="nodeId"/> from
         /// <paramref name="previousNodeId"/>.
-        /// R-MAP-002：走廊（只有前后两格）只有一个前进方向；岔路口（三岔及以上）只能
-        /// **直行或右拐**，两者都在时由玩家选（R-MOVE-004）；没有直行时直接右拐，不询问；
-        /// 连右拐都没有（地图上出现只能左拐的形状）时退回唯一可行的方向，保证不会卡死。
+        /// R-MOVE-004：只要路径经过分岔路，就提供所有非回头方向供玩家选择。
+        /// R-MAP-002：普通走廊没有选择，只沿唯一的前进方向继续。
         /// R-MOVE-001：原路折返永远不是选项。
         /// </summary>
         public IReadOnlyList<int> LegalNextNodes(int nodeId, int previousNodeId)
         {
             MapNode node = GetNode(nodeId);
-            if (node.OutEdges.Count <= 1)
-            {
-                return node.OutEdges;
-            }
-
-            if (previousNodeId < 0)
-            {
-                return node.OutEdges;
-            }
-
-            MapNode previous = GetNode(previousNodeId);
-            if (!node.HasGridPosition || !previous.HasGridPosition)
+            MapNode previous = previousNodeId >= 0
+                ? GetNode(previousNodeId)
+                : null;
+            if (!node.HasGridPosition ||
+                (previous != null && !previous.HasGridPosition))
             {
                 return WithoutPrevious(node, previousNodeId);
             }
 
+            if (node.IsFork)
+            {
+                int forkForwardRow = node.GridRow - previous.GridRow;
+                int forkForwardColumn = node.GridColumn - previous.GridColumn;
+                List<int> forkChoices = new List<int>(2);
+                foreach (int edge in node.OutEdges)
+                {
+                    if (edge == previousNodeId)
+                    {
+                        continue;
+                    }
+
+                    MapNode target = GetNode(edge);
+                    int stepRow = target.GridRow - node.GridRow;
+                    int stepColumn = target.GridColumn - node.GridColumn;
+                    bool isStraight =
+                        stepRow == forkForwardRow &&
+                        stepColumn == forkForwardColumn;
+                    bool isLeftTurn =
+                        stepRow == -forkForwardColumn &&
+                        stepColumn == forkForwardRow;
+                    if (isStraight || isLeftTurn)
+                    {
+                        forkChoices.Add(edge);
+                    }
+                }
+
+                return forkChoices.Count > 0
+                    ? forkChoices.AsReadOnly()
+                    : WithoutPrevious(node, previousNodeId);
+            }
+
+            if (previous == null)
+            {
+                List<int> counterClockwise = new List<int>(node.OutEdges.Count);
+                foreach (int edge in node.OutEdges)
+                {
+                    if (IsCounterClockwiseStep(node, GetNode(edge)))
+                    {
+                        counterClockwise.Add(edge);
+                    }
+                }
+
+                return counterClockwise.Count > 0
+                    ? counterClockwise.AsReadOnly()
+                    : node.OutEdges;
+            }
+
             int forwardRow = node.GridRow - previous.GridRow;
             int forwardColumn = node.GridColumn - previous.GridColumn;
-
             List<int> straight = new List<int>(2);
-            List<int> rightTurn = new List<int>(2);
-            List<int> others = new List<int>(2);
+            List<int> leftTurn = new List<int>(2);
+            List<int> fallback = new List<int>(2);
 
             foreach (int edge in node.OutEdges)
             {
@@ -131,37 +165,28 @@ namespace ProjectArtOfAll.Core.Board
                 MapNode target = GetNode(edge);
                 if (!target.HasGridPosition)
                 {
-                    others.Add(edge);
+                    fallback.Add(edge);
                     continue;
                 }
 
                 int stepRow = target.GridRow - node.GridRow;
                 int stepColumn = target.GridColumn - node.GridColumn;
-
                 if (stepRow == forwardRow && stepColumn == forwardColumn)
                 {
                     straight.Add(edge);
                 }
-                else if (stepRow == forwardColumn && stepColumn == -forwardRow)
+                else if (stepRow == -forwardColumn && stepColumn == forwardRow)
                 {
-                    rightTurn.Add(edge);
+                    leftTurn.Add(edge);
                 }
                 else
                 {
-                    others.Add(edge);
+                    fallback.Add(edge);
                 }
             }
 
-            // 被标成「不算岔路口」的格子只能直行：这些格子右拐会把人带回顺时针方向，
-            // 而棋盘约定只能逆时针推进（R-MAP-002）。
             if (node.ForceStraight && straight.Count > 0)
             {
-                return straight.AsReadOnly();
-            }
-
-            if (straight.Count > 0 && rightTurn.Count > 0)
-            {
-                straight.AddRange(rightTurn);
                 return straight.AsReadOnly();
             }
 
@@ -170,14 +195,14 @@ namespace ProjectArtOfAll.Core.Board
                 return straight.AsReadOnly();
             }
 
-            if (rightTurn.Count > 0)
+            if (leftTurn.Count > 0)
             {
-                return rightTurn.AsReadOnly();
+                return leftTurn.AsReadOnly();
             }
 
-            if (others.Count > 0)
+            if (fallback.Count > 0)
             {
-                return others.AsReadOnly();
+                return fallback.AsReadOnly();
             }
 
             return node.OutEdges;
@@ -190,6 +215,29 @@ namespace ProjectArtOfAll.Core.Board
                 .ToList();
 
             return legal.Count == 0 ? node.OutEdges : legal.AsReadOnly();
+        }
+
+        /// <summary>
+        /// True when moving from <paramref name="fromNodeId"/> to
+        /// <paramref name="toNodeId"/> advances the polar angle around the board centre.
+        /// A half-turn through the centre still counts as forward progress.
+        /// </summary>
+        public bool IsCounterClockwiseStep(int fromNodeId, int toNodeId)
+        {
+            return IsCounterClockwiseStep(GetNode(fromNodeId), GetNode(toNodeId));
+        }
+
+        private bool IsCounterClockwiseStep(MapNode from, MapNode to)
+        {
+            if (!from.HasGridPosition || !to.HasGridPosition)
+            {
+                return false;
+            }
+
+            double delta = NormalizeDegrees(
+                PolarAngle(to.GridRow, to.GridColumn) -
+                PolarAngle(from.GridRow, from.GridColumn));
+            return delta > 0.0001 && delta <= 180.0001;
         }
 
         /// <summary>
@@ -229,7 +277,7 @@ namespace ProjectArtOfAll.Core.Board
 
                 double delta = NormalizeDegrees(
                     PolarAngle(neighbour.GridRow, neighbour.GridColumn) - sourceAngle);
-                if (delta > 0.0001 && delta < bestDelta)
+                if (delta > 0.0001 && delta <= 180.0001 && delta < bestDelta)
                 {
                     bestDelta = delta;
                     best = edge;
@@ -253,22 +301,6 @@ namespace ProjectArtOfAll.Core.Board
             }
 
             return value;
-        }
-
-        private bool TryDirection(int fromNodeId, int toNodeId, out int row, out int column)
-        {
-            MapNode from = GetNode(fromNodeId);
-            MapNode to = GetNode(toNodeId);
-            row = 0;
-            column = 0;
-            if (!from.HasGridPosition || !to.HasGridPosition)
-            {
-                return false;
-            }
-
-            row = to.GridRow - from.GridRow;
-            column = to.GridColumn - from.GridColumn;
-            return row != 0 || column != 0;
         }
 
         public int StepsBetween(int startNodeId, int targetNodeId)

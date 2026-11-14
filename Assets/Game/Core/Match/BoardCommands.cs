@@ -12,6 +12,26 @@ namespace ProjectArtOfAll.Core.Match
         public int PlayerId { get; }
     }
 
+    /// <summary>Editor/playtest-only roll that fixes the current movement range to 1–12.</summary>
+    public sealed class DebugRollCommand : IMatchCommand
+    {
+        public DebugRollCommand(int playerId, int value)
+        {
+            if (value < 1 || value > 12)
+            {
+                throw new System.ArgumentOutOfRangeException(
+                    nameof(value),
+                    "Debug roll must be between 1 and 12.");
+            }
+
+            PlayerId = playerId;
+            Value = value;
+        }
+
+        public int PlayerId { get; }
+        public int Value { get; }
+    }
+
     public sealed class SetNormaCommand : IMatchCommand
     {
         public SetNormaCommand(int playerId, NormaType norma)

@@ -116,6 +116,9 @@ namespace ProjectArtOfAll.Core.Match
                 case RollCommand roll:
                     HandleRoll(roll);
                     break;
+                case DebugRollCommand debugRoll:
+                    HandleDebugRoll(debugRoll);
+                    break;
                 case MoveCommand move:
                     HandleMove(move);
                     break;
@@ -205,14 +208,40 @@ namespace ProjectArtOfAll.Core.Match
                 return;
             }
 
-            State.LastRoll = random.NextD6();
-            Publish(new DiceRolledEvent(command.PlayerId, State.LastRoll));
+            ApplyRoll(command.PlayerId, random.NextD6());
+        }
+
+        private void HandleDebugRoll(DebugRollCommand command)
+        {
+            ValidateCurrentPlayer(command.PlayerId);
+            if (State.Phase != MatchPhase.AwaitRoll)
+            {
+                throw new InvalidOperationException(
+                    $"DebugRollCommand is invalid during phase {State.Phase}.");
+            }
+
+            MatchPlayerState roller = State.CurrentPlayer;
+            if (roller.ImmobileRounds > 0)
+            {
+                roller.ImmobileRounds--;
+                Publish(new PlayerImmobilizedEvent(roller.Id, roller.ImmobileRounds));
+                EndCurrentTurn();
+                return;
+            }
+
+            ApplyRoll(command.PlayerId, command.Value);
+        }
+
+        private void ApplyRoll(int playerId, int value)
+        {
+            State.LastRoll = value;
+            Publish(new DiceRolledEvent(playerId, State.LastRoll));
 
             currentCandidates.Clear();
             currentCandidates.AddRange(
                 MovementSolver.FindStopCandidates(
                     graph,
-                    command.PlayerId,
+                    playerId,
                     State.CurrentPlayer.CurrentNode,
                     State.CurrentPlayer.LastArrivalNode,
                     State.LastRoll,

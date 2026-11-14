@@ -215,15 +215,18 @@ namespace ProjectArtOfAll.Core.Board
         /// <paramref name="forcedFirstNodeId"/> and spends every remaining step walking.
         /// The fork buttons use it to light up the tile the player will actually land on
         /// instead of the first tile behind the junction. Later junctions are walked
-        /// straight-first (then right, then the only edge) because the highlight cannot ask
-        /// the player twice in advance; the roll itself still offers those choices.
+        /// straight-first (then left, then the only edge) because the highlight cannot ask
+        /// the player twice in advance; the roll itself still offers those choices. When
+        /// <paramref name="stopAtWarp"/> is true, the preview ends on the first Warp tile so
+        /// the UI never reveals a landing beyond an unresolved teleport.
         /// </summary>
         public static int PredictLanding(
             MapGraph graph,
             int startNodeId,
             int previousNodeId,
             int steps,
-            int forcedFirstNodeId = -1)
+            int forcedFirstNodeId = -1,
+            bool stopAtWarp = false)
         {
             if (graph == null)
             {
@@ -255,12 +258,16 @@ namespace ProjectArtOfAll.Core.Board
                 int next = PreferredNext(graph, current, previous, legal);
                 previous = current;
                 current = next;
+                if (stopAtWarp && graph.GetNode(current).TileType == TileType.Warp)
+                {
+                    break;
+                }
             }
 
             return current;
         }
 
-        /// <summary>Straight first, then a right turn, otherwise whatever is left.</summary>
+        /// <summary>Straight first, then a left turn, otherwise whatever is left.</summary>
         private static int PreferredNext(
             MapGraph graph,
             int currentNodeId,
@@ -292,7 +299,7 @@ namespace ProjectArtOfAll.Core.Board
 
             foreach (int edge in legal)
             {
-                if (IsStep(graph, node, edge, forwardColumn, -forwardRow))
+                if (IsStep(graph, node, edge, -forwardColumn, forwardRow))
                 {
                     return edge;
                 }

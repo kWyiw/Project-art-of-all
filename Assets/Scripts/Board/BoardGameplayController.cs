@@ -261,6 +261,22 @@ namespace ProjectArtOfAll.Board
 
         public void RollDice()
         {
+            RollDice(null);
+        }
+
+        /// <summary>调试入口：跳过随机 D6，并按指定值执行完整移动流程。</summary>
+        public void DebugRollDice(int steps)
+        {
+            if (steps < 1 || steps > 12)
+            {
+                return;
+            }
+
+            RollDice(steps);
+        }
+
+        private void RollDice(int? forcedSteps)
+        {
             if (isMoving || awaitingFork || match == null)
             {
                 return;
@@ -279,10 +295,14 @@ namespace ProjectArtOfAll.Board
             }
 
             MatchPlayerState player = match.State.CurrentPlayer;
-            match.Submit(new RollCommand(player.Id));
+            match.Submit(
+                forcedSteps.HasValue
+                    ? (IMatchCommand)new DebugRollCommand(player.Id, forcedSteps.Value)
+                    : new RollCommand(player.Id));
             int roll = match.State.LastRoll;
             hud?.SetDiceResult(roll);
-            UpdateHudStatus($"掷出 {roll}");
+            UpdateHudStatus(
+                forcedSteps.HasValue ? $"调试前进 {roll}" : $"掷出 {roll}");
             StartCoroutine(PlanAndSubmitMove(player.Id, roll));
         }
 
@@ -1157,7 +1177,8 @@ namespace ProjectArtOfAll.Board
                         currentNodeId,
                         previousNodeId,
                         remainingSteps,
-                        edge)
+                        edge,
+                        stopAtWarp: true)
                     : edge;
                 BoardTileView targetTile = tilesByNode.ContainsKey(landingNodeId)
                     ? tilesByNode[landingNodeId]

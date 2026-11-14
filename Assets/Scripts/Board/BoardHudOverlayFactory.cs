@@ -1686,6 +1686,56 @@ namespace ProjectArtOfAll.Board
             return button;
         }
 
+        /// <summary>左侧居中的测试 UI 开关；面板默认收起，由这个按钮统一切换。</summary>
+        public static Button CreateDebugToggleButton(
+            RectTransform parent,
+            Font font)
+        {
+            GameObject buttonObject = CreateBar(
+                parent,
+                "TestUiToggle",
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(16f, -32f),
+                new Vector2(80f, 32f),
+                new Color(0.89f, 0.64f, 0.20f, 1f));
+            buttonObject.transform.SetAsLastSibling();
+
+            Image image = buttonObject.GetComponent<Image>();
+            image.raycastTarget = true;
+
+            Outline outline = buttonObject.AddComponent<Outline>();
+            outline.effectColor = new Color(1f, 0.91f, 0.65f, 0.82f);
+            outline.effectDistance = new Vector2(2f, -2f);
+
+            Button button = buttonObject.AddComponent<Button>();
+            ColorBlock colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1f, 0.95f, 0.78f, 1f);
+            colors.pressedColor = new Color(0.76f, 0.49f, 0.11f, 1f);
+            colors.disabledColor = new Color(0.42f, 0.43f, 0.40f, 1f);
+            button.colors = colors;
+            button.targetGraphic = image;
+
+            Text label = CreateText(
+                buttonObject.transform,
+                "Label",
+                "调试",
+                font,
+                15,
+                FontStyle.Bold,
+                Vector2.zero,
+                new Vector2(64f, 64f),
+                TextAnchor.MiddleCenter);
+            RectTransform labelRect = label.rectTransform;
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = Vector2.zero;
+            labelRect.offsetMax = Vector2.zero;
+            label.color = new Color(0.055f, 0.074f, 0.075f, 1f);
+            return button;
+        }
+
         internal static Text CreateText(
             Transform parent,
             string name,

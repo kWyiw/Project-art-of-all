@@ -35,6 +35,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckCardMechanics();
                 CheckM1MatchDurability();
                 CheckRandomness();
+                CheckDebugRollRange();
                 CheckHomeProgression();
                 CheckRewardChoice();
                 CheckWarpTeleport();
@@ -43,7 +44,8 @@ namespace ProjectArtOfAll.Core.Checks
             CheckBagCapacity();
                 CheckFreeActionsDuringAnotherTurn();
                 CheckSceneMapTeleport();
-            CheckOpeningGrant();
+                CheckSweetRingMovementRules();
+                CheckOpeningGrant();
                 CheckFirstMoveFromHome();
                 CheckEarlyHomeStop();
                 CheckPassThroughOpponent();
@@ -203,6 +205,22 @@ namespace ProjectArtOfAll.Core.Checks
                 teleport.FromNodeId == 1 &&
                 teleport.ToNodeId != 1,
                 "Arriving on a Warp tile must immediately trigger displacement.");
+
+            Assert(
+                MovementSolver.PredictLanding(
+                    graph,
+                    startNodeId: 0,
+                    previousNodeId: -1,
+                    steps: 2) == 2,
+                "Normal route prediction may pass through a Warp tile.");
+            Assert(
+                MovementSolver.PredictLanding(
+                    graph,
+                    startNodeId: 0,
+                    previousNodeId: -1,
+                    steps: 2,
+                    stopAtWarp: true) == 1,
+                "Fork previews must stop on the Warp tile instead of showing a later landing.");
         }
 
         private static MatchController CreateControllerWithRoll(
@@ -696,6 +714,39 @@ namespace ProjectArtOfAll.Core.Checks
             Console.WriteLine(
                 $"[rng] seeds={seeds.Count} rolls={rollsA.Count} " +
                 $"sample={DeckFingerprint(deckA.CreateEnemyDeck(3, 5000))}");
+        }
+
+        private static void CheckDebugRollRange()
+        {
+            bool rejected = false;
+            try
+            {
+                new DebugRollCommand(0, 13);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                rejected = true;
+            }
+
+            Assert(rejected, "A debug movement range outside 1..12 must be rejected.");
+
+            MatchController controller = new MatchController(CreateTestGraph(), 909UL);
+            int playerId = controller.State.CurrentPlayer.Id;
+            controller.Submit(new DebugRollCommand(playerId, 12));
+            Assert(
+                controller.State.LastRoll == 12 &&
+                controller.State.Phase == MatchPhase.AwaitMove,
+                "The debug range must enter the normal movement phase with value 12.");
+
+            int eventStart = controller.Events.History.Count;
+            controller.Submit(new MoveCommand(playerId));
+            Assert(
+                controller.Events.History
+                    .Skip(eventStart)
+                    .OfType<PlayerMovedEvent>()
+                    .Count() == 12,
+                "The debug range must execute twelve movement steps.");
+            Console.WriteLine("[debugroll] range=12 steps=12");
         }
 
         /// <summary>用一颗种子跑一串掷骰，返回骰值顺序（其余阶段用最省事的命令推进）。</summary>
@@ -2328,10 +2379,10 @@ namespace ProjectArtOfAll.Core.Checks
             {
                 MapNode[] nodes =
                 {
-                    new MapNode(0, TileType.Home, 0, new MapCell(0, 0), 1, 3),
+                    new MapNode(0, TileType.Home, 0, new MapCell(0, 2), 1),
                     new MapNode(1, TileType.Home, 1, new MapCell(0, 1), straightOnly, 0, 2, 4),
-                    new MapNode(2, TileType.Home, 2, new MapCell(0, 2), 1, 3),
-                    new MapNode(3, TileType.Home, 3, new MapCell(0, 3), 2, 0),
+                    new MapNode(2, TileType.Home, 2, new MapCell(0, 0), 1, 3),
+                    new MapNode(3, TileType.Home, 3, new MapCell(1, 3), 2),
                     new MapNode(4, TileType.Neutral, -1, new MapCell(1, 1), 1),
                 };
 
@@ -2341,13 +2392,13 @@ namespace ProjectArtOfAll.Core.Checks
             MapGraph open = Build(false);
             Assert(
                 open.LegalNextNodes(1, 0).Count == 2,
-                "A normal junction must offer the straight edge and the right turn.");
+                "A normal junction must offer every non-back direction.");
 
             MapGraph forced = Build(true);
             IReadOnlyList<int> legal = forced.LegalNextNodes(1, 0);
             Assert(
                 legal.Count == 1 && legal[0] == 2,
-                "A straight-only tile must keep only the straight edge, not the right turn.");
+                "A straight-only tile must keep only its authored straight edge.");
 
             int landing = MovementSolver.PredictLanding(forced, 0, 3, 3);
             Assert(
@@ -2356,6 +2407,23 @@ namespace ProjectArtOfAll.Core.Checks
                     + landing.ToString() + ".");
 
             Console.WriteLine("[straightonly] junction keeps straight only, predicted landing=3");
+        }
+
+        private static bool IsStraightOrLeft(
+            MapGraph graph,
+            int previousNodeId,
+            int nodeId,
+            int nextNodeId)
+        {
+            MapNode previous = graph.GetNode(previousNodeId);
+            MapNode node = graph.GetNode(nodeId);
+            MapNode next = graph.GetNode(nextNodeId);
+            int forwardRow = node.GridRow - previous.GridRow;
+            int forwardColumn = node.GridColumn - previous.GridColumn;
+            int stepRow = next.GridRow - node.GridRow;
+            int stepColumn = next.GridColumn - node.GridColumn;
+            return (stepRow == forwardRow && stepColumn == forwardColumn) ||
+                   (stepRow == -forwardColumn && stepColumn == forwardRow);
         }
 
         private static void CheckSceneMapTeleport()
@@ -2374,7 +2442,7 @@ namespace ProjectArtOfAll.Core.Checks
                 "The scene map needs three-way junctions for the fork UI, found "
                     + junctions.ToString() + ".");
 
-            // R-MAP-002：走廊（只有前后两格）只有一个前进方向，且永远不是原路。
+            // R-MAP-002：走廊只有一个前进方向，且永远不是原路。
             foreach (MapNode node in graph.Nodes.Where(n => n.OutEdges.Count == 2))
             {
                 foreach (int entry in node.OutEdges)
@@ -2389,38 +2457,45 @@ namespace ProjectArtOfAll.Core.Checks
                 }
             }
 
+            int promptEntries = 0;
             foreach (MapNode junction in graph.Nodes.Where(n => n.OutEdges.Count >= 3))
             {
                 foreach (int entry in junction.OutEdges)
                 {
-                    MapNode from = graph.GetNode(entry);
-                    int dr = junction.GridRow - from.GridRow;
-                    int dc = junction.GridColumn - from.GridColumn;
                     IReadOnlyList<int> legal = graph.LegalNextNodes(junction.Id, entry);
                     Assert(
                         legal.Count >= 1,
-                        "A junction must always leave at least one legal way forward.");
+                        "A Map1 junction must always leave a legal forward exit.");
                     Assert(
                         legal.All(edge => edge != entry),
                         "A junction must not offer the way back.");
 
-                    Assert(
-                        legal.Count >= 1,
-                        "A junction must always leave at least one legal way forward.");
-                    foreach (int next in legal)
+                    if (legal.Count >= 2)
                     {
-                        MapNode target = graph.GetNode(next);
-                        int stepRow = target.GridRow - junction.GridRow;
-                        int stepColumn = target.GridColumn - junction.GridColumn;
-                        bool straight = stepRow == dr && stepColumn == dc;
-                        bool right = stepRow == dc && stepColumn == -dr;
+                        promptEntries++;
                         Assert(
-                            straight || right,
-                            "A junction only allows going straight or turning right.");
+                            legal.All(next => IsStraightOrLeft(
+                                graph,
+                                entry,
+                                junction.Id,
+                                next)),
+                            "A Map1 fork prompt may only offer straight or left turns.");
                     }
                 }
             }
 
+            Assert(
+                promptEntries == junctions,
+                "Every Map1 junction must expose one straight-or-left prompt.");
+
+            int fork = 4 * 12 + 4;
+            int forkApproach = 4 * 12 + 5;
+            IReadOnlyList<int> forkExits = graph.LegalNextNodes(fork, forkApproach);
+            Assert(
+                forkExits.Count == 2 &&
+                forkExits.Contains(5 * 12 + 4) &&
+                forkExits.Contains(4 * 12 + 3),
+                "A real Map1 fork must keep both valid counter-clockwise choices.");
 
             Dictionary<int, TileType> types = graph.Nodes
                 .ToDictionary(node => node.Id, node => node.TileType);
@@ -2433,10 +2508,35 @@ namespace ProjectArtOfAll.Core.Checks
                 SimpleMatchAutoplayer.Run(controller, maximumTurns: 400);
 
                 Dictionary<int, int> lastCell = new Dictionary<int, int>();
+                Dictionary<int, int> previousCell = new Dictionary<int, int>();
                 foreach (GameEvent gameEvent in controller.Events.History.Skip(start))
                 {
                     if (gameEvent is PlayerMovedEvent moved)
                     {
+                        if (lastCell.TryGetValue(moved.PlayerId, out int previousNode))
+                        {
+                            Assert(
+                                moved.FromNodeId == previousNode,
+                                "Movement events must continue from the last visited tile.");
+                            if (previousCell.TryGetValue(
+                                    moved.PlayerId,
+                                    out int nodeBeforeMove))
+                            {
+                                IReadOnlyList<int> legal =
+                                    graph.LegalNextNodes(moved.FromNodeId, nodeBeforeMove);
+                                Assert(
+                                    legal.Contains(moved.ToNodeId),
+                                    "A movement step must use one of the legal forward exits.");
+                                Assert(
+                                    moved.ToNodeId != nodeBeforeMove,
+                                    "A movement step must not reverse immediately.");
+                            }
+                        }
+
+                        Assert(
+                            moved.ToNodeId != moved.FromNodeId,
+                            "A movement step must change tiles.");
+                        previousCell[moved.PlayerId] = moved.FromNodeId;
                         lastCell[moved.PlayerId] = moved.ToNodeId;
                         continue;
                     }
@@ -2444,6 +2544,7 @@ namespace ProjectArtOfAll.Core.Checks
                     if (gameEvent is TurnStartedEvent started)
                     {
                         lastCell.Remove(started.PlayerId);
+                        previousCell.Remove(started.PlayerId);
                         continue;
                     }
 
@@ -2468,6 +2569,8 @@ namespace ProjectArtOfAll.Core.Checks
                     Assert(
                         teleport.FromNodeId != teleport.ToNodeId,
                         "A teleport must move to another Warp tile.");
+                    lastCell.Remove(teleport.PlayerId);
+                    previousCell.Remove(teleport.PlayerId);
                 }
             }
 
@@ -2492,22 +2595,22 @@ namespace ProjectArtOfAll.Core.Checks
             new SceneCell(0, 10, TileType.Event, 0),
             new SceneCell(0, 11, TileType.Home, 1),
             new SceneCell(1, 0, TileType.Monster, 0),
-            new SceneCell(1, 4, TileType.Neutral, 0),
+            new SceneCell(1, 7, TileType.Neutral, 0),
             new SceneCell(1, 11, TileType.Reward, 0),
             new SceneCell(2, 0, TileType.Warp, 0),
-            new SceneCell(2, 4, TileType.Neutral, 0),
+            new SceneCell(2, 7, TileType.Neutral, 0),
             new SceneCell(2, 11, TileType.Event, 0),
             new SceneCell(3, 0, TileType.Event, 0),
-            new SceneCell(3, 4, TileType.Neutral, 0),
+            new SceneCell(3, 7, TileType.Neutral, 0),
             new SceneCell(3, 11, TileType.Reward, 0),
             new SceneCell(4, 0, TileType.Reward, 0),
             new SceneCell(4, 4, TileType.Shop, 0),
             new SceneCell(4, 5, TileType.Neutral, 0),
             new SceneCell(4, 6, TileType.Neutral, 0),
             new SceneCell(4, 7, TileType.Shop, 0),
-            new SceneCell(4, 8, TileType.Neutral, 0),
-            new SceneCell(4, 9, TileType.Neutral, 0),
-            new SceneCell(4, 10, TileType.Neutral, 0),
+            new SceneCell(4, 1, TileType.Neutral, 0),
+            new SceneCell(4, 2, TileType.Neutral, 0),
+            new SceneCell(4, 3, TileType.Neutral, 0),
             new SceneCell(4, 11, TileType.Monster, 0),
             new SceneCell(5, 0, TileType.Event, 0),
             new SceneCell(5, 4, TileType.Neutral, 0),
@@ -2518,22 +2621,22 @@ namespace ProjectArtOfAll.Core.Checks
             new SceneCell(6, 7, TileType.Neutral, 0),
             new SceneCell(6, 11, TileType.Reward, 0),
             new SceneCell(7, 0, TileType.Event, 0),
-            new SceneCell(7, 1, TileType.Neutral, 0),
-            new SceneCell(7, 2, TileType.Neutral, 0),
-            new SceneCell(7, 3, TileType.Neutral, 0),
             new SceneCell(7, 4, TileType.Shop, 0),
             new SceneCell(7, 5, TileType.Neutral, 0),
             new SceneCell(7, 6, TileType.Neutral, 0),
             new SceneCell(7, 7, TileType.Shop, 0),
+            new SceneCell(7, 8, TileType.Neutral, 0),
+            new SceneCell(7, 9, TileType.Neutral, 0),
+            new SceneCell(7, 10, TileType.Neutral, 0),
             new SceneCell(7, 11, TileType.Event, 0),
             new SceneCell(8, 0, TileType.Monster, 0),
-            new SceneCell(8, 7, TileType.Neutral, 0),
+            new SceneCell(8, 4, TileType.Neutral, 0),
             new SceneCell(8, 11, TileType.Monster, 0),
             new SceneCell(9, 0, TileType.Monster, 0),
-            new SceneCell(9, 7, TileType.Neutral, 0),
+            new SceneCell(9, 4, TileType.Neutral, 0),
             new SceneCell(9, 11, TileType.Event, 0),
             new SceneCell(10, 0, TileType.Event, 0),
-            new SceneCell(10, 7, TileType.Neutral, 0),
+            new SceneCell(10, 4, TileType.Neutral, 0),
             new SceneCell(10, 11, TileType.Event, 0),
             new SceneCell(11, 0, TileType.Home, 3),
             new SceneCell(11, 1, TileType.Warp, 0),
@@ -2601,6 +2704,228 @@ namespace ProjectArtOfAll.Core.Checks
                 nodes,
                 playerCount: 4,
                 teleportGroups: new[] { warpIds.ToArray() });
+        }
+
+        private static void CheckSweetRingMovementRules()
+        {
+            MapGraph graph = CreateSweetRingGraph();
+            Assert(graph.Nodes.Count == 36, "Map2 must keep all 36 sketch cells.");
+
+            int junctions = graph.Nodes.Count(node => node.OutEdges.Count >= 3);
+            Assert(junctions > 0, "Map2 must contain forks.");
+
+            foreach (MapNode node in graph.Nodes)
+            {
+                foreach (int entry in node.OutEdges)
+                {
+                    IReadOnlyList<int> legal = graph.LegalNextNodes(node.Id, entry);
+                    Assert(
+                        legal.Count > 0,
+                        "Every Map2 entry must leave a legal forward exit.");
+                    Assert(
+                        legal.All(next => next != entry),
+                        "Map2 must not offer the reverse direction.");
+                }
+            }
+
+            int promptEntries = 0;
+            foreach (MapNode junction in graph.Nodes.Where(node => node.OutEdges.Count >= 3))
+            {
+                foreach (int entry in junction.OutEdges)
+                {
+                    IReadOnlyList<int> legal = graph.LegalNextNodes(junction.Id, entry);
+                    if (legal.Count >= 2)
+                    {
+                        promptEntries++;
+                        Assert(
+                            legal.All(next => IsStraightOrLeft(
+                                graph,
+                                entry,
+                                junction.Id,
+                                next)),
+                            "A Map2 fork prompt may only offer straight or left turns.");
+                    }
+                }
+            }
+
+            Assert(
+                promptEntries == junctions,
+                "Every Map2 junction must expose one straight-or-left prompt.");
+
+            int fork = 2 * 16 + 6;
+            int forkEntry = 2 * 16 + 5;
+            IReadOnlyList<int> forkExits = graph.LegalNextNodes(fork, forkEntry);
+            Assert(
+                forkExits.Count == 2 &&
+                forkExits.Contains(1 * 16 + 6) &&
+                forkExits.Contains(2 * 16 + 7),
+                "Map2 must keep both valid straight-or-left fork choices.");
+
+            int warp = 1 * 16 + 6;
+            Assert(
+                MovementSolver.PredictLanding(
+                    graph,
+                    startNodeId: fork,
+                    previousNodeId: forkEntry,
+                    steps: 2,
+                    forcedFirstNodeId: warp,
+                    stopAtWarp: true) == warp,
+                "Map2 fork preview must stop at a Warp tile.");
+
+            int movements = 0;
+            int teleports = 0;
+            for (ulong seed = 1; seed <= 20; seed++)
+            {
+                MatchController controller = new MatchController(graph, seed);
+                SimpleMatchAutoplayer.Run(controller, maximumTurns: 400);
+
+                Dictionary<int, int> lastCell = new Dictionary<int, int>();
+                Dictionary<int, int> previousCell = new Dictionary<int, int>();
+                foreach (GameEvent gameEvent in controller.Events.History)
+                {
+                    if (gameEvent is PlayerMovedEvent moved)
+                    {
+                        if (lastCell.TryGetValue(moved.PlayerId, out int current) &&
+                            previousCell.TryGetValue(moved.PlayerId, out int previous))
+                        {
+                            Assert(
+                                moved.FromNodeId == current,
+                                "Map2 movement events must be continuous.");
+                            Assert(
+                                moved.ToNodeId != previous,
+                                "Map2 movement must not reverse immediately.");
+                            Assert(
+                                graph.LegalNextNodes(moved.FromNodeId, previous)
+                                    .Contains(moved.ToNodeId),
+                                "Map2 movement must use a legal forward exit.");
+                        }
+
+                        previousCell[moved.PlayerId] = moved.FromNodeId;
+                        lastCell[moved.PlayerId] = moved.ToNodeId;
+                        Assert(
+                            moved.ToNodeId != moved.FromNodeId,
+                            "Every Map2 movement step must change tiles.");
+                        movements++;
+                    }
+                    else if (gameEvent is TurnStartedEvent started)
+                    {
+                        lastCell.Remove(started.PlayerId);
+                        previousCell.Remove(started.PlayerId);
+                    }
+                    else if (gameEvent is PlayerTeleportedEvent teleport)
+                    {
+                        lastCell.Remove(teleport.PlayerId);
+                        previousCell.Remove(teleport.PlayerId);
+                        teleports++;
+                    }
+                }
+            }
+
+            Assert(movements > 0, "Map2 regression runs must exercise movement.");
+            Console.WriteLine(
+                "[sweetring] moves=" + movements.ToString()
+                + " teleports=" + teleports.ToString());
+        }
+
+        private static MapGraph CreateSweetRingGraph()
+        {
+            string[] sketch =
+            {
+                "....GBY....",
+                "....Y.P....",
+                "...HRYGH...",
+                ".YPG...RYG.",
+                ".B.Y...Y.B.",
+                ".GYR...GPY.",
+                "...HGYRH...",
+                "....P.Y....",
+                "....YBG...."
+            };
+
+            const int stride = 16;
+            Dictionary<int, (int Row, int Column, char Code)> byId =
+                new Dictionary<int, (int Row, int Column, char Code)>();
+            for (int row = 0; row < sketch.Length; row++)
+            {
+                for (int column = 0; column < sketch[row].Length; column++)
+                {
+                    char code = sketch[row][column];
+                    if (code != '.')
+                    {
+                        byId[row * stride + column] = (row, column, code);
+                    }
+                }
+            }
+
+            int[] rowOffsets = { -1, 0, 1, 0 };
+            int[] columnOffsets = { 0, 1, 0, -1 };
+            List<MapNode> nodes = new List<MapNode>();
+            foreach (KeyValuePair<int, (int Row, int Column, char Code)> pair in byId
+                         .OrderBy(pair => pair.Key))
+            {
+                (int row, int column, char code) = pair.Value;
+                List<int> outgoing = new List<int>();
+                for (int index = 0; index < 4; index++)
+                {
+                    int nextRow = row + rowOffsets[index];
+                    int nextColumn = column + columnOffsets[index];
+                    if (nextRow < 0 || nextRow >= sketch.Length ||
+                        nextColumn < 0 || nextColumn >= sketch[nextRow].Length)
+                    {
+                        continue;
+                    }
+
+                    int nextId = nextRow * stride + nextColumn;
+                    if (byId.ContainsKey(nextId))
+                    {
+                        outgoing.Add(nextId);
+                    }
+                }
+
+                outgoing.Sort();
+                TileType type = SweetRingTileType(code);
+                int owner = type != TileType.Home
+                    ? -1
+                    : row == 2 && column == 3 ? 0
+                    : row == 6 && column == 3 ? 1
+                    : row == 6 && column == 7 ? 2
+                    : 3;
+                nodes.Add(
+                    new MapNode(
+                        pair.Key,
+                        type,
+                        owner,
+                        new MapCell(row, column),
+                        outgoing.ToArray()));
+            }
+
+            return MapGraph.Create(
+                nodes,
+                playerCount: 4,
+                teleportGroups: new[]
+                {
+                    new[] { 1 * stride + 6, 7 * stride + 4 },
+                    new[] { 3 * stride + 2, 5 * stride + 8 }
+                });
+        }
+
+        private static TileType SweetRingTileType(char code)
+        {
+            switch (code)
+            {
+                case 'H':
+                    return TileType.Home;
+                case 'R':
+                    return TileType.Monster;
+                case 'G':
+                    return TileType.Shop;
+                case 'P':
+                    return TileType.Warp;
+                case 'B':
+                    return TileType.Event;
+                default:
+                    return TileType.Reward;
+            }
         }
 
         private static void CheckM3MatchReport()

@@ -58,6 +58,7 @@ namespace ProjectArtOfAll.Board
         [SerializeField] private PauseOverlayView pauseOverlay;
         [SerializeField] private BoardEventFeed eventFeed;
         [SerializeField] private BoardFieldInfoPanel fieldInfo;
+        [SerializeField] private Button testUiButton;
         [SerializeField] private BoardTileTooltip tileTooltip;
         [SerializeField] private BoardRoundBanner roundBanner;
         [SerializeField] private CombatPlaybackView combatPlayback;
@@ -76,6 +77,8 @@ namespace ProjectArtOfAll.Board
         private bool encounterVisible;
         private float encounterShownAt;
         private bool encounterButtonBound;
+        private bool testUiVisible;
+        private Button[] diceRangeButtons;
         private CardBandController cardBand;
         private Action<bool> homeStopHandler;
         private Action<int> shopBuyHandler;
@@ -95,6 +98,9 @@ namespace ProjectArtOfAll.Board
 
         private void Awake()
         {
+            EnsureTestUiButton();
+            EnsureDiceDebugGrid();
+
             if (Application.isPlaying)
             {
                 BindOverlayViews();
@@ -117,6 +123,115 @@ namespace ProjectArtOfAll.Board
             {
                 boardGameplay = FindObjectOfType<BoardGameplayController>();
             }
+
+            SetTestUiVisible(false);
+        }
+
+        private void EnsureTestUiButton()
+        {
+            if (testUiButton != null)
+            {
+                return;
+            }
+
+            testUiButton = BoardHudOverlayFactory.CreateDebugToggleButton(
+                (RectTransform)transform,
+                BoardHudOverlayFactory.CreateFont());
+        }
+
+        private void EnsureDiceDebugGrid()
+        {
+            if (diceButton == null || diceRangeButtons != null)
+            {
+                return;
+            }
+
+            RectTransform diceRect = (RectTransform)diceButton.transform;
+            diceRect.sizeDelta = new Vector2(190f, 238f);
+
+            Font font = diceResult != null
+                ? diceResult.font
+                : BoardHudOverlayFactory.CreateFont();
+            BoardHudOverlayFactory.CreateBar(
+                diceRect,
+                "DebugRule",
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(10f, -84f),
+                new Vector2(180f, -83f),
+                new Color(0.88f, 0.66f, 0.28f, 0.72f));
+            Text title = BoardHudOverlayFactory.CreateText(
+                diceRect,
+                "DebugTitle",
+                "调试前进范围",
+                font,
+                12,
+                FontStyle.Bold,
+                new Vector2(10f, -88f),
+                new Vector2(170f, 18f),
+                TextAnchor.MiddleLeft);
+            title.color = new Color(0.88f, 0.70f, 0.36f, 1f);
+
+            diceRangeButtons = new Button[12];
+            for (int index = 0; index < diceRangeButtons.Length; index++)
+            {
+                int column = index % 4;
+                int row = index / 4;
+                float x = 14f + column * 42f;
+                float top = 110f + row * 40f;
+                GameObject buttonObject = BoardHudOverlayFactory.CreateBar(
+                    diceRect,
+                    "DebugRange_" + (index + 1),
+                    new Vector2(0f, 1f),
+                    new Vector2(0f, 1f),
+                    new Vector2(x, -top - 36f),
+                    new Vector2(x + 36f, -top),
+                    new Color(0.20f, 0.40f, 0.39f, 1f));
+                Image image = buttonObject.GetComponent<Image>();
+                image.raycastTarget = true;
+
+                Outline outline = buttonObject.AddComponent<Outline>();
+                outline.effectColor = new Color(0.54f, 0.80f, 0.74f, 0.84f);
+                outline.effectDistance = new Vector2(1f, -1f);
+
+                Button button = buttonObject.AddComponent<Button>();
+                button.targetGraphic = image;
+                ColorBlock colors = button.colors;
+                colors.normalColor = Color.white;
+                colors.highlightedColor = new Color(0.84f, 1f, 0.91f, 1f);
+                colors.pressedColor = new Color(0.62f, 0.78f, 0.73f, 1f);
+                button.colors = colors;
+                int capturedSteps = index + 1;
+                button.onClick.AddListener(() => SelectDebugRange(capturedSteps));
+
+                Text label = BoardHudOverlayFactory.CreateText(
+                    buttonObject.transform,
+                    "Label",
+                    capturedSteps.ToString(),
+                    font,
+                    15,
+                    FontStyle.Bold,
+                    Vector2.zero,
+                    new Vector2(36f, 36f),
+                    TextAnchor.MiddleCenter);
+                RectTransform labelRect = label.rectTransform;
+                labelRect.anchorMin = Vector2.zero;
+                labelRect.anchorMax = Vector2.one;
+                labelRect.offsetMin = Vector2.zero;
+                labelRect.offsetMax = Vector2.zero;
+                label.color = new Color(0.92f, 0.95f, 0.88f, 1f);
+                diceRangeButtons[index] = button;
+            }
+        }
+
+        private void SelectDebugRange(int steps)
+        {
+            if (boardGameplay == null)
+            {
+                boardGameplay = FindObjectOfType<BoardGameplayController>();
+            }
+
+            boardGameplay?.DebugRollDice(steps);
         }
 
         /// <summary>
@@ -170,6 +285,27 @@ namespace ProjectArtOfAll.Board
             cardBand?.ToggleCollapsed();
         }
 
+        /// <summary>测试信息默认收起，通过左侧居中的“调试”按钮切换。</summary>
+        public void ToggleTestUi()
+        {
+            SetTestUiVisible(!testUiVisible);
+        }
+
+        private void SetTestUiVisible(bool visible)
+        {
+            testUiVisible = visible;
+
+            if (eventFeed != null)
+            {
+                eventFeed.gameObject.SetActive(visible);
+            }
+
+            if (fieldInfo != null)
+            {
+                fieldInfo.gameObject.SetActive(visible);
+            }
+        }
+
         public void SetCardViewOpen(bool open)
         {
             isCardViewOpen = open;
@@ -216,6 +352,17 @@ namespace ProjectArtOfAll.Board
             if (diceButton != null)
             {
                 diceButton.interactable = interactable;
+            }
+
+            if (diceRangeButtons != null)
+            {
+                for (int index = 0; index < diceRangeButtons.Length; index++)
+                {
+                    if (diceRangeButtons[index] != null)
+                    {
+                        diceRangeButtons[index].interactable = interactable;
+                    }
+                }
             }
         }
 
@@ -903,6 +1050,7 @@ namespace ProjectArtOfAll.Board
                 dossier == null ||
                 eventFeed == null ||
                 fieldInfo == null ||
+                testUiButton == null ||
                 tileTooltip == null ||
                 roundBanner == null ||
                 pauseOverlay == null ||
@@ -976,6 +1124,8 @@ namespace ProjectArtOfAll.Board
             cornerPanels.Bind(ShowDossier);
             dossier.BindClose(HideDossier);
             pauseOverlay.Bind(TogglePause);
+            testUiButton.onClick.RemoveAllListeners();
+            testUiButton.onClick.AddListener(ToggleTestUi);
             CardTooltipHost.Register(cardTooltip);
         }
 

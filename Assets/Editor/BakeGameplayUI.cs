@@ -1,6 +1,7 @@
 using ProjectArtOfAll.Board;
 using ProjectArtOfAll.UI;
 using UnityEditor;
+using UnityEditor.Events;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -120,6 +121,10 @@ namespace ProjectArtOfAll.Editor
                 OpponentDossierView.Create(bakedRect, font, null);
             BoardEventFeed eventFeed = BoardEventFeed.Create(bakedRect, font);
             BoardFieldInfoPanel fieldInfo = BoardFieldInfoPanel.Create(bakedRect, font);
+            eventFeed.gameObject.SetActive(false);
+            fieldInfo.gameObject.SetActive(false);
+            Button testUiButton =
+                BoardHudOverlayFactory.CreateDebugToggleButton(bakedRect, font);
             BoardTileTooltip tileTooltip = BoardTileTooltip.Create(bakedRect, font);
             BoardRoundBanner roundBanner = BoardRoundBanner.Create(bakedRect, font);
             PauseOverlayView pause = PauseOverlayView.Create(bakedRect, font, null);
@@ -150,6 +155,7 @@ namespace ProjectArtOfAll.Editor
             SetDirect(serialized, "dossier", dossier);
             SetDirect(serialized, "eventFeed", eventFeed);
             SetDirect(serialized, "fieldInfo", fieldInfo);
+            SetDirect(serialized, "testUiButton", testUiButton);
             SetDirect(serialized, "tileTooltip", tileTooltip);
             SetDirect(serialized, "roundBanner", roundBanner);
             SetDirect(serialized, "pauseOverlay", pause);
@@ -190,6 +196,9 @@ namespace ProjectArtOfAll.Editor
             SetRelative(serialized, "combatResultView", "closeButton", combatResult.CloseButton);
             SetRelative(serialized, "combatResultView", "closeLabel", combatResult.CloseLabel);
             serialized.ApplyModifiedPropertiesWithoutUndo();
+            UnityEventTools.AddPersistentListener(
+                testUiButton.onClick,
+                controller.ToggleTestUi);
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
@@ -246,6 +255,7 @@ namespace ProjectArtOfAll.Editor
                 "dossier",
                 "eventFeed",
                 "fieldInfo",
+                "testUiButton",
                 "tileTooltip",
                 "roundBanner",
                 "pauseOverlay",

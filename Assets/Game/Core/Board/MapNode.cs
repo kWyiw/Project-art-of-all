@@ -90,6 +90,6 @@ namespace ProjectArtOfAll.Core.Board
         /// </summary>
         public bool ForceStraight { get; }
 
-        public bool IsFork => !ForceStraight && outEdges.Count >= 2;
+        public bool IsFork => !ForceStraight && outEdges.Count >= 3;
     }
 }
