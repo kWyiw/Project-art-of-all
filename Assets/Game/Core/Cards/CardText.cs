@@ -207,7 +207,9 @@ namespace ProjectArtOfAll.Core.Cards
                 ? "额外施放"
                 : aura.Stat == AuraStat.DiceCount
                     ? "骰数"
-                    : "骰值";
+                    : aura.Stat == AuraStat.ValueBonus
+                        ? "数值"
+                        : "骰值";
             string amount = aura.Amount >= 0
                 ? string.Concat("+", aura.Amount.ToString())
                 : aura.Amount.ToString();
@@ -300,6 +302,47 @@ namespace ProjectArtOfAll.Core.Cards
                 TagList(card.Tags));
         }
 
+        /// <summary>
+        /// 棋盘层的被动（设计稿里写在「战斗外成长」那些行）。这些规则没有战斗事件可以挂，
+        /// 由 BoardCardEconomy 按基础牌 id 结算，卡面文案在这里补一句，别让玩家以为它没效果。
+        /// </summary>
+        public static string BoardNote(CardDefinition card)
+        {
+            switch (card?.BaseId)
+            {
+                case "shredder":
+                    return "棋盘层：每场战斗开始吃掉背包最左侧的一张废料，自身骰数永久 +1。";
+                case "snow_purifier":
+                    return "棋盘层：每回合结束生成一张「淡水」。";
+                case "recycler":
+                    return card.IsUpgraded
+                        ? "棋盘层：出售废料时按尺寸多卖碎片，升级版翻倍。"
+                        : "棋盘层：出售废料时按尺寸多卖碎片。";
+                case "fresh_water":
+                    return card.IsUpgraded
+                        ? "棋盘层：出售时给最左侧的恢复牌 +2 永久修正。"
+                        : "棋盘层：出售时给最左侧的恢复牌 +1 永久修正。";
+                case "fortune_cookie":
+                    return card.IsUpgraded
+                        ? "棋盘层：出售时给最左侧的食物 +2 永久修正。"
+                        : "棋盘层：出售时给最左侧的食物 +1 永久修正。";
+                case "dorayaki":
+                    return "棋盘层：每回合结束价值 +1，恢复的骰数跟着涨。";
+                case "golden_chariot":
+                    return "棋盘层：你每卖掉一张牌，它的价值 +1。";
+                case "barbed_wire":
+                    return card.IsUpgraded
+                        ? "棋盘层：出售时在当前地块留下陷阱，停留者 3 回合不能移动。"
+                        : "棋盘层：出售时在当前地块留下陷阱，停留者 2 回合不能移动。";
+                case "roadblock":
+                    return card.IsUpgraded
+                        ? "棋盘层：出售时在当前地块留下陷阱，经过者强制停下（触发 4 次后失效）。"
+                        : "棋盘层：出售时在当前地块留下陷阱，经过者强制停下（触发 3 次后失效）。";
+                default:
+                    return string.Empty;
+            }
+        }
+
         /// <summary>效果正文，逗号分隔；没有效果时返回空串。</summary>
         public static string Description(CardDefinition card)
         {
@@ -321,7 +364,19 @@ namespace ProjectArtOfAll.Core.Cards
 
             foreach (PassiveDefinition passive in card.Passives)
             {
+                // 出售类被动在战斗中永不触发（棋盘层按 id 结算），行文交给 BoardNote。
+                if (passive.Trigger == PassiveTrigger.CardSold)
+                {
+                    continue;
+                }
+
                 parts.Add(string.Concat("被动：", Passive(passive)));
+            }
+
+            string note = BoardNote(card);
+            if (note.Length > 0)
+            {
+                parts.Add(note);
             }
 
             return string.Join("，", parts);

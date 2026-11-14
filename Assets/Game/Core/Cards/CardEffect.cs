@@ -227,13 +227,15 @@ namespace ProjectArtOfAll.Core.Cards
             CardEffect effect,
             CardTag castTag = CardTag.None,
             bool ownSideOnly = true,
-            bool requiresAdjacentSource = false)
+            bool requiresAdjacentSource = false,
+            bool excludesSource = false)
         {
             Trigger = trigger;
             Effect = effect ?? throw new ArgumentNullException(nameof(effect));
             CastTag = castTag;
             OwnSideOnly = ownSideOnly;
             RequiresAdjacentSource = requiresAdjacentSource;
+            ExcludesSource = excludesSource;
         }
 
         public PassiveTrigger Trigger { get; }
@@ -241,5 +243,8 @@ namespace ProjectArtOfAll.Core.Cards
         public CardTag CastTag { get; }
         public bool OwnSideOnly { get; }
         public bool RequiresAdjacentSource { get; }
+
+        /// <summary>企鹅: 「使用其他伙伴或食物时」——触发的牌本身不能是这张牌。</summary>
+        public bool ExcludesSource { get; }
     }
 }

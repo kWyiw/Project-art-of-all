@@ -25,6 +25,12 @@ namespace ProjectArtOfAll.Core.Combat
             return GetAuraValue(side, target, AuraStat.DiceCount);
         }
 
+        /// <summary>结算数值直接 +N（自噬之蛇的「所有数值 +100」）。</summary>
+        public int GetValueBonus(CombatantRuntime side, CombatCardRuntime target)
+        {
+            return GetAuraValue(side, target, AuraStat.ValueBonus);
+        }
+
         /// <summary>自噬之蛇: the target card's dice always roll their maximum face.</summary>
         public bool HasMaxRoll(CombatantRuntime side, CombatCardRuntime target)
         {

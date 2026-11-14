@@ -106,6 +106,36 @@ namespace ProjectArtOfAll.Core.Match
             return TryAddCardAt(card, -1);
         }
 
+        /// <summary>
+        /// 找到一张可以融合升级的同名牌：还没有升级过、而且自己手里确实有它
+        /// （CJ-5.11）。战斗栏优先于背包，各自按列从左到右，结果稳定可复现。
+        /// </summary>
+        public CardInstance FindUpgradableCopy(string baseId)
+        {
+            if (string.IsNullOrEmpty(baseId))
+            {
+                return null;
+            }
+
+            foreach (CardSlot slot in battleSlots
+                         .OrderBy(slot => slot.Column)
+                         .Concat(bagSlots.OrderBy(slot => slot.Column)))
+            {
+                CardInstance card = slot.Card;
+                if (card == null || !card.CanUpgrade)
+                {
+                    continue;
+                }
+
+                if (string.Equals(card.Definition.BaseId, baseId, StringComparison.Ordinal))
+                {
+                    return card;
+                }
+            }
+
+            return null;
+        }
+
         /// <summary>把新牌放进背包：给了 <paramref name="column"/> 就放那里，否则最靠左的合法空位。</summary>
         public bool TryAddCardAt(CardInstance card, int column)
         {

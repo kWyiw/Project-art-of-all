@@ -171,6 +171,47 @@ namespace ProjectArtOfAll.Core.Match
         public string Source { get; }
     }
 
+    /// <summary>融合升级：手里已有的同名牌吃掉新牌，Definition 换成升级版（CJ-5.11）。</summary>
+    public sealed class CardUpgradedEvent : GameEvent
+    {
+        public CardUpgradedEvent(
+            int playerId,
+            int cardUid,
+            string baseId,
+            string upgradedId,
+            string source)
+        {
+            PlayerId = playerId;
+            CardUid = cardUid;
+            BaseId = baseId;
+            UpgradedId = upgradedId;
+            Source = source;
+        }
+
+        public int PlayerId { get; }
+        public int CardUid { get; }
+        public string BaseId { get; }
+        public string UpgradedId { get; }
+        public string Source { get; }
+    }
+
+    /// <summary>牌被非出售手段消耗掉了（粉碎机每场战斗吃掉背包最左侧的废料）。</summary>
+    public sealed class CardConsumedEvent : GameEvent
+    {
+        public CardConsumedEvent(int playerId, int cardUid, string cardId, string reason)
+        {
+            PlayerId = playerId;
+            CardUid = cardUid;
+            CardId = cardId;
+            Reason = reason;
+        }
+
+        public int PlayerId { get; }
+        public int CardUid { get; }
+        public string CardId { get; }
+        public string Reason { get; }
+    }
+
     public sealed class CardSoldEvent : GameEvent
     {
         public CardSoldEvent(int playerId, int cardUid, string cardId, int shards)
@@ -286,5 +327,66 @@ namespace ProjectArtOfAll.Core.Match
         public string EventId { get; }
         public int OptionIndex { get; }
         public int ShardCost { get; }
+    }
+
+    /// <summary>铁丝网 / 路障出售后在地块上留下了陷阱（R-TRAP-001）。</summary>
+    public sealed class BoardTrapPlacedEvent : GameEvent
+    {
+        public BoardTrapPlacedEvent(
+            int playerId,
+            int nodeId,
+            string cardId,
+            BoardTrapKind kind,
+            int charges)
+        {
+            PlayerId = playerId;
+            NodeId = nodeId;
+            CardId = cardId;
+            Kind = kind;
+            Charges = charges;
+        }
+
+        public int PlayerId { get; }
+        public int NodeId { get; }
+        public string CardId { get; }
+        public BoardTrapKind Kind { get; }
+        public int Charges { get; }
+    }
+
+    /// <summary>陷阱被踩中：路障强制停车或铁丝网禁行。</summary>
+    public sealed class BoardTrapTriggeredEvent : GameEvent
+    {
+        public BoardTrapTriggeredEvent(
+            int ownerPlayerId,
+            int playerId,
+            int nodeId,
+            BoardTrapKind kind,
+            int chargesLeft)
+        {
+            OwnerPlayerId = ownerPlayerId;
+            PlayerId = playerId;
+            NodeId = nodeId;
+            Kind = kind;
+            ChargesLeft = chargesLeft;
+        }
+
+        public int OwnerPlayerId { get; }
+        public int PlayerId { get; }
+        public int NodeId { get; }
+        public BoardTrapKind Kind { get; }
+        public int ChargesLeft { get; }
+    }
+
+    /// <summary>被铁丝网困住，这次回合不能移动。</summary>
+    public sealed class PlayerImmobilizedEvent : GameEvent
+    {
+        public PlayerImmobilizedEvent(int playerId, int roundsLeft)
+        {
+            PlayerId = playerId;
+            RoundsLeft = roundsLeft;
+        }
+
+        public int PlayerId { get; }
+        public int RoundsLeft { get; }
     }
 }

@@ -27,6 +27,8 @@ public static class CardTooltipPreview
         Render("_tmp/tooltip_preview.png", "generator");
         Render("_tmp/tooltip_preview_food.png", "hardtack");
         Render("_tmp/tooltip_preview_weapon.png", "shredder");
+        Render("_tmp/tooltip_preview_board.png", "fortune_cookie");
+        Render("_tmp/tooltip_preview_upgraded.png", "lighter+");
     }
 
     private static void Render(string path, string cardId)

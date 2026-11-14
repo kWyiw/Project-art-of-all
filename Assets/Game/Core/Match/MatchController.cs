@@ -195,6 +195,16 @@ namespace ProjectArtOfAll.Core.Match
                     $"RollCommand is invalid during phase {State.Phase}.");
             }
 
+            MatchPlayerState roller = State.CurrentPlayer;
+            if (roller.ImmobileRounds > 0)
+            {
+                // 铁丝网：禁行回合里掷骰也不动，直接把这回合走完。
+                roller.ImmobileRounds--;
+                Publish(new PlayerImmobilizedEvent(roller.Id, roller.ImmobileRounds));
+                EndCurrentTurn();
+                return;
+            }
+
             State.LastRoll = random.NextD6();
             Publish(new DiceRolledEvent(command.PlayerId, State.LastRoll));
 
@@ -222,7 +232,7 @@ namespace ProjectArtOfAll.Core.Match
             }
 
             MatchPlayerState player = State.CurrentPlayer;
-            IReadOnlyList<int> path = SelectPath(command);
+            IReadOnlyList<int> path = TruncateAtForcedStopTrap(player, SelectPath(command));
             player.HasMoved = true;
             int fromNode = player.CurrentNode;
 
@@ -312,19 +322,11 @@ namespace ProjectArtOfAll.Core.Match
             }
 
             CardDefinition definition = currentRewardChoices[command.ChoiceIndex];
-            CardInstance card = new CardInstance(nextCardUid++, definition);
-            if (!State.CurrentPlayer.TryAddCard(card, equipIfPossible: true))
-            {
-                throw new InvalidOperationException(
-                    "The selected reward does not fit in the player's Bag.");
-            }
-
-            Publish(
-                new CardAddedEvent(
-                    State.CurrentPlayer.Id,
-                    card.Uid,
-                    definition.Id,
-                    "Reward"));
+            AcquireOrUpgrade(
+                State.CurrentPlayer,
+                definition,
+                "Reward",
+                "The selected reward does not fit in the player's Bag.");
             currentRewardChoices.Clear();
             EndCurrentTurn();
         }
@@ -365,8 +367,9 @@ namespace ProjectArtOfAll.Core.Match
                     $"Player {command.PlayerId} does not own card {command.CardUid}.");
             }
 
-            // R-ECO-005：出售按这张牌的当前价值结算（幸运饼干这类会成长）。
-            int refund = card.Value;
+            // R-ECO-005：出售按这张牌的当前价值结算（铜锣烧 / 黄金战车会成长），
+            // 回收站在场时废料还能多卖（CJ-10 / BoardCardEconomy）。
+            int refund = BoardCardEconomy.SaleValue(actor, card);
             AddShards(actor, refund);
             Publish(
                 new CardSoldEvent(
@@ -374,6 +377,102 @@ namespace ProjectArtOfAll.Core.Match
                     card.Uid,
                     card.Definition.Id,
                     refund));
+            BoardCardEconomy.OnCardSold(actor, card);
+            PlaceTrap(actor, card);
+        }
+
+        /// <summary>
+        /// 路障：路径上第一次踩到的强制停车陷阱把这次移动截断在那里，并消耗一次触发。
+        /// </summary>
+        private IReadOnlyList<int> TruncateAtForcedStopTrap(
+            MatchPlayerState player,
+            IReadOnlyList<int> path)
+        {
+            for (int index = 0; index < path.Count; index++)
+            {
+                BoardTrap trap = State.FindTrap(path[index], BoardTrapKind.ForcedStop);
+                if (trap == null)
+                {
+                    continue;
+                }
+
+                trap.Charges--;
+                Publish(
+                    new BoardTrapTriggeredEvent(
+                        trap.OwnerPlayerId,
+                        player.Id,
+                        trap.NodeId,
+                        trap.Kind,
+                        trap.Charges));
+                if (trap.Charges <= 0)
+                {
+                    State.RemoveTrap(trap);
+                }
+
+                if (index == path.Count - 1)
+                {
+                    return path;
+                }
+
+                int[] truncated = new int[index + 1];
+                for (int step = 0; step <= index; step++)
+                {
+                    truncated[step] = path[step];
+                }
+
+                return truncated;
+            }
+
+            return path;
+        }
+
+        /// <summary>铁丝网：停在被布下陷阱的地块上的单位禁行若干回合（一次性）。</summary>
+        private void TriggerImmobilizeTrap(MatchPlayerState player, int nodeId)
+        {
+            BoardTrap trap = State.FindTrap(nodeId, BoardTrapKind.Immobilize);
+            if (trap == null)
+            {
+                return;
+            }
+
+            player.ImmobileRounds = Math.Max(player.ImmobileRounds, trap.Charges);
+            State.RemoveTrap(trap);
+            Publish(
+                new BoardTrapTriggeredEvent(
+                    trap.OwnerPlayerId,
+                    player.Id,
+                    trap.NodeId,
+                    trap.Kind,
+                    0));
+        }
+
+        /// <summary>R-TRAP-001：铁丝网 / 路障出售时在当前地块留下陷阱。</summary>
+        private void PlaceTrap(MatchPlayerState seller, CardInstance sold)
+        {
+            if (!BoardTrapCatalog.TryDescribe(
+                    sold.Definition.BaseId,
+                    sold.Definition.IsUpgraded,
+                    out BoardTrapKind kind,
+                    out int charges))
+            {
+                return;
+            }
+
+            int nodeId = seller.CurrentNode;
+            BoardTrap existing = State.FindTrap(nodeId, kind);
+            if (existing != null)
+            {
+                State.RemoveTrap(existing);
+            }
+
+            State.AddTrap(nodeId, kind, seller.Id, charges);
+            Publish(
+                new BoardTrapPlacedEvent(
+                    seller.Id,
+                    nodeId,
+                    sold.Definition.Id,
+                    kind,
+                    charges));
         }
 
         private void HandleMoveCard(MoveCardCommand command)
@@ -584,6 +683,7 @@ namespace ProjectArtOfAll.Core.Match
             MapNode arrival,
             bool isWarpDestination)
         {
+            TriggerImmobilizeTrap(player, arrival.Id);
             switch (arrival.TileType)
             {
                 case TileType.Home:
@@ -750,15 +850,90 @@ namespace ProjectArtOfAll.Core.Match
 
         private void GrantEventCard(MatchPlayerState player, string cardId)
         {
-            CardDefinition definition = cardCatalog.Get(cardId);
-            CardInstance card = new CardInstance(nextCardUid++, definition);
-            if (!player.TryAddCard(card, equipIfPossible: true))
+            AcquireOrUpgrade(
+                player,
+                cardCatalog.Get(cardId),
+                "Event",
+                "The event reward does not fit in the player's Bag.");
+        }
+
+        /// <summary>一轮打完：铜锣烧涨价值，雪水净化器往背包里塞一张淡水。</summary>
+        private void ApplyRoundEndEconomy()
+        {
+            foreach (MatchPlayerState player in State.Players)
             {
-                throw new InvalidOperationException(
-                    "The event reward does not fit in the player's Bag.");
+                CardDefinition produced = BoardCardEconomy.OnRoundEnded(player);
+                if (produced != null)
+                {
+                    AcquireOrUpgrade(player, produced, "Purifier", null, required: false);
+                }
+            }
+        }
+
+        /// <summary>开战前结算粉碎机：吃掉背包最左侧的废料，永久 +1 颗骰子。</summary>
+        private void PrepareShredders(MatchPlayerState player)
+        {
+            if (player == null)
+            {
+                return;
             }
 
-            Publish(new CardAddedEvent(player.Id, card.Uid, definition.Id, "Event"));
+            foreach (CardInstance consumed in BoardCardEconomy.PrepareBattleDice(player))
+            {
+                Publish(
+                    new CardConsumedEvent(
+                        player.Id,
+                        consumed.Uid,
+                        consumed.Definition.Id,
+                        "Shredder"));
+            }
+        }
+
+        /// <summary>
+        /// 统一的「获得一张牌」入口：手里已有同名牌就融合升级（CJ-5.11），否则加进背包。
+        /// 升级时不会消耗 <see cref="nextCardUid"/>，也不产生第二张牌。
+        /// </summary>
+        internal CardInstance AcquireOrUpgrade(
+            MatchPlayerState player,
+            CardDefinition definition,
+            string source,
+            string failureMessage,
+            bool required = true)
+        {
+            CardAcquisition acquisition = player.AcquireCard(
+                definition,
+                nextCardUid,
+                equipIfPossible: true);
+            if (!acquisition.Succeeded)
+            {
+                if (!required)
+                {
+                    return null;
+                }
+
+                throw new InvalidOperationException(failureMessage);
+            }
+
+            if (acquisition.Kind == CardAcquisitionKind.Upgraded)
+            {
+                Publish(
+                    new CardUpgradedEvent(
+                        player.Id,
+                        acquisition.Card.Uid,
+                        definition.BaseId,
+                        acquisition.Card.Definition.Id,
+                        source));
+                return acquisition.Card;
+            }
+
+            nextCardUid = Math.Max(nextCardUid + 1, acquisition.Card.Uid + 1);
+            Publish(
+                new CardAddedEvent(
+                    player.Id,
+                    acquisition.Card.Uid,
+                    acquisition.Card.Definition.Id,
+                    source));
+            return acquisition.Card;
         }
 
         private void FinishEvent(MatchPlayerState player, int optionIndex, int shardCost)
@@ -787,23 +962,13 @@ namespace ProjectArtOfAll.Core.Match
                 throw new InvalidOperationException("Not enough Shards.");
             }
 
-            CardInstance card = new CardInstance(
-                nextCardUid++,
-                offer.Definition);
-            if (!player.TryAddCard(card, equipIfPossible: true))
-            {
-                throw new InvalidOperationException(
-                    "The card does not fit in the player's Bag.");
-            }
-
+            AcquireOrUpgrade(
+                player,
+                offer.Definition,
+                "Shop",
+                "The card does not fit in the player's Bag.");
             AddShards(player, -offer.Price);
             offer.IsAvailable = false;
-            Publish(
-                new CardAddedEvent(
-                    player.Id,
-                    card.Uid,
-                    offer.Definition.Id,
-                    "Shop"));
         }
 
         private void RerollShop(MatchPlayerState player)
@@ -969,6 +1134,9 @@ namespace ProjectArtOfAll.Core.Match
             IEnumerable<CardInstance> rightCards,
             MatchPlayerState rightPlayer = null)
         {
+            PrepareShredders(left);
+            PrepareShredders(rightPlayer);
+
             CombatantSnapshot leftSnapshot = new CombatantSnapshot(
                 left.Id,
                 leftLevel,
@@ -1071,6 +1239,7 @@ namespace ProjectArtOfAll.Core.Match
             if (State.CurrentPlayerIndex == 0)
             {
                 State.RoundNumber++;
+                ApplyRoundEndEconomy();
                 if ((State.RoundNumber - 1) % GlobalGrantInterval == 0)
                 {
                     Publish(new GlobalShardsGrantedEvent(GlobalShardGrant));

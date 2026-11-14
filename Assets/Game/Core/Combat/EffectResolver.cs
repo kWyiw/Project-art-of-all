@@ -74,7 +74,7 @@ namespace ProjectArtOfAll.Core.Combat
                     break;
             }
 
-            int amount = Roll(simulation, owner, card, effect);
+            int amount = Roll(simulation, owner, card, effect) + ValueBonus(owner, card);
             CombatantRuntime target = effect.Target == EffectTarget.Enemy ? enemy : owner;
 
             switch (effect.Operation)
@@ -339,6 +339,12 @@ namespace ProjectArtOfAll.Core.Combat
                 perDieModifier,
                 forceMaximum,
                 extraDice);
+        }
+
+        /// <summary>自噬之蛇这类「所有数值 +N」的光环（直接加在结算结果上）。</summary>
+        private int ValueBonus(CombatantRuntime owner, CombatCardRuntime card)
+        {
+            return auraResolver.GetValueBonus(owner, card);
         }
 
         private static int RollFlat(CardEffect effect)

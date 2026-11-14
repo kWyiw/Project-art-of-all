@@ -20,7 +20,9 @@ namespace ProjectArtOfAll.Core.Cards
         }
 
         public int Uid { get; }
-        public CardDefinition Definition { get; }
+
+        /// <summary>这张牌当前的定义：融合升级后指向升级版（CJ-5.11）。</summary>
+        public CardDefinition Definition { get; private set; }
 
         /// <summary>铜锣烧 / 黄金战车: value grows during a run.</summary>
         public int ValueBonus { get; set; }
@@ -33,9 +35,29 @@ namespace ProjectArtOfAll.Core.Cards
 
         public int Value => Math.Max(0, Definition.Value + ValueBonus);
 
+        public bool IsUpgraded => Definition.IsUpgraded;
+
+        /// <summary>这张牌还能不能再升级（每张牌只能升级一次）。</summary>
+        public bool CanUpgrade => Definition.CanUpgrade;
+
         public void ModifyValue(int delta)
         {
             ValueBonus = Math.Max(0, ValueBonus + delta);
+        }
+
+        /// <summary>
+        /// 融合升级：把这张牌换成它的升级版。已经升级过、或没有设计升级版时返回 false。
+        /// 实例本身（Uid、栏位、永久成长）保持不变，所以升级不会移动牌的位置。
+        /// </summary>
+        internal bool TryUpgrade()
+        {
+            if (!CanUpgrade)
+            {
+                return false;
+            }
+
+            Definition = Definition.Upgraded;
+            return true;
         }
     }
 }

@@ -212,6 +212,14 @@ namespace ProjectArtOfAll.Core.Combat
                             continue;
                         }
 
+                        // 企鹅「使用其他伙伴或食物时」：自己这次施放不算。
+                        if (passive.ExcludesSource &&
+                            sourceCard != null &&
+                            ReferenceEquals(card, sourceCard))
+                        {
+                            continue;
+                        }
+
                         effectResolver.Resolve(
                             this,
                             owner,

@@ -12,6 +12,7 @@ namespace ProjectArtOfAll.Core.Match
         private readonly Dictionary<int, int> monsterPools =
             new Dictionary<int, int>();
         private readonly HashSet<int> bossNodes = new HashSet<int>();
+        private readonly List<BoardTrap> traps = new List<BoardTrap>();
 
         internal MatchState(MapGraph graph, ulong seed)
         {
@@ -50,6 +51,48 @@ namespace ProjectArtOfAll.Core.Match
         public bool BossEvolutionTriggered { get; internal set; }
 
         public MatchPlayerState CurrentPlayer => Players[CurrentPlayerIndex];
+
+        /// <summary>地块上还生效的陷阱（铁丝网 / 路障），按放置顺序。</summary>
+        public IReadOnlyList<BoardTrap> Traps => traps;
+
+        public IReadOnlyList<BoardTrap> TrapsAt(int nodeId)
+        {
+            List<BoardTrap> found = new List<BoardTrap>();
+            foreach (BoardTrap trap in traps)
+            {
+                if (trap.NodeId == nodeId)
+                {
+                    found.Add(trap);
+                }
+            }
+
+            return found;
+        }
+
+        internal BoardTrap FindTrap(int nodeId, BoardTrapKind kind)
+        {
+            foreach (BoardTrap trap in traps)
+            {
+                if (trap.NodeId == nodeId && trap.Kind == kind)
+                {
+                    return trap;
+                }
+            }
+
+            return null;
+        }
+
+        internal BoardTrap AddTrap(int nodeId, BoardTrapKind kind, int ownerPlayerId, int charges)
+        {
+            BoardTrap trap = new BoardTrap(nodeId, kind, ownerPlayerId, charges);
+            traps.Add(trap);
+            return trap;
+        }
+
+        internal void RemoveTrap(BoardTrap trap)
+        {
+            traps.Remove(trap);
+        }
 
         internal MatchPlayerState AddPlayer(
             string name,
@@ -149,6 +192,16 @@ namespace ProjectArtOfAll.Core.Match
             foreach (int nodeId in bossNodes.OrderBy(id => id))
             {
                 hash = StableHash.Add(hash, nodeId);
+            }
+
+            foreach (BoardTrap trap in traps
+                         .OrderBy(trap => trap.NodeId)
+                         .ThenBy(trap => (long)trap.Kind))
+            {
+                hash = StableHash.Add(hash, trap.NodeId);
+                hash = StableHash.Add(hash, (long)trap.Kind);
+                hash = StableHash.Add(hash, trap.OwnerPlayerId);
+                hash = StableHash.Add(hash, trap.Charges);
             }
 
             foreach (MatchPlayerState player in Players)

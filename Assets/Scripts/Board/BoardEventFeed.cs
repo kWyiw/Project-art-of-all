@@ -197,6 +197,13 @@ namespace ProjectArtOfAll.Board
                 case CardAddedEvent added:
                     return "玩家 " + (added.PlayerId + 1) + " 获得【" + CardName(added.CardId) + "】"
                         + SourceSuffix(added.Source);
+                case CardUpgradedEvent upgraded:
+                    return "玩家 " + (upgraded.PlayerId + 1) + " 的【"
+                        + CardName(upgraded.UpgradedId) + "】升级完成"
+                        + SourceSuffix(upgraded.Source);
+                case CardConsumedEvent consumed:
+                    return "玩家 " + (consumed.PlayerId + 1) + " 的粉碎机吃掉了【"
+                        + CardName(consumed.CardId) + "】";
                 case CardSoldEvent sold:
                     return "玩家 " + (sold.PlayerId + 1) + " 卖掉【" + CardName(sold.CardId)
                         + "】+" + sold.Shards + " 碎片";
@@ -204,6 +211,21 @@ namespace ProjectArtOfAll.Board
                     return "玩家 " + (failed.PlayerId + 1) + " 拿不到奖励：" + ReasonText(failed.Reason);
                 case GlobalShardsGrantedEvent granted:
                     return "全员 +" + granted.Amount + " 碎片";
+                case BoardTrapPlacedEvent trap:
+                    return "玩家 " + (trap.PlayerId + 1) + " 在 R"
+                        + (trap.NodeId + 1).ToString("D2") + " 布下"
+                        + (trap.Kind == BoardTrapKind.ForcedStop ? "路障" : "铁丝网")
+                        + "（" + trap.Charges
+                        + (trap.Kind == BoardTrapKind.ForcedStop ? " 次" : " 回合") + "）";
+                case BoardTrapTriggeredEvent triggered:
+                    return triggered.Kind == BoardTrapKind.ForcedStop
+                        ? "玩家 " + (triggered.PlayerId + 1) + " 被路障拦在 R"
+                            + (triggered.NodeId + 1).ToString("D2")
+                        : "玩家 " + (triggered.PlayerId + 1) + " 踩中铁丝网（R"
+                            + (triggered.NodeId + 1).ToString("D2") + "）";
+                case PlayerImmobilizedEvent immobilized:
+                    return "玩家 " + (immobilized.PlayerId + 1)
+                        + " 被铁丝网困住，这回合不能移动";
                 case BossEvolutionEvent boss:
                     return "玩家 " + (boss.TriggeredByPlayerId + 1) + " 触发 Boss 演化：怪物格全部变 BOSS";
                 case CombatResolvedEvent combat:

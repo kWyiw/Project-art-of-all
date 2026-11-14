@@ -47,6 +47,9 @@ namespace ProjectArtOfAll.Core.Match
         /// first step away from Home only applies to the opening move (R-MAP-002).
         /// </summary>
         public bool HasMoved { get; internal set; }
+
+        /// <summary>铁丝网留下的禁行回合数；大于 0 时这几次掷骰都不能移动（R-TRAP-001）。</summary>
+        public int ImmobileRounds { get; internal set; }
         public int Level { get; internal set; }
         public int Shards { get; internal set; }
         public int Wins { get; internal set; }
@@ -144,6 +147,7 @@ namespace ProjectArtOfAll.Core.Match
             hash = StableHash.Add(hash, Shards);
             hash = StableHash.Add(hash, Wins);
             hash = StableHash.Add(hash, (long)Norma);
+            hash = StableHash.Add(hash, ImmobileRounds);
 
             foreach (BattleModifier modifier in battleModifiers)
             {
@@ -154,6 +158,35 @@ namespace ProjectArtOfAll.Core.Match
             }
 
             return cards.AddToHash(hash);
+        }
+
+        /// <summary>
+        /// 获得一张牌。手里已经有同名牌且它还没升级时，这次拿到的牌与那张牌融合，
+        /// 原牌升一级、不再产生新牌（CJ-5.11，融合升级）；已经升级过的同名牌不再吸收。
+        /// </summary>
+        internal CardAcquisition AcquireCard(
+            Cards.CardDefinition definition,
+            int uid,
+            bool equipIfPossible)
+        {
+            if (definition == null)
+            {
+                throw new ArgumentNullException(nameof(definition));
+            }
+
+            if (!definition.IsUpgraded)
+            {
+                CardInstance existing = cards.FindUpgradableCopy(definition.BaseId);
+                if (existing != null && existing.TryUpgrade())
+                {
+                    return CardAcquisition.Upgraded(existing);
+                }
+            }
+
+            CardInstance card = new CardInstance(uid, definition);
+            return TryAddCard(card, equipIfPossible)
+                ? CardAcquisition.Added(card)
+                : CardAcquisition.Failed();
         }
 
         internal bool TryAddCard(CardInstance card, bool equipIfPossible)
@@ -172,6 +205,12 @@ namespace ProjectArtOfAll.Core.Match
         }
 
         internal bool TrySellCard(int cardUid, out CardInstance removed)
+        {
+            return cards.TryRemove(cardUid, out removed);
+        }
+
+        /// <summary>把一张牌从手里直接拿掉（不结算碎片）：粉碎机吃掉背包里的废料用。</summary>
+        internal bool TryConsumeCard(int cardUid, out CardInstance removed)
         {
             return cards.TryRemove(cardUid, out removed);
         }

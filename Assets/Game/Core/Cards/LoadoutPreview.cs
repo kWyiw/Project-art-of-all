@@ -55,6 +55,20 @@ namespace ProjectArtOfAll.Core.Cards
                   SumAura(row, index, AuraStat.DiceCount);
         }
 
+        /// <summary>按栏位看某张牌的最终数值加成（自噬之蛇的「所有数值 +N」）。</summary>
+        public static int ValueBonus(IReadOnlyList<CardSlot> slots, int cardUid)
+        {
+            List<Placed> row = Place(slots);
+            int index = IndexOf(row, cardUid);
+            return index < 0 ? 0 : SumAura(row, index, AuraStat.ValueBonus);
+        }
+
+        /// <summary>按一排牌看某张牌的最终数值加成。</summary>
+        public static int ValueBonus(IReadOnlyList<CardInstance> row, int index)
+        {
+            return SumAura(Pack(row), index, AuraStat.ValueBonus);
+        }
+
         public static bool HasMaxRoll(IReadOnlyList<CardSlot> slots, int cardUid)
         {
             List<Placed> row = Place(slots);
@@ -130,13 +144,14 @@ namespace ProjectArtOfAll.Core.Cards
         {
             int dice = DiceModifier(row, index);
             int extra = BonusDice(row, index);
+            int value = SumAura(row, index, AuraStat.ValueBonus);
             bool maxRoll = HasMaxRoll(row, index);
-            if (dice == 0 && extra == 0 && !maxRoll)
+            if (dice == 0 && extra == 0 && value == 0 && !maxRoll)
             {
                 return null;
             }
 
-            List<string> parts = new List<string>(3);
+            List<string> parts = new List<string>(4);
             if (dice != 0)
             {
                 parts.Add("骰值 " + (dice > 0 ? "+" + dice : dice.ToString()));
@@ -145,6 +160,11 @@ namespace ProjectArtOfAll.Core.Cards
             if (extra != 0)
             {
                 parts.Add("额外 " + (extra > 0 ? "+" + extra : extra.ToString()) + " 颗骰");
+            }
+
+            if (value != 0)
+            {
+                parts.Add("数值 " + (value > 0 ? "+" + value : value.ToString()));
             }
 
             if (maxRoll)

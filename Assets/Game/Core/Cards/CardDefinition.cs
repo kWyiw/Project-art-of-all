@@ -44,7 +44,12 @@ namespace ProjectArtOfAll.Core.Cards
         MaxRoll = 2,
 
         /// <summary>Adds whole dice to the roll (data-driven cards such as 粉碎机).</summary>
-        DiceCount = 3
+        DiceCount = 3,
+
+        /// <summary>
+        /// 结算出来的最终数值直接 +N（不夹到骰面）：自噬之蛇的「所有数值 +100」用它。
+        /// </summary>
+        ValueBonus = 4
     }
 
     public enum AuraScaling
@@ -103,7 +108,9 @@ namespace ProjectArtOfAll.Core.Cards
             CardScope scope,
             IEnumerable<CardEffect> activeEffects,
             IEnumerable<AuraDefinition> auras = null,
-            IEnumerable<PassiveDefinition> passives = null)
+            IEnumerable<PassiveDefinition> passives = null,
+            string baseId = null,
+            bool isUpgraded = false)
         {
             if (string.IsNullOrWhiteSpace(id))
             {
@@ -161,6 +168,16 @@ namespace ProjectArtOfAll.Core.Cards
             ActiveEffects = new ReadOnlyCollection<CardEffect>(effects);
             Auras = new ReadOnlyCollection<AuraDefinition>(auraArray);
             Passives = new ReadOnlyCollection<PassiveDefinition>(passiveArray);
+            IsUpgraded = isUpgraded;
+            BaseId = isUpgraded
+                ? (string.IsNullOrEmpty(baseId) ? id : baseId)
+                : id;
+            if (isUpgraded && BaseId == id)
+            {
+                throw new ArgumentException(
+                    $"Upgraded card '{id}' needs a different base id.",
+                    nameof(baseId));
+            }
         }
 
         public string Id { get; }
@@ -173,6 +190,37 @@ namespace ProjectArtOfAll.Core.Cards
         public IReadOnlyList<CardEffect> ActiveEffects { get; }
         public IReadOnlyList<AuraDefinition> Auras { get; }
         public IReadOnlyList<PassiveDefinition> Passives { get; }
+
+        /// <summary>升级版的 id 前缀：基础牌指向自己，升级牌指向原始牌（CJ-5.11）。</summary>
+        public string BaseId { get; }
+
+        /// <summary>这张定义是不是某个基础牌的升级版。</summary>
+        public bool IsUpgraded { get; }
+
+        /// <summary>
+        /// 基础牌对应的升级版；已经升级的牌、以及没有设计升级版的牌都是 null。
+        /// 每张牌只能升级一次，所以升级版永远不再带升级目标。
+        /// </summary>
+        public CardDefinition Upgraded { get; private set; }
+
+        public bool CanUpgrade => Upgraded != null;
+
+        internal void LinkUpgrade(CardDefinition upgraded)
+        {
+            if (upgraded == null)
+            {
+                throw new ArgumentNullException(nameof(upgraded));
+            }
+
+            if (!upgraded.IsUpgraded || upgraded.BaseId != Id)
+            {
+                throw new ArgumentException(
+                    $"'{upgraded.Id}' is not the upgrade of '{Id}'.",
+                    nameof(upgraded));
+            }
+
+            Upgraded = upgraded;
+        }
 
         public bool HasTag(CardTag tag)
         {

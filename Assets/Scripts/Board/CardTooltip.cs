@@ -99,8 +99,24 @@ namespace ProjectArtOfAll.Board
                 contentWidth, 0f, TextAnchor.UpperLeft);
 
             bool hasEffects = card.ActiveEffects != null && card.ActiveEffects.Count > 0;
-            bool hasPassives = (card.Auras != null && card.Auras.Count > 0)
-                || (card.Passives != null && card.Passives.Count > 0);
+            List<string> passiveRows = new List<string>();
+            if (card.Passives != null)
+            {
+                foreach (PassiveDefinition passive in card.Passives)
+                {
+                    // Sold-scope passives are restated in board-layer terms by CardText.BoardNote.
+                    if (passive.Trigger == PassiveTrigger.CardSold)
+                    {
+                        continue;
+                    }
+
+                    passiveRows.Add(CardText.Passive(passive));
+                }
+            }
+
+            string boardNote = CardText.BoardNote(card);
+            bool hasBoardNote = !string.IsNullOrEmpty(boardNote);
+            bool hasPassives = (card.Auras != null && card.Auras.Count > 0) || passiveRows.Count > 0;
 
             float effectsTop = cursorY;
 
@@ -125,22 +141,25 @@ namespace ProjectArtOfAll.Board
                     }
                 }
 
-                if (card.Passives != null)
+                foreach (string passiveRow in passiveRows)
                 {
-                    foreach (PassiveDefinition passive in card.Passives)
-                    {
-                        AddBulletRow(CardTooltipText.Colorize(
-                            string.Concat("被动 · ", CardText.Passive(passive))));
-                    }
+                    AddBulletRow(CardTooltipText.Colorize(
+                        string.Concat("被动 · ", passiveRow)));
                 }
             }
 
-            if (hasEffects || hasPassives)
+            if (hasBoardNote)
+            {
+                cursorY += (hasEffects || hasPassives) ? 12f : 16f;
+                AddBulletRow(CardTooltipText.Colorize(boardNote));
+            }
+
+            if (hasEffects || hasPassives || hasBoardNote)
             {
                 AddInnerBox(effectsTop + 4f, cursorY - 8f);
             }
 
-            if (!hasEffects && !hasPassives)
+            if (!hasEffects && !hasPassives && !hasBoardNote)
             {
                 AddDivider(12f);
                 AddText("Plain", "这张牌没有触发效果。", 26, BodyColor, FontStyle.Normal, 0f,

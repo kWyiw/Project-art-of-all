@@ -39,7 +39,8 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckRewardChoice();
                 CheckWarpTeleport();
                 CheckCardBandCommands();
-                CheckBagCapacity();
+                CheckCardFusion();
+            CheckBagCapacity();
                 CheckFreeActionsDuringAnotherTurn();
                 CheckSceneMapTeleport();
             CheckOpeningGrant();
@@ -47,6 +48,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckEarlyHomeStop();
                 CheckPassThroughOpponent();
                 CheckMatchEvent();
+                CheckBoardTraps();
                 CheckCombatBonus();
                 CheckStraightOnlyAndPrediction();
                 CheckShopTile();
@@ -282,8 +284,9 @@ namespace ProjectArtOfAll.Core.Checks
                 "Crowbar must describe its damage.");
 
             CardDefinition snake = CardDatabase.Instance.Get("ouroboros");
-            Assert(CardText.Description(snake).Contains("必定取最大值"),
-                "自噬之蛇 must read as a最大骰 aura, not a flat modifier.");
+            Assert(CardText.Description(snake).Contains("100") &&
+                   CardText.Description(snake).Contains("数值"),
+                "自噬之蛇 must read as a +100 value aura.");
 
             CardDefinition fire = CardDatabase.Instance.Get("campfire");
             Assert(CardText.Description(fire).Contains("光环"),
@@ -331,12 +334,12 @@ namespace ProjectArtOfAll.Core.Checks
             Assert(LoadoutPreview.DiceModifier(apart, 1) == 2,
                 "相邻的消防斧必须吃到 +2。");
 
-            // 自噬之蛇：右侧相邻牌骰值必定取最大值。
+            // 自噬之蛇：右侧相邻牌的结算数值 +100。
             CardInstance snake = new CardInstance(4, CardDatabase.Instance.Get("ouroboros"));
             CardInstance[] snakePair = { snake, crowbar };
-            Assert(LoadoutPreview.HasMaxRoll(snakePair, 1),
-                "自噬之蛇右侧的牌必须被标记为必定最大骰。");
-            Assert(!LoadoutPreview.HasMaxRoll(new[] { crowbar, snake }, 0),
+            Assert(LoadoutPreview.ValueBonus(snakePair, 1) == 100,
+                "自噬之蛇右侧的牌必须拿到 +100 数值。");
+            Assert(LoadoutPreview.ValueBonus(new[] { crowbar, snake }, 0) == 0,
                 "自噬之蛇只影响它右侧的那张牌。");
             Assert(LoadoutPreview.Describe(snakePair, 1) != null,
                 "有加成时必须能描述出来。");
@@ -379,8 +382,13 @@ namespace ProjectArtOfAll.Core.Checks
         private static void CheckCardDatabase()
         {
             CardDatabase catalog = CardDatabase.Instance;
-            Assert(catalog.All.Count == 31,
-                "The catalog must contain all thirty-one cards of the first set.");
+            // 35 张基础牌 + 其中 33 张各自的「+」升级版（雪水净化器 / 神秘饮料没有升级版）。
+            Assert(catalog.All.Count == 35,
+                "The catalog must expose all thirty-five base cards of the first set.");
+            Assert(catalog.All.All(card => !card.IsUpgraded),
+                "The shop / reward pool must never list upgraded cards.");
+            Assert(catalog.AllDefinitions.Count == 68,
+                "Every upgradable base card must ship its upgraded twin.");
             Assert(catalog.Get("crowbar").CooldownTicks == 180,
                 "Crowbar must use a 180-tick cooldown.");
             Assert(catalog.Get("crowbar").SlotSize == 1,
@@ -393,8 +401,33 @@ namespace ProjectArtOfAll.Core.Checks
                 "A pure aura card must never cast on its own.");
             Assert(catalog.Get("crowbar").IsActive,
                 "A card with a cooldown and effects must cast on its own.");
-            Assert(catalog.All.Select(card => card.Id).Distinct().Count() == 31,
+            Assert(
+                catalog.AllDefinitions.Select(card => card.Id).Distinct().Count() ==
+                catalog.AllDefinitions.Count,
                 "Card ids must be unique.");
+
+            // 融合升级（CJ-5.11）：每张升级牌都指回自己的基础牌，基础牌反过来指向它。
+            CardDefinition lighterPlus = catalog.Get("lighter+");
+            Assert(lighterPlus != null && lighterPlus.IsUpgraded,
+                "打火机 must ship a 打火机+ upgrade.");
+            Assert(lighterPlus.BaseId == "lighter" && lighterPlus.DisplayName == "打火机+",
+                "The upgrade must keep its base id and grow a plus sign.");
+            Assert(ReferenceEquals(catalog.Get("lighter").Upgraded, lighterPlus),
+                "The base card must point at its upgraded twin.");
+            Assert(catalog.Get("snow_purifier").Upgraded == null,
+                "雪水净化器 must have no upgrade (its value is the 淡水 it produces).");
+            Assert(catalog.Get("mystery_drink").Upgraded == null,
+                "神秘饮料 must have no upgrade (it is a sellable bottle).");
+            Assert(catalog.Get("recycler+") != null && catalog.Get("recycler+").IsUpgraded,
+                "回收站 must ship 回收站+ (its sell bonus doubles).");
+
+            // 棋盘层被动必须写在卡面上（BoardNote），否则玩家会以为这些牌没有效果。
+            Assert(CardText.Description(catalog.Get("fortune_cookie")).Contains("最左侧的食物"),
+                "幸运饼干的卡面必须说明它给最左侧食物加永久修正。");
+            Assert(CardText.Description(catalog.Get("barbed_wire")).Contains("陷阱"),
+                "铁丝网的卡面必须说明出售时留陷阱。");
+            Assert(!CardText.Description(catalog.Get("fortune_cookie")).Contains("被出售时"),
+                "出售类被动不该再重复成一行「被出售时 → 数值自身」，棋盘层由 BoardNote 描述。");
 
             // 这些是摆在战斗栏里的装备（食物相当于带回复的防具），不是一次性消耗品：
             // 牌是永久资产（CJ-1.2），效果只在战斗中结算，背包里不该有回血、回再生这类效果。
@@ -904,6 +937,58 @@ namespace ProjectArtOfAll.Core.Checks
         /// 旧版本用「全部持有宽度」去卡背包，4 级以后满装备的玩家背包明明是空的，
         /// 商店和奖励却一律提示「装不下」。
         /// </summary>
+        /// <summary>
+        /// 融合升级（CJ-5.11）：手里已有同名牌时，再获得一张不再占新格子，而是把那张牌升级。
+        /// </summary>
+        private static void CheckCardFusion()
+        {
+            MapGraph graph = CreateTestGraph();
+            MatchController controller = new MatchController(graph, 21UL);
+            MatchPlayerState player = controller.State.Players[0];
+            CardDefinition lighter = CardDatabase.Instance.Get("lighter");
+
+            controller.AcquireOrUpgrade(player, lighter, "Test", "no room");
+            Assert(player.OwnedCards.Count == 1 &&
+                   player.OwnedCards[0].Definition.Id == "lighter",
+                "The first 打火机 must simply enter the bag.");
+
+            CardInstance first = player.OwnedCards[0];
+            CardInstance upgraded = controller.AcquireOrUpgrade(player, lighter, "Shop", "no room");
+            Assert(ReferenceEquals(upgraded, first) && player.OwnedCards.Count == 1,
+                "A second 打火机 must fuse into the one you already own.");
+            Assert(first.Definition.Id == "lighter+" && first.Definition.DisplayName == "打火机+",
+                "The fused card must become 打火机+.");
+            Assert(CardText.Description(first.Definition).Contains("1d6") &&
+                   CardText.Description(lighter).Contains("1d4"),
+                "打火机+ must burn harder than 打火机 (1d4 -> 1d6).");
+
+            CardUpgradedEvent upgradedEvent = controller.Events.History
+                .OfType<CardUpgradedEvent>()
+                .LastOrDefault();
+            Assert(
+                upgradedEvent != null &&
+                upgradedEvent.PlayerId == player.Id &&
+                upgradedEvent.BaseId == "lighter" &&
+                upgradedEvent.UpgradedId == "lighter+" &&
+                upgradedEvent.Source == "Shop",
+                "Fusing must announce which card was upgraded and why.");
+
+            // 已经升到顶的牌不会再融合：新来的那张只能自己占位。
+            controller.AcquireOrUpgrade(player, lighter, "Shop", "no room");
+            Assert(player.OwnedCards.Count == 2,
+                "An already upgraded card must not fuse again.");
+
+            // 升级后的牌在战斗里用的是升级版数值。
+            Assert(
+                CardDatabase.Instance.Get("crowbar+").CooldownTicks == 120 &&
+                CardDatabase.Instance.Get("crowbar").CooldownTicks == 180,
+                "撬棍+ must cast in 2 seconds (upgrade shortens the cooldown).");
+
+            Console.WriteLine(
+                "[fusion] lighter -> lighter+ fused in place, bag=" +
+                player.OwnedCards.Count + " cost=" + first.Definition.CooldownTicks);
+        }
+
         private static void CheckBagCapacity()
         {
             Assert(LoadoutRules.FitsInBag(0, 3), "An empty bag must fit a 3c card.");
@@ -1648,8 +1733,9 @@ namespace ProjectArtOfAll.Core.Checks
                         gameEvent.TargetPlayerId == 1 &&
                         !gameEvent.IgnoresShield)
                     .ToList();
-            Assert(forced.Count > 0 && forced.All(hit => hit.Amount == 6),
-                "Ouroboros must force the right neighbour to roll the maximum value.");
+            Assert(
+                forced.Count > 0 && forced.All(hit => hit.Amount > 100 && hit.Amount <= 106),
+                "Ouroboros must add +100 to every number the right neighbour resolves.");
 
             CombatSimulation taped = new CombatSimulation(
                 CombatOf(new[] { "duct_tape", "crowbar" }, new[] { "car_door" }),
@@ -1966,6 +2052,107 @@ namespace ProjectArtOfAll.Core.Checks
         /// <summary>
         /// 事件格（R-EVT-001..003）：停上去开一次三选一，付不起的选项被拒绝，「走开」什么都不拿就结束回合。
         /// </summary>
+        /// <summary>
+        /// R-TRAP-001：铁丝网 / 路障出售后在地块上留陷阱。路障强制停车并消耗次数，
+        /// 铁丝网让停在上面的单位禁行若干回合，禁行回合里掷骰不动。
+        /// </summary>
+        private static void CheckBoardTraps()
+        {
+            // 8 格环：0..3 是四个家（R-MAP-003 要求恰好 4 个唯一归属的家），4..7 空地。
+            MapNode[] nodes = new MapNode[8];
+            for (int index = 0; index < nodes.Length; index++)
+            {
+                bool isHome = index < 4;
+                nodes[index] = new MapNode(
+                    index,
+                    isHome ? TileType.Home : TileType.Neutral,
+                    isHome ? index : -1,
+                    (index + 1) % nodes.Length);
+            }
+
+            MapGraph graph = MapGraph.Create(nodes, playerCount: 4);
+
+            // 1) 路障强制停车：路径上第一个强制停车陷阱把移动截断在那里。
+            MatchController stopper = FindRollingController(graph, 5);
+            Assert(stopper != null, "Some seed must roll a 5 for the trap probe.");
+            MatchPlayerState walker = stopper.State.CurrentPlayer;
+            stopper.State.AddTrap(2, BoardTrapKind.ForcedStop, walker.Id, 2);
+            stopper.Submit(new MoveCommand(walker.Id, null));
+            Assert(
+                walker.CurrentNode == 2,
+                "A roadblock must stop the walker on its tile, reached "
+                    + walker.CurrentNode.ToString() + ".");
+            Assert(
+                stopper.State.Traps.Count == 1 && stopper.State.Traps[0].Charges == 1,
+                "A roadblock must spend one charge when it triggers.");
+            Assert(
+                stopper.Events.History.OfType<BoardTrapTriggeredEvent>().Any(
+                    triggered => triggered.PlayerId == walker.Id
+                        && triggered.Kind == BoardTrapKind.ForcedStop),
+                "Triggering a trap must be reported.");
+
+            // 2) 出售路障 / 铁丝网会在地块上留下陷阱。
+            MatchController seller = new MatchController(graph, 20261203UL);
+            MatchPlayerState owner = seller.State.CurrentPlayer;
+            List<CardInstance> cards = SeedLoadout(owner, 9100, "roadblock", "barbed_wire+");
+            seller.Submit(new SellCardCommand(owner.Id, cards[0].Uid));
+            Assert(
+                seller.State.Traps.Count == 1 &&
+                seller.State.Traps[0].Kind == BoardTrapKind.ForcedStop &&
+                seller.State.Traps[0].NodeId == owner.CurrentNode &&
+                seller.State.Traps[0].Charges == 3,
+                "Selling a roadblock must leave a 3-charge forced stop on the tile.");
+            Assert(
+                seller.Events.History.OfType<BoardTrapPlacedEvent>().Any(
+                    placed => placed.PlayerId == owner.Id
+                        && placed.Kind == BoardTrapKind.ForcedStop),
+                "Placing a trap must be reported.");
+
+            seller.Submit(new SellCardCommand(owner.Id, cards[1].Uid));
+            Assert(
+                seller.State.Traps.Count == 2 &&
+                seller.State.Traps.Any(
+                    trap => trap.Kind == BoardTrapKind.Immobilize && trap.Charges == 3),
+                "Selling 铁丝网+ must leave a 3-round immobilise on the tile.");
+
+            // 3) 铁丝网：停上去就被禁行，禁行回合里掷骰也不动。
+            MatchController trapper = FindRollingController(graph, 1);
+            Assert(trapper != null, "Some seed must roll a 1 for the immobilise probe.");
+            MatchPlayerState victim = trapper.State.CurrentPlayer;
+            trapper.State.AddTrap(1, BoardTrapKind.Immobilize, victim.Id, 2);
+            trapper.Submit(new MoveCommand(victim.Id, null));
+            Assert(
+                victim.CurrentNode == 1 && victim.ImmobileRounds == 2,
+                "Stepping on 铁丝网 must immobilise the walker for 2 rounds.");
+            Assert(
+                trapper.State.Traps.Count == 0,
+                "铁丝网 is a one-shot trap and must disappear after it triggers.");
+
+            // 4) 禁行回合：掷骰后直接结束回合，人物不动。
+            MatchController stuck = new MatchController(graph, 20261204UL);
+            MatchPlayerState immobile = stuck.State.CurrentPlayer;
+            immobile.ImmobileRounds = 2;
+            int turnBefore = stuck.State.TurnNumber;
+            stuck.Submit(new RollCommand(immobile.Id));
+            Assert(
+                immobile.CurrentNode == 0,
+                "An immobilised player must not move.");
+            Assert(
+                stuck.State.TurnNumber == turnBefore + 1 &&
+                stuck.State.CurrentPlayer.Id == 1,
+                "An immobilised turn must end immediately.");
+            Assert(
+                immobile.ImmobileRounds == 1,
+                "Immobilise on the player must count down every turn.");
+            Assert(
+                stuck.Events.History.OfType<PlayerImmobilizedEvent>().Any(
+                    immobilized => immobilized.PlayerId == immobile.Id),
+                "Being immobilised must be reported.");
+
+            Console.WriteLine(
+                "[trap] roadblock stops and spends a charge, 铁丝网 immobilises for 2 rounds");
+        }
+
         private static void CheckMatchEvent()
         {
             // 8 格环：0..3 四个家、4 空地、5 事件格（奇数号 → 神秘饮料）、6..7 空地。
