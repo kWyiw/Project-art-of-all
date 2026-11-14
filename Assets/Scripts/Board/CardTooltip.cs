@@ -534,8 +534,10 @@ namespace ProjectArtOfAll.Board
         public static void Register(CardTooltipView bakedView)
         {
             view = bakedView;
+            // 记的是根画布，不是 view 的直接父节点：所有调用点都传 CanvasRect(...) 的根画布，
+            // 两边口径必须一致，否则会被下面那条"换了画布就重建"的逻辑误判成换了画布。
             hostedCanvas = bakedView != null
-                ? bakedView.transform.parent as RectTransform
+                ? CanvasRect(bakedView.transform)
                 : null;
         }
 
@@ -565,8 +567,9 @@ namespace ProjectArtOfAll.Board
                 hostedCanvas = canvas;
                 if (view == null)
                 {
-                    Debug.LogError("[CardTooltip] Baked tooltip is missing.");
-                    return;
+                    // 场景里没烤进 tooltip（或刚被上面那条逻辑销毁了）：就地建一个，别让悬停整块失效。
+                    view = CardTooltipView.Create(canvas, font);
+                    hostedCanvas = canvas;
                 }
             }
 
