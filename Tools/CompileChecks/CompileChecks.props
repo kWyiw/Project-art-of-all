@@ -1,0 +1,54 @@
+<Project>
+
+  <!--
+    快速回路的公共设置：不启动 Unity，直接用 dotnet 编译 Assets 里的脚本。
+
+    Unity 安装目录默认写死成开发机上的那一份，换机器时命令行覆盖即可：
+
+      dotnet build Tools/CompileChecks/UICompileCheck.csproj -c Release `
+        -p:UnityInstallRoot="C:\Program Files\Unity\Hub\Editor\2022.3.62f2c1"
+
+    依赖项：项目至少要先用 Unity 打开过一次（生成 Library/ScriptAssemblies/UnityEngine.UI.dll）。
+  -->
+
+  <PropertyGroup>
+    <UnityInstallRoot Condition="'$(UnityInstallRoot)' == ''">D:\unity hub\2022.3.62f2c1</UnityInstallRoot>
+    <UnityManagedDir>$(UnityInstallRoot)\Editor\Data\Managed\UnityEngine</UnityManagedDir>
+    <UnityEditorManagedDir>$(UnityInstallRoot)\Editor\Data\Managed</UnityEditorManagedDir>
+    <UnityProjectLibraryDir Condition="'$(UnityProjectLibraryDir)' == ''">$(MSBuildThisFileDirectory)..\..\Library\ScriptAssemblies</UnityProjectLibraryDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(UnityManagedDir)\UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>$(UnityManagedDir)\UnityEngine.UIModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(UnityProjectLibraryDir)\UnityEngine.UI.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(UnityManagedDir)\UnityEngine.TextRenderingModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(UnityManagedDir)\UnityEngine.IMGUIModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(UnityManagedDir)\UnityEngine.InputLegacyModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(UnityManagedDir)\UnityEngine.PhysicsModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.ImageConversionModule">
+      <HintPath>$(UnityManagedDir)\UnityEngine.ImageConversionModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.AnimationModule">
+      <HintPath>$(UnityManagedDir)\UnityEngine.AnimationModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>$(UnityManagedDir)\UnityEngine.AudioModule.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

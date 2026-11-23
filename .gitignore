@@ -29,6 +29,8 @@
 !Game.Core.csproj
 !Tests/Game.Core.Checks/Game.Core.Checks.csproj
 !Tools/BalanceSim/BalanceSim.csproj
+!Tools/CompileChecks/UICompileCheck.csproj
+!Tools/CompileChecks/EditorCompileCheck.csproj
 
 # OS and editor noise
 .DS_Store

@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="CompileChecks.props" />
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>EditorCompileCheck</AssemblyName>
+    <DefineConstants>UNITY_EDITOR;UNITY_2022_3_OR_NEWER;UNITY_STANDALONE</DefineConstants>
+    <NoWarn>CS0649;CS0414;CS0169;CS0618</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../Assets/Game/Core/**/*.cs" />
+    <Compile Include="../../Assets/Scripts/**/*.cs" />
+    <Compile Include="../../Assets/Editor/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="UnityEngine">
+      <HintPath>$(UnityManagedDir)\UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEditor">
+      <HintPath>$(UnityEditorManagedDir)\UnityEditor.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>
