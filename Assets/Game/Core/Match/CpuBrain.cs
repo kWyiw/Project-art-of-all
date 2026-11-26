@@ -302,8 +302,12 @@ namespace ProjectArtOfAll.Core.Match
             for (int i = 0; i < observation.RewardChoices.Count; i++)
             {
                 CardDefinition definition = observation.RewardChoices[i];
-                bool fits = observation.BagWidth + definition.SlotSize <= observation.BagCapacity;
-                double score = EstimateCardValue(definition) + (fits ? 3.0 : -25.0);
+                if (!LoadoutRules.FitsInBag(observation.BagWidth, definition.SlotSize))
+                {
+                    continue;
+                }
+
+                double score = EstimateCardValue(definition);
                 score = ApplyNoise(score);
                 if (score > bestScore)
                 {
@@ -314,7 +318,9 @@ namespace ProjectArtOfAll.Core.Match
 
             if (bestIndex < 0)
             {
-                bestIndex = 0;
+                // BeginReward keeps the match out of AwaitReward when neither card fits,
+                // so this only guards against an inconsistent caller.
+                return CpuDecision.Reward(-1, "没有放得下的奖励");
             }
 
             return CpuDecision.Reward(

@@ -118,6 +118,12 @@ namespace MatchSim
                 MatchController controller = new MatchController(BuildRingMap(), matchSeed);
                 CpuMatchRunner runner = new CpuMatchRunner(controller, difficulty);
                 CpuMatchResult result = runner.Run(Math.Max(4000, maxTurns * 6));
+                if (!result.Finished)
+                {
+                    Console.Error.WriteLine(
+                        $"match seed {matchSeed} stalled: {result.StallReason}");
+                }
+
                 if (index == 0)
                 {
                     firstReport = result.ToReport();

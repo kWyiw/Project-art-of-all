@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ProjectArtOfAll.Core.Cards;
 using ProjectArtOfAll.Core.Commands;
 
 namespace ProjectArtOfAll.Core.Match
@@ -243,6 +244,12 @@ namespace ProjectArtOfAll.Core.Match
                     break;
 
                 case CpuAction.ChooseReward:
+                    if (decision.Index < 0)
+                    {
+                        throw new InvalidOperationException(
+                            "No reward fits in the player's Bag.");
+                    }
+
                     controller.Submit(new ChooseRewardCommand(playerId, decision.Index));
                     break;
 
@@ -291,7 +298,15 @@ namespace ProjectArtOfAll.Core.Match
                     break;
                 }
 
-                RecoverFromFailure();
+                try
+                {
+                    RecoverFromFailure();
+                }
+                catch (InvalidOperationException recoveryError)
+                {
+                    stall = "recovery -> " + recoveryError.Message;
+                    break;
+                }
             }
 
             if (controller.IsFinished)
@@ -334,7 +349,14 @@ namespace ProjectArtOfAll.Core.Match
                     controller.Submit(new SetNormaCommand(playerId, NormaType.Wins));
                     break;
                 case MatchPhase.AwaitReward:
-                    controller.Submit(new ChooseRewardCommand(playerId, 0));
+                    int rewardIndex = FirstFittingRewardIndex();
+                    if (rewardIndex < 0)
+                    {
+                        throw new InvalidOperationException(
+                            "No reward fits in the player's Bag.");
+                    }
+
+                    controller.Submit(new ChooseRewardCommand(playerId, rewardIndex));
                     break;
                 case MatchPhase.AwaitShop:
                     controller.Submit(new ShopActionCommand(playerId, ShopActionType.Leave));
@@ -343,6 +365,21 @@ namespace ProjectArtOfAll.Core.Match
                     controller.Submit(new EventChoiceCommand(playerId, -1));
                     break;
             }
+        }
+
+        private int FirstFittingRewardIndex()
+        {
+            MatchPlayerState player = controller.State.CurrentPlayer;
+            for (int index = 0; index < controller.CurrentRewardChoices.Count; index++)
+            {
+                CardDefinition definition = controller.CurrentRewardChoices[index];
+                if (LoadoutRules.FitsInBag(player.BagCardWidth, definition.SlotSize))
+                {
+                    return index;
+                }
+            }
+
+            return -1;
         }
     }
 }

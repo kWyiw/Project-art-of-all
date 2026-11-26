@@ -155,7 +155,14 @@ namespace ProjectArtOfAll.Core.Match
                 card.Definition.SlotSize,
                 LoadoutRules.BagCapacity,
                 preferredColumn: column);
-            return target >= 0 && TryPlace(bagSlots, card, target);
+            if (target >= 0)
+            {
+                return TryPlace(bagSlots, card, target);
+            }
+
+            // R-ECO-006 的容量口径是背包总宽度。零散空格可能拼不出连续位置，
+            // 此时按原顺序做最小位移重排，避免“还剩 5c 却收不下 2c 牌”。
+            return TryRepackWithCard(card);
         }
 
         public bool TryEquip(int cardUid, int battleCapacity)
@@ -331,6 +338,80 @@ namespace ProjectArtOfAll.Core.Match
 
             Remove(slots, card.Uid);
             slots.Add(new CardSlot(column, card));
+            return true;
+        }
+
+        private bool TryRepackWithCard(CardInstance card)
+        {
+            List<CardSlot> existing = bagSlots
+                .OrderBy(slot => slot.Column)
+                .ToList();
+            int usedWidth = existing.Sum(slot => slot.Card.Definition.SlotSize);
+            if (usedWidth + card.Definition.SlotSize > LoadoutRules.BagCapacity)
+            {
+                return false;
+            }
+
+            int bestInsertion = -1;
+            int bestMovement = int.MaxValue;
+            int bestNewColumn = int.MaxValue;
+            for (int insertion = 0; insertion <= existing.Count; insertion++)
+            {
+                int column = 0;
+                int existingIndex = 0;
+                int movement = 0;
+                int newColumn = -1;
+                bool valid = true;
+
+                for (int order = 0; order <= existing.Count; order++)
+                {
+                    if (order == insertion)
+                    {
+                        newColumn = column;
+                        column += card.Definition.SlotSize;
+                    }
+                    else
+                    {
+                        CardSlot slot = existing[existingIndex++];
+                        movement += Math.Abs(slot.Column - column);
+                        column += slot.Card.Definition.SlotSize;
+                    }
+
+                    if (column > LoadoutRules.BagCapacity)
+                    {
+                        valid = false;
+                        break;
+                    }
+                }
+
+                if (valid &&
+                    (movement < bestMovement ||
+                     (movement == bestMovement && newColumn < bestNewColumn)))
+                {
+                    bestInsertion = insertion;
+                    bestMovement = movement;
+                    bestNewColumn = newColumn;
+                }
+            }
+
+            if (bestInsertion < 0)
+            {
+                return false;
+            }
+
+            List<CardInstance> ordered = existing
+                .Select(slot => slot.Card)
+                .ToList();
+            ordered.Insert(bestInsertion, card);
+
+            bagSlots.Clear();
+            int packedColumn = 0;
+            foreach (CardInstance packed in ordered)
+            {
+                bagSlots.Add(new CardSlot(packedColumn, packed));
+                packedColumn += packed.Definition.SlotSize;
+            }
+
             return true;
         }
 

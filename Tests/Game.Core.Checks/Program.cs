@@ -55,6 +55,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckStraightOnlyAndPrediction();
                 CheckShopTile();
                 CheckCpuAi();
+                CheckCpuRewardFitRegression();
                 CheckM3FullMatch();
                 CheckM3MatchReport();
                 Console.WriteLine("Game.Core checks passed.");
@@ -1108,6 +1109,29 @@ namespace ProjectArtOfAll.Core.Checks
                     8601,
                     CardDatabase.Instance.Get("car_door"))),
                 "The bag must keep accepting cards until its own 10c is used.");
+
+            PlayerCardCollection fragmented = new PlayerCardCollection(
+                new List<CardInstance>(),
+                LoadoutRules.GetBattleCapacity(1));
+            for (int column = 0; column < 10; column += 2)
+            {
+                Assert(
+                    fragmented.TryAddCardAt(
+                        new CardInstance(
+                            8700 + column,
+                            CardDatabase.Instance.Get("crowbar")),
+                        column),
+                    "The fragmented-bag fixture must place every 1c card.");
+            }
+
+            Assert(
+                fragmented.TryAddCard(new CardInstance(
+                    8799,
+                    CardDatabase.Instance.Get("car_door"))),
+                "A 2c card must fit when total bag width has room even if every gap is 1c.");
+            Assert(
+                fragmented.BagWidth == 7,
+                "Repacking must preserve every card and the new card's width.");
             Console.WriteLine(
                 $"[bagspace] bag={collection.BagWidth} battle={collection.BattleWidth}");
         }
@@ -3135,6 +3159,28 @@ namespace ProjectArtOfAll.Core.Checks
         }
 
         /// <summary>
+        /// These seeds used to fail when the CPU chose a reward that did not fit, or when
+        /// fragmented bag gaps blocked a card despite enough total bag width.
+        /// </summary>
+        private static void CheckCpuRewardFitRegression()
+        {
+            ulong[] seeds = { 20261070UL, 20261074UL, 20261149UL };
+            foreach (ulong seed in seeds)
+            {
+                MatchController controller =
+                    new MatchController(CreateCpuAcceptanceGraph(), seed);
+                CpuMatchResult result = new CpuMatchRunner(controller).Run();
+
+                Assert(result.Finished, $"{seed}: reward-fit regression must finish.");
+                Assert(
+                    result.StallReason.Length == 0,
+                    $"{seed}: reward-fit regression stalled. " + result.StallReason);
+                Console.WriteLine(
+                    $"[cpu-reward] seed={seed} finished=True rounds={result.Rounds}");
+            }
+        }
+
+        /// <summary>
         /// Reflection guard for R-CPU-002: no public CPU type may expose the controller, the live
         /// state, or another player's bag cards.
         /// </summary>
@@ -3219,6 +3265,62 @@ namespace ProjectArtOfAll.Core.Checks
             }
 
             return MapGraph.Create(nodes, playerCount: 4);
+        }
+
+        /// <summary>
+        /// Same 24-tile acceptance board used by Tools/MatchSim. Kept here so the CPU
+        /// reward regression exercises the exact map topology that exposed the bug.
+        /// </summary>
+        private static MapGraph CreateCpuAcceptanceGraph()
+        {
+            TileType[] layout =
+            {
+                TileType.Home, TileType.Monster, TileType.Reward, TileType.Shop,
+                TileType.Monster, TileType.Warp, TileType.Home, TileType.Monster,
+                TileType.Reward, TileType.Shop, TileType.Monster, TileType.Warp,
+                TileType.Home, TileType.Monster, TileType.Reward, TileType.Shop,
+                TileType.Monster, TileType.Boss, TileType.Home, TileType.Monster,
+                TileType.Reward, TileType.Shop, TileType.Monster, TileType.Warp
+            };
+
+            List<MapNode> nodes = new List<MapNode>(layout.Length);
+            for (int nodeId = 0; nodeId < layout.Length; nodeId++)
+            {
+                TileType tileType = layout[nodeId];
+                int owner = tileType == TileType.Home
+                    ? CpuAcceptanceHomeOwner(nodeId)
+                    : -1;
+                nodes.Add(
+                    new MapNode(
+                        nodeId,
+                        tileType,
+                        owner,
+                        (nodeId + 1) % layout.Length));
+            }
+
+            int[] warps = Enumerable.Range(0, layout.Length)
+                .Where(nodeId => layout[nodeId] == TileType.Warp)
+                .ToArray();
+
+            return MapGraph.Create(
+                nodes,
+                playerCount: 4,
+                teleportGroups: new[] { warps });
+        }
+
+        private static int CpuAcceptanceHomeOwner(int nodeId)
+        {
+            switch (nodeId)
+            {
+                case 0:
+                    return 0;
+                case 6:
+                    return 1;
+                case 12:
+                    return 2;
+                default:
+                    return 3;
+            }
         }
 
         private static MapGraph CreateTestGraph()
