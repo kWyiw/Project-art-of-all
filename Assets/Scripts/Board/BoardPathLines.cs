@@ -9,11 +9,12 @@ namespace ProjectArtOfAll.Board
     /// 当前棋盘明确不显示淡黄色标线，因此 BoardGameplayController 不再自动调用它。
     /// 只在相邻（正交相接）的瓦片之间连线，线贴在瓦片顶面之上，不参与任何规则判定。
     /// </summary>
-    public static class BoardPathLines
+    public sealed class BoardPathLines : MonoBehaviour
     {
         private const float LineLift = 0.055f;
         private const float LineWidth = 0.075f;
         private static readonly Color LineColor = new Color(0.98f, 0.80f, 0.42f, 0.55f);
+        private Material material;
 
         public static GameObject Build(
             Transform parent,
@@ -22,13 +23,14 @@ namespace ProjectArtOfAll.Board
         {
             GameObject rootObject = new GameObject("BoardPathLines");
             rootObject.transform.SetParent(parent, false);
+            BoardPathLines builder = rootObject.AddComponent<BoardPathLines>();
 
             if (graph == null || tiles == null)
             {
                 return rootObject;
             }
 
-            Material material = CreateLineMaterial();
+            builder.material = CreateLineMaterial();
             HashSet<long> drawn = new HashSet<long>();
 
             for (int i = 0; i < graph.Nodes.Count; i++)
@@ -55,14 +57,14 @@ namespace ProjectArtOfAll.Board
                         continue;
                     }
 
-                    CreateLine(rootObject.transform, from, to, material);
+                    builder.CreateLine(rootObject.transform, from, to, builder.material);
                 }
             }
 
             return rootObject;
         }
 
-        private static void CreateLine(
+        private void CreateLine(
             Transform parent,
             BoardTileView from,
             BoardTileView to,
@@ -86,7 +88,7 @@ namespace ProjectArtOfAll.Board
             line.numCapVertices = 4;
             line.alignment = LineAlignment.TransformZ;
             line.textureMode = LineTextureMode.Stretch;
-            line.material = material;
+            line.sharedMaterial = material;
             line.startColor = LineColor;
             line.endColor = LineColor;
             line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -111,6 +113,34 @@ namespace ProjectArtOfAll.Board
             Material material = new Material(shader) { name = "BoardPathLine" };
             material.renderQueue = 3000;
             return material;
+        }
+
+        private void OnDestroy()
+        {
+            Material owned = material;
+            material = null;
+            if (owned == null)
+            {
+                return;
+            }
+
+            LineRenderer[] renderers = GetComponentsInChildren<LineRenderer>(true);
+            for (int index = 0; index < renderers.Length; index++)
+            {
+                if (renderers[index] != null && renderers[index].sharedMaterial == owned)
+                {
+                    renderers[index].sharedMaterial = null;
+                }
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(owned);
+            }
+            else
+            {
+                DestroyImmediate(owned, true);
+            }
         }
     }
 }

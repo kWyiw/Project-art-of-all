@@ -127,5 +127,30 @@ namespace ProjectArtOfAll.Environment
 
             meshFilter.sharedMesh = generatedMesh;
         }
+
+        private void OnDestroy()
+        {
+            Mesh mesh = generatedMesh;
+            generatedMesh = null;
+            if (mesh == null || (mesh.hideFlags & HideFlags.DontSave) == 0)
+            {
+                return;
+            }
+
+            MeshFilter meshFilter = GetComponent<MeshFilter>();
+            if (meshFilter != null && meshFilter.sharedMesh == mesh)
+            {
+                meshFilter.sharedMesh = null;
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(mesh);
+            }
+            else
+            {
+                DestroyImmediate(mesh);
+            }
+        }
     }
 }

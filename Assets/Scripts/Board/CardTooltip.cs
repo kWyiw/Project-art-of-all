@@ -3,6 +3,7 @@ using System.Text;
 using ProjectArtOfAll.Core.Cards;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace ProjectArtOfAll.Board
@@ -221,6 +222,11 @@ namespace ProjectArtOfAll.Board
         private void OnDisable()
         {
             ClearGenerated();
+        }
+
+        private void OnDestroy()
+        {
+            CardTooltipHost.Release(this);
         }
 
         private void PlaceAt(
@@ -537,9 +543,18 @@ namespace ProjectArtOfAll.Board
         private static RectTransform hostedCanvas;
         private static CardDefinition visibleCard;
         private static int? visibleValue;
+        private static bool sceneHookInstalled;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForPlayMode()
+        {
+            sceneHookInstalled = false;
+            Clear();
+        }
 
         public static void Register(CardTooltipView bakedView)
         {
+            EnsureSceneHook();
             view = bakedView;
             // 记的是根画布，不是 view 的直接父节点：所有调用点都传 CanvasRect(...) 的根画布，
             // 两边口径必须一致，否则会被下面那条"换了画布就重建"的逻辑误判成换了画布。
@@ -548,6 +563,18 @@ namespace ProjectArtOfAll.Board
                 : null;
             visibleCard = null;
             visibleValue = null;
+        }
+
+        /// <summary>
+        /// 场景卸载时 Unity 会销毁组合 UI，但静态字段仍能暂时留住已销毁的托管包装。
+        /// 由实例 OnDestroy 主动回传，避免重复加载棋盘后保留上一场的工具提示和字体引用。
+        /// </summary>
+        public static void Release(CardTooltipView source)
+        {
+            if (ReferenceEquals(view, source) || view == source)
+            {
+                Clear();
+            }
         }
 
         /// <summary>扫到卡牌立即显示（原先的 0.35 秒悬停延迟按玩家要求去掉）。</summary>
@@ -564,6 +591,7 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
+            EnsureSceneHook();
             if (view != null && hostedCanvas != canvas)
             {
                 Object.Destroy(view.gameObject);
@@ -605,6 +633,32 @@ namespace ProjectArtOfAll.Board
                 view.Hide();
             }
 
+            CardHoverLift.ReleaseAll();
+        }
+
+        private static void EnsureSceneHook()
+        {
+            if (sceneHookInstalled)
+            {
+                return;
+            }
+
+            sceneHookInstalled = true;
+            SceneManager.sceneUnloaded -= OnSceneUnloaded;
+            SceneManager.sceneUnloaded += OnSceneUnloaded;
+        }
+
+        private static void OnSceneUnloaded(Scene scene)
+        {
+            Clear();
+        }
+
+        private static void Clear()
+        {
+            view = null;
+            hostedCanvas = null;
+            visibleCard = null;
+            visibleValue = null;
             CardHoverLift.ReleaseAll();
         }
 
