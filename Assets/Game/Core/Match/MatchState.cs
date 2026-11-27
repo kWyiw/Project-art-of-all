@@ -69,19 +69,6 @@ namespace ProjectArtOfAll.Core.Match
             return found;
         }
 
-        internal BoardTrap FindTrap(int nodeId, BoardTrapKind kind)
-        {
-            foreach (BoardTrap trap in traps)
-            {
-                if (trap.NodeId == nodeId && trap.Kind == kind)
-                {
-                    return trap;
-                }
-            }
-
-            return null;
-        }
-
         internal BoardTrap AddTrap(int nodeId, BoardTrapKind kind, int ownerPlayerId, int charges)
         {
             BoardTrap trap = new BoardTrap(nodeId, kind, ownerPlayerId, charges);

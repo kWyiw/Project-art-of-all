@@ -16,6 +16,11 @@ namespace ProjectArtOfAll.Core.Combat
             return GetAuraValue(side, target, AuraStat.DiceFlatModifier);
         }
 
+        public int GetDamageDiceModifier(CombatantRuntime side, CombatCardRuntime target)
+        {
+            return GetAuraValue(side, target, AuraStat.DamageDiceModifier);
+        }
+
         public int GetBonusMultiCast(CombatantRuntime side, CombatCardRuntime target)
         {
             return GetAuraValue(side, target, AuraStat.MultiCast);

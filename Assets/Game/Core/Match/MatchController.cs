@@ -201,7 +201,8 @@ namespace ProjectArtOfAll.Core.Match
             MatchPlayerState roller = State.CurrentPlayer;
             if (roller.ImmobileRounds > 0)
             {
-                // 铁丝网：禁行回合里掷骰也不动，直接把这回合走完。
+                // 铁丝网：掷骰照常，但不进入移动阶段。
+                RecordRoll(roller.Id, random.NextD6());
                 roller.ImmobileRounds--;
                 Publish(new PlayerImmobilizedEvent(roller.Id, roller.ImmobileRounds));
                 EndCurrentTurn();
@@ -223,6 +224,7 @@ namespace ProjectArtOfAll.Core.Match
             MatchPlayerState roller = State.CurrentPlayer;
             if (roller.ImmobileRounds > 0)
             {
+                RecordRoll(roller.Id, command.Value);
                 roller.ImmobileRounds--;
                 Publish(new PlayerImmobilizedEvent(roller.Id, roller.ImmobileRounds));
                 EndCurrentTurn();
@@ -234,9 +236,7 @@ namespace ProjectArtOfAll.Core.Match
 
         private void ApplyRoll(int playerId, int value)
         {
-            State.LastRoll = value;
-            Publish(new DiceRolledEvent(playerId, State.LastRoll));
-            BoardCardEconomy.OnDiceRolled(State.CurrentPlayer, value);
+            RecordRoll(playerId, value);
 
             currentCandidates.Clear();
             currentCandidates.AddRange(
@@ -250,6 +250,13 @@ namespace ProjectArtOfAll.Core.Match
                     ForcedFirstStepNodeId()));
 
             State.Phase = MatchPhase.AwaitMove;
+        }
+
+        private void RecordRoll(int playerId, int value)
+        {
+            State.LastRoll = value;
+            Publish(new DiceRolledEvent(playerId, State.LastRoll));
+            BoardCardEconomy.OnDiceRolled(State.CurrentPlayer, value);
         }
 
         private void HandleMove(MoveCommand command)
@@ -420,23 +427,28 @@ namespace ProjectArtOfAll.Core.Match
         {
             for (int index = 0; index < path.Count; index++)
             {
-                BoardTrap trap = State.FindTrap(path[index], BoardTrapKind.ForcedStop);
-                if (trap == null)
+                BoardTrap[] traps = State.TrapsAt(path[index])
+                    .Where(trap => trap.Kind == BoardTrapKind.ForcedStop)
+                    .ToArray();
+                if (traps.Length == 0)
                 {
                     continue;
                 }
 
-                trap.Charges--;
-                Publish(
-                    new BoardTrapTriggeredEvent(
-                        trap.OwnerPlayerId,
-                        player.Id,
-                        trap.NodeId,
-                        trap.Kind,
-                        trap.Charges));
-                if (trap.Charges <= 0)
+                foreach (BoardTrap trap in traps)
                 {
-                    State.RemoveTrap(trap);
+                    trap.Charges--;
+                    Publish(
+                        new BoardTrapTriggeredEvent(
+                            trap.OwnerPlayerId,
+                            player.Id,
+                            trap.NodeId,
+                            trap.Kind,
+                            trap.Charges));
+                    if (trap.Charges <= 0)
+                    {
+                        State.RemoveTrap(trap);
+                    }
                 }
 
                 if (index == path.Count - 1)
@@ -459,21 +471,28 @@ namespace ProjectArtOfAll.Core.Match
         /// <summary>铁丝网：停在被布下陷阱的地块上的单位禁行若干回合（一次性）。</summary>
         private void TriggerImmobilizeTrap(MatchPlayerState player, int nodeId)
         {
-            BoardTrap trap = State.FindTrap(nodeId, BoardTrapKind.Immobilize);
-            if (trap == null)
+            BoardTrap[] traps = State.TrapsAt(nodeId)
+                .Where(trap => trap.Kind == BoardTrapKind.Immobilize)
+                .ToArray();
+            if (traps.Length == 0)
             {
                 return;
             }
 
-            player.ImmobileRounds = Math.Max(player.ImmobileRounds, trap.Charges);
-            State.RemoveTrap(trap);
-            Publish(
-                new BoardTrapTriggeredEvent(
-                    trap.OwnerPlayerId,
-                    player.Id,
-                    trap.NodeId,
-                    trap.Kind,
-                    0));
+            foreach (BoardTrap trap in traps)
+            {
+                player.ImmobileRounds = Math.Max(
+                    player.ImmobileRounds,
+                    trap.Charges);
+                State.RemoveTrap(trap);
+                Publish(
+                    new BoardTrapTriggeredEvent(
+                        trap.OwnerPlayerId,
+                        player.Id,
+                        trap.NodeId,
+                        trap.Kind,
+                        0));
+            }
         }
 
         /// <summary>R-TRAP-001：铁丝网 / 路障出售时在当前地块留下陷阱。</summary>
@@ -489,12 +508,6 @@ namespace ProjectArtOfAll.Core.Match
             }
 
             int nodeId = seller.CurrentNode;
-            BoardTrap existing = State.FindTrap(nodeId, kind);
-            if (existing != null)
-            {
-                State.RemoveTrap(existing);
-            }
-
             State.AddTrap(nodeId, kind, seller.Id, charges);
             Publish(
                 new BoardTrapPlacedEvent(
@@ -888,16 +901,12 @@ namespace ProjectArtOfAll.Core.Match
                 "The event reward does not fit in the player's Bag.");
         }
 
-        /// <summary>一轮打完：铜锣烧涨价值，雪水净化器往背包里塞一张淡水。</summary>
-        private void ApplyRoundEndEconomy()
+        /// <summary>该玩家回合结束：结算只属于该玩家的棋盘成长与产牌。</summary>
+        private void ApplyTurnEndEconomy(MatchPlayerState player)
         {
-            foreach (MatchPlayerState player in State.Players)
+            foreach (CardDefinition produced in BoardCardEconomy.OnTurnEnded(player))
             {
-                CardDefinition produced = BoardCardEconomy.OnRoundEnded(player);
-                if (produced != null)
-                {
-                    AcquireOrUpgrade(player, produced, "Purifier", null, required: false);
-                }
+                AcquireOrUpgrade(player, produced, "Purifier", null, required: false);
             }
         }
 
@@ -1171,14 +1180,14 @@ namespace ProjectArtOfAll.Core.Match
             CombatantSnapshot leftSnapshot = new CombatantSnapshot(
                 left.Id,
                 leftLevel,
-                left.BattleSlots,
+                EffectiveBattleSlots(left),
                 null,
                 ToCombatBonus(left.CombinedBattleModifier()));
             CombatantSnapshot rightSnapshot = rightPlayer != null
                 ? new CombatantSnapshot(
                     rightPlayerId,
                     rightLevel,
-                    rightPlayer.BattleSlots,
+                    EffectiveBattleSlots(rightPlayer),
                     null,
                     ToCombatBonus(rightPlayer.CombinedBattleModifier()))
                 : new CombatantSnapshot(
@@ -1198,6 +1207,16 @@ namespace ProjectArtOfAll.Core.Match
             left.ConsumeBattleModifiers();
             rightPlayer?.ConsumeBattleModifiers();
             return result;
+        }
+
+        private static IReadOnlyList<CardSlot> EffectiveBattleSlots(MatchPlayerState player)
+        {
+            return player.BattleSlots
+                .Select(slot => new CardSlot(
+                    slot.Column,
+                    slot.Card.CloneForRuntime(
+                        BoardCardEconomy.RecyclerBonus(player, slot.Card))))
+                .ToArray();
         }
 
         private static CombatBonus ToCombatBonus(BattleModifier modifier)
@@ -1264,13 +1283,13 @@ namespace ProjectArtOfAll.Core.Match
         {
             MatchPlayerState endingPlayer = State.CurrentPlayer;
             Publish(new TurnEndedEvent(endingPlayer.Id, State.TurnNumber));
+            ApplyTurnEndEconomy(endingPlayer);
 
             State.CurrentPlayerIndex =
                 (State.CurrentPlayerIndex + 1) % State.Players.Count;
             if (State.CurrentPlayerIndex == 0)
             {
                 State.RoundNumber++;
-                ApplyRoundEndEconomy();
                 if ((State.RoundNumber - 1) % GlobalGrantInterval == 0)
                 {
                     Publish(new GlobalShardsGrantedEvent(GlobalShardGrant));

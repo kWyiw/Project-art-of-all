@@ -625,7 +625,10 @@ namespace ProjectArtOfAll.Board
 
             float thickness = Mathf.Max(2f, 2.2f * scale);
             AddFramedBorder(widget.transform, FrameColor(card.Definition.SlotSize), thickness, 13f * scale);
-            AddValueBadge(widget.transform, card.Value);
+            int displayedValue = lastPlayer != null
+                ? lastPlayer.EffectiveCardValue(card)
+                : card.Value;
+            AddValueBadge(widget.transform, displayedValue);
             if (inBattle)
             {
                 string bonus = BonusBadge(slots, card.Uid);
@@ -863,7 +866,10 @@ namespace ProjectArtOfAll.Board
                 CardTooltipHost.CanvasRect(root),
                 font,
                 handler.Card.Definition,
-                screenPosition);
+                screenPosition,
+                currentValue: lastPlayer != null
+                    ? lastPlayer.EffectiveCardValue(handler.Card)
+                    : handler.Card.Value);
         }
 
         public void HideTooltip()

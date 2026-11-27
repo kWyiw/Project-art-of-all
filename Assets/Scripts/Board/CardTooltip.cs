@@ -67,7 +67,8 @@ namespace ProjectArtOfAll.Board
             CardDefinition card,
             Vector2 screenPosition,
             RectTransform canvas,
-            Camera screenCamera = null)
+            Camera screenCamera = null,
+            int? currentValue = null)
         {
             if (card == null || canvas == null)
             {
@@ -95,7 +96,7 @@ namespace ProjectArtOfAll.Board
             string meta = string.Concat(
                 CardText.Meta(card),
                 " · 价值 ",
-                card.Value.ToString());
+                (currentValue ?? card.Value).ToString());
             AddText("Meta", meta, 24, MetaColor, FontStyle.Normal, 0f,
                 contentWidth, 0f, TextAnchor.UpperLeft);
 
@@ -535,6 +536,7 @@ namespace ProjectArtOfAll.Board
         private static CardTooltipView view;
         private static RectTransform hostedCanvas;
         private static CardDefinition visibleCard;
+        private static int? visibleValue;
 
         public static void Register(CardTooltipView bakedView)
         {
@@ -544,6 +546,8 @@ namespace ProjectArtOfAll.Board
             hostedCanvas = bakedView != null
                 ? CanvasRect(bakedView.transform)
                 : null;
+            visibleCard = null;
+            visibleValue = null;
         }
 
         /// <summary>扫到卡牌立即显示（原先的 0.35 秒悬停延迟按玩家要求去掉）。</summary>
@@ -552,7 +556,8 @@ namespace ProjectArtOfAll.Board
             Font font,
             CardDefinition card,
             Vector2 screenPosition,
-            Camera screenCamera = null)
+            Camera screenCamera = null,
+            int? currentValue = null)
         {
             if (canvas == null || card == null)
             {
@@ -564,6 +569,7 @@ namespace ProjectArtOfAll.Board
                 Object.Destroy(view.gameObject);
                 view = null;
                 visibleCard = null;
+                visibleValue = null;
             }
 
             if (view == null)
@@ -578,19 +584,21 @@ namespace ProjectArtOfAll.Board
                 }
             }
 
-            if (visibleCard == card && view.IsShown)
+            if (visibleCard == card && visibleValue == currentValue && view.IsShown)
             {
                 view.Follow(screenPosition, canvas, screenCamera);
                 return;
             }
 
             visibleCard = card;
-            view.Show(card, screenPosition, canvas, screenCamera);
+            visibleValue = currentValue;
+            view.Show(card, screenPosition, canvas, screenCamera, currentValue);
         }
 
         public static void Hide()
         {
             visibleCard = null;
+            visibleValue = null;
 
             if (view != null)
             {

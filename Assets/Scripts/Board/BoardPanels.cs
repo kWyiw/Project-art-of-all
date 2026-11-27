@@ -344,7 +344,7 @@ namespace ProjectArtOfAll.Board
             List<CardInstance> bag = player.OwnedCards.Where(card => !player.IsEquipped(card)).ToList();
             int bagWidth = bag.Sum(card => card.Definition.SlotSize);
             int bagCount = bag.Count;
-            int bagValue = player.OwnedCards.Sum(card => card.Value);
+            int bagValue = player.OwnedCards.Sum(player.EffectiveCardValue);
 
             bagHeader.text = string.Concat(
                 "背包 ", bagWidth.ToString(), "c / ", LoadoutRules.BagCapacity.ToString(), "c",

@@ -315,6 +315,7 @@ namespace ProjectArtOfAll.Core.Match
                 hash = StableHash.Add(hash, slot.Card.Definition.Id);
                 hash = StableHash.Add(hash, 0);
                 hash = StableHash.Add(hash, slot.Column);
+                hash = AddCardGrowth(hash, slot.Card);
             }
 
             foreach (CardSlot slot in battleSlots.OrderBy(slot => slot.Column))
@@ -323,8 +324,18 @@ namespace ProjectArtOfAll.Core.Match
                 hash = StableHash.Add(hash, slot.Card.Definition.Id);
                 hash = StableHash.Add(hash, 1);
                 hash = StableHash.Add(hash, slot.Column);
+                hash = AddCardGrowth(hash, slot.Card);
             }
 
+            return hash;
+        }
+
+        private static ulong AddCardGrowth(ulong hash, CardInstance card)
+        {
+            hash = StableHash.Add(hash, card.ValueBonus);
+            hash = StableHash.Add(hash, card.PermanentDiceModifier);
+            hash = StableHash.Add(hash, card.PermanentDiceCountBonus);
+            hash = StableHash.Add(hash, card.PermanentHealingModifier);
             return hash;
         }
 

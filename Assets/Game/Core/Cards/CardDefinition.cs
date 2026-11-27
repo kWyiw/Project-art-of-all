@@ -57,7 +57,10 @@ namespace ProjectArtOfAll.Core.Cards
         ShieldBonus = 5,
 
         /// <summary>Attack damage dealt by this card restores the same amount of health.</summary>
-        Lifesteal = 6
+        Lifesteal = 6,
+
+        /// <summary>Only modifies dice that produce attack damage.</summary>
+        DamageDiceModifier = 7
     }
 
     public enum AuraScaling

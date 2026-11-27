@@ -362,7 +362,13 @@ namespace ProjectArtOfAll.Core.Combat
             int perDieModifier =
                 auraResolver.GetDiceModifier(owner, card) +
                 card.BattleDiceModifier +
-                card.Instance.PermanentDiceModifier;
+                card.Instance.PermanentDiceModifier +
+                (effect.Operation == EffectOp.DealDamage
+                    ? auraResolver.GetDamageDiceModifier(owner, card)
+                    : 0) +
+                (effect.Operation == EffectOp.Heal
+                    ? card.Instance.PermanentHealingModifier
+                    : 0);
             int extraDice =
                 card.TotalDiceCountBonus +
                 auraResolver.GetBonusDiceCount(owner, card);

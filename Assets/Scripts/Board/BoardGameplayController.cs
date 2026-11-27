@@ -295,6 +295,7 @@ namespace ProjectArtOfAll.Board
             }
 
             MatchPlayerState player = match.State.CurrentPlayer;
+            int eventStart = match.Events.History.Count;
             match.Submit(
                 forcedSteps.HasValue
                     ? (IMatchCommand)new DebugRollCommand(player.Id, forcedSteps.Value)
@@ -303,6 +304,23 @@ namespace ProjectArtOfAll.Board
             hud?.SetDiceResult(roll);
             UpdateHudStatus(
                 forcedSteps.HasValue ? $"调试前进 {roll}" : $"掷出 {roll}");
+
+            PlayerImmobilizedEvent immobilized = match.Events.History
+                .Skip(eventStart)
+                .OfType<PlayerImmobilizedEvent>()
+                .LastOrDefault();
+            if (immobilized != null)
+            {
+                UpdateHudStatus(string.Concat(
+                    "铁丝网禁行 · 掷出 ",
+                    roll.ToString(),
+                    " · 剩余 ",
+                    immobilized.RoundsLeft.ToString(),
+                    " 回合"));
+                ActivateCurrentPlayer();
+                return;
+            }
+
             StartCoroutine(PlanAndSubmitMove(player.Id, roll));
         }
 
@@ -1417,12 +1435,27 @@ namespace ProjectArtOfAll.Board
                     automaticTurn = true;
                     isMoving = true;
                     hud?.SetDiceInteractable(false);
+                    int eventStart = match.Events.History.Count;
                     match.Submit(new RollCommand(actor.Id));
                     int roll = match.State.LastRoll;
                     hud?.SetDiceResult(roll);
                     UpdateHudStatus(string.Concat(
                         "CPU P", (actor.Id + 1).ToString(),
                         "（", brain.Personality.Label, "）掷出 ", roll.ToString()));
+
+                    if (match.Events.History
+                        .Skip(eventStart)
+                        .OfType<PlayerImmobilizedEvent>()
+                        .Any())
+                    {
+                        isMoving = false;
+                        automaticTurn = false;
+                        UpdateHudStatus(string.Concat(
+                            "CPU P", (actor.Id + 1).ToString(),
+                            " 被铁丝网禁行，掷出 ", roll.ToString()));
+                        ActivateCurrentPlayer();
+                        break;
+                    }
 
                     // 掷完才轮到"走哪条路"，此时 Phase 已经是 AwaitMove，重新观察一次。
                     CpuDecision move = brain.Decide(CpuObservation.Capture(match));

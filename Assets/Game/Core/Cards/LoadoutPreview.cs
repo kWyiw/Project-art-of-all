@@ -42,7 +42,10 @@ namespace ProjectArtOfAll.Core.Cards
         {
             List<Placed> row = Place(slots);
             int index = IndexOf(row, cardUid);
-            return index < 0 ? 0 : SumAura(row, index, AuraStat.DiceFlatModifier);
+            return index < 0
+                ? 0
+                : SumAura(row, index, AuraStat.DiceFlatModifier) +
+                  SumAura(row, index, AuraStat.DamageDiceModifier);
         }
 
         public static int BonusDice(IReadOnlyList<CardSlot> slots, int cardUid)
@@ -106,7 +109,8 @@ namespace ProjectArtOfAll.Core.Cards
 
         private static int DiceModifier(IReadOnlyList<Placed> row, int index)
         {
-            return SumAura(row, index, AuraStat.DiceFlatModifier);
+            return SumAura(row, index, AuraStat.DiceFlatModifier) +
+                   SumAura(row, index, AuraStat.DamageDiceModifier);
         }
 
         private static int BonusDice(IReadOnlyList<Placed> row, int index)

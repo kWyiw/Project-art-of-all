@@ -179,7 +179,7 @@ namespace ProjectArtOfAll.Core.Cards
             Add(
                 all,
                 Card(
-                    "special_rubber", "特种橡胶", 1, 0, CardTag.Waste, 1, both,
+                    "special_rubber", "特种橡胶", 1, 0, CardTag.Waste, 1, battle,
                     passives: new[]
                     {
                         new PassiveDefinition(PassiveTrigger.BurnApplied, ShieldBonus(1))
@@ -192,12 +192,12 @@ namespace ProjectArtOfAll.Core.Cards
             Add(
                 all,
                 Card(
-                    "whetstone", "磨刀石", 1, 0, CardTag.Waste, 1, both,
+                    "whetstone", "磨刀石", 1, 0, CardTag.Waste, 1, battle,
                     auras: new[]
                     {
                         new AuraDefinition(
                             AuraTarget.AllAdjacent,
-                            AuraStat.DiceFlatModifier,
+                            AuraStat.DamageDiceModifier,
                             2,
                             CardTag.Weapon)
                     }),
@@ -205,7 +205,7 @@ namespace ProjectArtOfAll.Core.Cards
                 {
                     new AuraDefinition(
                         AuraTarget.AllAdjacent,
-                        AuraStat.DiceFlatModifier,
+                        AuraStat.DamageDiceModifier,
                         4,
                         CardTag.Weapon)
                 }));
@@ -213,7 +213,7 @@ namespace ProjectArtOfAll.Core.Cards
             Add(
                 all,
                 Card(
-                    "duct_tape", "胶带", 1, 0, CardTag.Waste, 1, both,
+                    "duct_tape", "胶带", 1, 0, CardTag.Waste, 1, battle,
                     passives: new[]
                     {
                         new PassiveDefinition(
@@ -330,7 +330,7 @@ namespace ProjectArtOfAll.Core.Cards
             Add(
                 all,
                 Card(
-                    "snow_purifier", "雪水净化器", 2, 8, CardTag.Estate | CardTag.Waste, 2, battle,
+                    "snow_purifier", "雪水净化器", 2, 8, CardTag.Estate | CardTag.Waste, 2, both,
                     effects: new[] { Heal(1, 20) }));
 
             // 淡水：出售时给最左侧的恢复牌 +1/+2 永久修正（棋盘层，BoardCardEconomy）。
@@ -394,7 +394,7 @@ namespace ProjectArtOfAll.Core.Cards
             Add(
                 all,
                 Card(
-                    "dorayaki", "铜锣烧", 1, 6, CardTag.Food, 1, battle,
+                    "dorayaki", "铜锣烧", 1, 6, CardTag.Food, 1, both,
                     effects: new[]
                     {
                         new CardEffect(
@@ -458,7 +458,7 @@ namespace ProjectArtOfAll.Core.Cards
                     {
                         new AuraDefinition(
                             AuraTarget.AllByTag,
-                            AuraStat.DiceFlatModifier,
+                            AuraStat.DamageDiceModifier,
                             2,
                             CardTag.Weapon)
                     }),
@@ -466,7 +466,7 @@ namespace ProjectArtOfAll.Core.Cards
                 {
                     new AuraDefinition(
                         AuraTarget.AllByTag,
-                        AuraStat.DiceFlatModifier,
+                        AuraStat.DamageDiceModifier,
                         3,
                         CardTag.Weapon)
                 }));
@@ -496,7 +496,7 @@ namespace ProjectArtOfAll.Core.Cards
             Add(
                 all,
                 Card(
-                    "ouroboros", "自噬之蛇", 1, 0, CardTag.Companion, 1, both,
+                    "ouroboros", "自噬之蛇", 1, 0, CardTag.Companion, 1, battle,
                     auras: new[]
                     {
                         new AuraDefinition(
@@ -516,7 +516,7 @@ namespace ProjectArtOfAll.Core.Cards
             Add(
                 all,
                 Card(
-                    "golden_chariot", "黄金战车", 3, 12, CardTag.Weapon, 4, battle,
+                    "golden_chariot", "黄金战车", 3, 12, CardTag.Weapon, 4, both,
                     effects: new[]
                     {
                         new CardEffect(
@@ -536,7 +536,7 @@ namespace ProjectArtOfAll.Core.Cards
             Add(
                 all,
                 Card(
-                    "six_six_streak", "六六大顺", 2, 6, CardTag.Mascot, 2, battle,
+                    "six_six_streak", "六六大顺", 2, 6, CardTag.Mascot, 2, both,
                     effects: new[] { Shield(2, 20) },
                     auras: new[]
                     {
@@ -550,7 +550,7 @@ namespace ProjectArtOfAll.Core.Cards
             Add(
                 all,
                 Card(
-                    "placeholder_7", "占位符7", 1, 6, CardTag.Mascot, 2, battle,
+                    "placeholder_7", "占位符7", 1, 6, CardTag.Mascot, 2, both,
                     effects: new[]
                     {
                         new CardEffect(
@@ -625,7 +625,7 @@ namespace ProjectArtOfAll.Core.Cards
                 all,
                 Card(
                     "placeholder_1", "占位符1", 1, 5,
-                    CardTag.Weapon | CardTag.Companion, 1, battle,
+                    CardTag.Weapon | CardTag.Companion, 1, both,
                     effects: new[] { Damage(1, 8) },
                     auras: new[]
                     {
@@ -666,7 +666,7 @@ namespace ProjectArtOfAll.Core.Cards
                     {
                         new AuraDefinition(
                             AuraTarget.Self,
-                            AuraStat.DiceFlatModifier,
+                            AuraStat.DamageDiceModifier,
                             10,
                             CardTag.Weapon,
                             AuraScaling.PerOtherMatchingTag)
@@ -758,7 +758,7 @@ namespace ProjectArtOfAll.Core.Cards
                     {
                         new AuraDefinition(
                             AuraTarget.Self,
-                            AuraStat.DiceFlatModifier,
+                            AuraStat.DamageDiceModifier,
                             1,
                             scaling: AuraScaling.PerOwnerRegeneration)
                     }));
@@ -787,7 +787,7 @@ namespace ProjectArtOfAll.Core.Cards
             // 没有设计升级版，所以同名第二瓶不会融合。
             all.Add(
                 Card(
-                    "mystery_drink", "神秘饮料", 2, 0, CardTag.Food, 8, both,
+                    "mystery_drink", "神秘饮料", 2, 0, CardTag.Food, 8, battle,
                     passives: new[]
                     {
                         new PassiveDefinition(

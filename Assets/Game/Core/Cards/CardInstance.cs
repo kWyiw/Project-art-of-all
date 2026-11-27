@@ -27,6 +27,7 @@ namespace ProjectArtOfAll.Core.Cards
         private int valueBonus;
         private int permanentDiceModifier;
         private int permanentDiceCountBonus;
+        private int permanentHealingModifier;
 
         /// <summary>铜锣烧 / 黄金战车: value grows during a run, capped at 20.</summary>
         public int ValueBonus
@@ -47,6 +48,13 @@ namespace ProjectArtOfAll.Core.Cards
         {
             get => permanentDiceCountBonus;
             set => permanentDiceCountBonus = Math.Max(-2, Math.Min(4, value));
+        }
+
+        /// <summary>Fresh water sales: only modifies dice that heal.</summary>
+        public int PermanentHealingModifier
+        {
+            get => permanentHealingModifier;
+            set => permanentHealingModifier = Math.Max(-5, Math.Min(5, value));
         }
 
         public int Value => Math.Max(0, Definition.Value + ValueBonus);
@@ -74,6 +82,16 @@ namespace ProjectArtOfAll.Core.Cards
 
             Definition = Definition.Upgraded;
             return true;
+        }
+
+        internal CardInstance CloneForRuntime(int dynamicValueBonus)
+        {
+            CardInstance clone = new CardInstance(Uid, Definition);
+            clone.ValueBonus = ValueBonus + dynamicValueBonus;
+            clone.PermanentDiceModifier = PermanentDiceModifier;
+            clone.PermanentDiceCountBonus = PermanentDiceCountBonus;
+            clone.PermanentHealingModifier = PermanentHealingModifier;
+            return clone;
         }
     }
 }

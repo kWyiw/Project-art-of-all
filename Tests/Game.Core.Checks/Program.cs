@@ -34,6 +34,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckCustomMaxHealth();
                 CheckCardMechanics();
                 CheckSecondSetMechanics();
+                CheckCardStrictnessFixes();
                 CheckM1MatchDurability();
                 CheckRandomness();
                 CheckDebugRollRange();
@@ -499,15 +500,34 @@ namespace ProjectArtOfAll.Core.Checks
             // 牌是永久资产（CJ-1.2），效果只在战斗中结算，背包里不该有回血、回再生这类效果。
             foreach (string id in new[]
                      {
-                         "fresh_water", "mineral_water", "chocolate", "hardtack", "baguette", "dorayaki"
+                         "fresh_water", "mineral_water", "chocolate", "hardtack", "baguette"
                      })
             {
                 Assert(catalog.Get(id).Scope == CardScope.BattleOnly,
                     string.Concat(id, " is battle gear and must only work in battle."));
             }
 
-            Assert(catalog.Get("recycler").Scope == CardScope.BagAndBattle,
-                "The recycler keeps working while it sits in the bag.");
+            foreach (string id in new[]
+                     {
+                         "whetstone", "duct_tape", "special_rubber", "ouroboros"
+                     })
+            {
+                Assert(catalog.Get(id).Scope == CardScope.BattleOnly,
+                    string.Concat(id, " has only combat effects and must be BattleOnly."));
+            }
+
+            Assert(
+                catalog.Get("mystery_drink").Scope == CardScope.BattleOnly,
+                "Mystery drink's battle-start heal must require the battle row.");
+            foreach (string id in new[]
+                     {
+                         "recycler", "snow_purifier", "dorayaki", "golden_chariot",
+                         "six_six_streak", "placeholder_7", "placeholder_1"
+                     })
+            {
+                Assert(catalog.Get(id).Scope == CardScope.BagAndBattle,
+                    string.Concat(id, " has a board-layer economy passive that works from the bag."));
+            }
         }
 
         private static void CheckCardKeywords()
@@ -1972,7 +1992,7 @@ namespace ProjectArtOfAll.Core.Checks
             Assert(six.Value == 4, "六六大顺 must ignore non-6 rolls.");
             BoardCardEconomy.OnRewardStopped(owner);
             Assert(rewardValue.Value == 3, "占位符7 must gain 1 value on a Reward stop.");
-            BoardCardEconomy.OnRoundEnded(owner);
+            BoardCardEconomy.OnTurnEnded(owner);
             Assert(
                 roundDamage.PermanentDiceModifier == 1,
                 "占位符1 must gain 1 permanent dice modifier each round.");
@@ -2023,7 +2043,7 @@ namespace ProjectArtOfAll.Core.Checks
             CombatCardRuntime placeholder3Runtime = weaponCounter.Left.Cards
                 .First(card => card.Instance.Uid == placeholder3.Uid);
             Assert(
-                aura.GetDiceModifier(weaponCounter.Left, placeholder3Runtime) == 20,
+                aura.GetDamageDiceModifier(weaponCounter.Left, placeholder3Runtime) == 20,
                 "占位符3 must gain +10 for each other weapon.");
 
             CardInstance fruitKnife = new CardInstance(9120, catalog.Get("fruit_knife"));
@@ -2033,7 +2053,7 @@ namespace ProjectArtOfAll.Core.Checks
             regenerationCounter.Left.Regeneration = 5;
             CombatCardRuntime fruitKnifeRuntime = regenerationCounter.Left.Cards[0];
             Assert(
-                aura.GetDiceModifier(regenerationCounter.Left, fruitKnifeRuntime) == 5,
+                aura.GetDamageDiceModifier(regenerationCounter.Left, fruitKnifeRuntime) == 5,
                 "水果刀 must gain +1 dice modifier per Regeneration layer.");
 
             // 占位符2：右邻武器获得吸血。
@@ -2226,6 +2246,149 @@ namespace ProjectArtOfAll.Core.Checks
 
             Console.WriteLine(
                 "[second-set] board-growth, lifesteal, triggers and dynamic modifiers verified");
+        }
+
+        private static void CheckCardStrictnessFixes()
+        {
+            CardDatabase catalog = CardDatabase.Instance;
+
+            // 回合结束只结算当前玩家；棋盘经济被动从背包也生效。
+            MatchController turn = new MatchController(CreateM3Graph(), 20261210UL);
+            MatchPlayerState owner = turn.State.Players[0];
+            CardInstance dorayaki = new CardInstance(9300, catalog.Get("dorayaki"));
+            CardInstance purifierA = new CardInstance(9301, catalog.Get("snow_purifier"));
+            CardInstance purifierB = new CardInstance(9302, catalog.Get("snow_purifier"));
+            Assert(owner.TryAddCard(dorayaki, equipIfPossible: false), "Dorayaki fixture must fit.");
+            Assert(owner.TryAddCard(purifierA, equipIfPossible: false), "Purifier A fixture must fit.");
+            Assert(owner.TryAddCard(purifierB, equipIfPossible: false), "Purifier B fixture must fit.");
+            Assert(
+                !owner.IsEquipped(dorayaki) &&
+                !owner.IsEquipped(purifierA) &&
+                !owner.IsEquipped(purifierB),
+                "Turn-end economy fixtures must start in the bag.");
+
+            int eventStart = turn.Events.History.Count;
+            turn.Submit(new DebugRollCommand(owner.Id, 1));
+            turn.Submit(new MoveCommand(owner.Id));
+            Assert(
+                dorayaki.Value == 2,
+                "Dorayaki must grow at its owner's first turn end, not four turns later.");
+            Assert(
+                turn.Events.History.Skip(eventStart)
+                    .OfType<CardAddedEvent>()
+                    .Count(cardEvent => cardEvent.Source == "Purifier") == 1 &&
+                turn.Events.History.Skip(eventStart)
+                    .OfType<CardUpgradedEvent>()
+                    .Count(cardEvent => cardEvent.Source == "Purifier") == 1,
+                "Two bagged Snow Purifiers must each produce a Fresh Water at turn end.");
+
+            for (int index = 0; index < 3; index++)
+            {
+                MatchPlayerState other = turn.State.CurrentPlayer;
+                turn.Submit(new DebugRollCommand(other.Id, 1));
+                turn.Submit(new MoveCommand(other.Id));
+            }
+
+            Assert(
+                dorayaki.Value == 2,
+                "Other players' turn ends must not grow the owner's Dorayaki.");
+
+            // Recycler value aura works from the bag and is reflected as effective value.
+            MatchController recyclerMatch = new MatchController(CreateM3Graph(), 20261211UL);
+            MatchPlayerState recyclerOwner = recyclerMatch.State.Players[0];
+            CardInstance recycler =
+                new CardInstance(9310, catalog.Get("recycler"));
+            CardInstance waste =
+                new CardInstance(9311, catalog.Get("roadblock"));
+            Assert(recyclerOwner.TryAddCard(recycler, equipIfPossible: false), "Recycler must fit.");
+            Assert(recyclerOwner.TryAddCard(waste, equipIfPossible: false), "Waste must fit.");
+            Assert(
+                !recyclerOwner.IsEquipped(recycler),
+                "The recycler value probe must run from the bag.");
+            Assert(
+                recyclerOwner.EffectiveCardValue(waste) == 4 &&
+                BoardCardEconomy.SaleValue(recyclerOwner, waste) == 4,
+                "A bagged Recycler must add +2 value to a 2c waste card.");
+
+            // "Weapon damage" modifiers must not leak into healing effects.
+            CombatSimulation modified = new CombatSimulation(
+                new BattleSnapshot(
+                    new CombatantSnapshot(
+                        0,
+                        5,
+                        new[]
+                        {
+                            new CardInstance(9320, catalog.Get("whetstone")),
+                            new CardInstance(9321, catalog.Get("baguette"))
+                        },
+                        maxHealth: 5000),
+                    new CombatantSnapshot(
+                        1,
+                        5,
+                        new[] { new CardInstance(9322, catalog.Get("car_door")) },
+                        maxHealth: 5000)),
+                2UL);
+            CombatSimulation baseline = new CombatSimulation(
+                new BattleSnapshot(
+                    new CombatantSnapshot(
+                        0,
+                        5,
+                        new[] { new CardInstance(9321, catalog.Get("baguette")) },
+                        maxHealth: 5000),
+                    new CombatantSnapshot(
+                        1,
+                        5,
+                        new[] { new CardInstance(9322, catalog.Get("car_door")) },
+                        maxHealth: 5000)),
+                2UL);
+            for (int tick = 0; tick < 400; tick++)
+            {
+                modified.TickOnce();
+                baseline.TickOnce();
+            }
+
+            HealthRestoredEvent modifiedHeal = modified.Events.History
+                .OfType<HealthRestoredEvent>()
+                .First(gameEvent => gameEvent.PlayerId == 0);
+            HealthRestoredEvent baselineHeal = baseline.Events.History
+                .OfType<HealthRestoredEvent>()
+                .First(gameEvent => gameEvent.PlayerId == 0);
+            Assert(
+                modifiedHeal.Amount == baselineHeal.Amount,
+                "Whetstone must not increase Baguette's healing dice.");
+            CombatCardRuntime baguetteRuntime = modified.Left.Cards
+                .First(card => card.Instance.Uid == 9321);
+            AuraResolver aura = new AuraResolver();
+            Assert(
+                aura.GetDamageDiceModifier(modified.Left, baguetteRuntime) == 2 &&
+                aura.GetDiceModifier(modified.Left, baguetteRuntime) == 0,
+                "Whetstone's +2 must be classified as damage-only.");
+
+            // Fresh Water's sale bonus is healing-only.
+            CardInstance healingOnly = new CardInstance(9330, catalog.Get("baguette"));
+            healingOnly.PermanentHealingModifier = 2;
+            Assert(
+                healingOnly.PermanentDiceModifier == 0 &&
+                healingOnly.PermanentHealingModifier == 2,
+                "Fresh Water's permanent buff must not become a generic dice modifier.");
+
+            MatchController freshWaterMatch =
+                new MatchController(CreateM3Graph(), 20261212UL);
+            MatchPlayerState freshWaterOwner = freshWaterMatch.State.Players[0];
+            CardInstance foodHeal = new CardInstance(9340, catalog.Get("baguette"));
+            CardInstance freshWater = new CardInstance(9341, catalog.Get("fresh_water"));
+            Assert(freshWaterOwner.TryAddCard(foodHeal, equipIfPossible: false), "Food must fit.");
+            Assert(freshWaterOwner.TryAddCard(freshWater, equipIfPossible: false), "Water must fit.");
+            freshWaterMatch.Submit(new SellCardCommand(
+                freshWaterOwner.Id,
+                freshWater.Uid));
+            Assert(
+                foodHeal.PermanentHealingModifier == 1 &&
+                foodHeal.PermanentDiceModifier == 0,
+                "Selling Fresh Water must buff the leftmost healing value only.");
+
+            Console.WriteLine(
+                "[strictness] turn ownership, bag economy, modifier scope verified");
         }
 
         private readonly struct SceneCell
@@ -2473,14 +2636,16 @@ namespace ProjectArtOfAll.Core.Checks
             Assert(stopper != null, "Some seed must roll a 5 for the trap probe.");
             MatchPlayerState walker = stopper.State.CurrentPlayer;
             stopper.State.AddTrap(2, BoardTrapKind.ForcedStop, walker.Id, 2);
+            stopper.State.AddTrap(2, BoardTrapKind.ForcedStop, walker.Id, 2);
             stopper.Submit(new MoveCommand(walker.Id, null));
             Assert(
                 walker.CurrentNode == 2,
                 "A roadblock must stop the walker on its tile, reached "
                     + walker.CurrentNode.ToString() + ".");
             Assert(
-                stopper.State.Traps.Count == 1 && stopper.State.Traps[0].Charges == 1,
-                "A roadblock must spend one charge when it triggers.");
+                stopper.State.Traps.Count == 2 &&
+                stopper.State.Traps.All(trap => trap.Charges == 1),
+                "Stacked roadblocks must each spend one charge when they trigger.");
             Assert(
                 stopper.Events.History.OfType<BoardTrapTriggeredEvent>().Any(
                     triggered => triggered.PlayerId == walker.Id
@@ -2511,24 +2676,37 @@ namespace ProjectArtOfAll.Core.Checks
                     trap => trap.Kind == BoardTrapKind.Immobilize && trap.Charges == 3),
                 "Selling 铁丝网+ must leave a 3-round immobilise on the tile.");
 
+            MatchController stackSeller = new MatchController(graph, 20261205UL);
+            MatchPlayerState stackOwner = stackSeller.State.CurrentPlayer;
+            List<CardInstance> stackCards =
+                SeedLoadout(stackOwner, 9200, "roadblock", "roadblock");
+            stackSeller.Submit(new SellCardCommand(stackOwner.Id, stackCards[0].Uid));
+            stackSeller.Submit(new SellCardCommand(stackOwner.Id, stackCards[1].Uid));
+            Assert(
+                stackSeller.State.TrapsAt(stackOwner.CurrentNode)
+                    .Count(trap => trap.Kind == BoardTrapKind.ForcedStop) == 2,
+                "Selling two roadblocks on one tile must leave two independent traps.");
+
             // 3) 铁丝网：停上去就被禁行，禁行回合里掷骰也不动。
             MatchController trapper = FindRollingController(graph, 1);
             Assert(trapper != null, "Some seed must roll a 1 for the immobilise probe.");
             MatchPlayerState victim = trapper.State.CurrentPlayer;
             trapper.State.AddTrap(1, BoardTrapKind.Immobilize, victim.Id, 2);
+            trapper.State.AddTrap(1, BoardTrapKind.Immobilize, victim.Id, 3);
             trapper.Submit(new MoveCommand(victim.Id, null));
             Assert(
-                victim.CurrentNode == 1 && victim.ImmobileRounds == 2,
-                "Stepping on 铁丝网 must immobilise the walker for 2 rounds.");
+                victim.CurrentNode == 1 && victim.ImmobileRounds == 3,
+                "Stacked 铁丝网 traps must each trigger; the strongest duration applies.");
             Assert(
                 trapper.State.Traps.Count == 0,
-                "铁丝网 is a one-shot trap and must disappear after it triggers.");
+                "Every stacked 铁丝网 is one-shot and must disappear after it triggers.");
 
             // 4) 禁行回合：掷骰后直接结束回合，人物不动。
             MatchController stuck = new MatchController(graph, 20261204UL);
             MatchPlayerState immobile = stuck.State.CurrentPlayer;
             immobile.ImmobileRounds = 2;
             int turnBefore = stuck.State.TurnNumber;
+            int rollEventStart = stuck.Events.History.Count;
             stuck.Submit(new RollCommand(immobile.Id));
             Assert(
                 immobile.CurrentNode == 0,
@@ -2540,6 +2718,12 @@ namespace ProjectArtOfAll.Core.Checks
             Assert(
                 immobile.ImmobileRounds == 1,
                 "Immobilise on the player must count down every turn.");
+            Assert(
+                stuck.State.LastRoll >= 1 && stuck.State.LastRoll <= 6 &&
+                stuck.Events.History.Skip(rollEventStart)
+                    .OfType<DiceRolledEvent>()
+                    .Any(dice => dice.PlayerId == immobile.Id && dice.Value == stuck.State.LastRoll),
+                "An immobilised player must still roll the die before skipping movement.");
             Assert(
                 stuck.Events.History.OfType<PlayerImmobilizedEvent>().Any(
                     immobilized => immobilized.PlayerId == immobile.Id),

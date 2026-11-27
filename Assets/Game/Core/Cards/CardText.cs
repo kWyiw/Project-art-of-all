@@ -238,6 +238,9 @@ namespace ProjectArtOfAll.Core.Cards
                 case AuraStat.Lifesteal:
                     stat = "吸血";
                     break;
+                case AuraStat.DamageDiceModifier:
+                    stat = "伤害骰值";
+                    break;
                 default:
                     stat = "骰值";
                     break;

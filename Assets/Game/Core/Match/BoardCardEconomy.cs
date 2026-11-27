@@ -55,7 +55,7 @@ namespace ProjectArtOfAll.Core.Match
             }
 
             int bonus = 0;
-            foreach (CardInstance owned in player.BattleCards)
+            foreach (CardInstance owned in player.OwnedCards)
             {
                 if (!string.Equals(owned.Definition.BaseId, RecyclerId, StringComparison.Ordinal))
                 {
@@ -75,6 +75,11 @@ namespace ProjectArtOfAll.Core.Match
             return card == null ? 0 : card.Value + RecyclerBonus(player, card);
         }
 
+        public static int EffectiveValue(MatchPlayerState player, CardInstance card)
+        {
+            return card == null ? 0 : card.Value + RecyclerBonus(player, card);
+        }
+
         /// <summary>出售结算后的成长：幸运饼干 / 淡水 / 黄金战车。</summary>
         public static void OnCardSold(MatchPlayerState seller, CardInstance sold)
         {
@@ -89,7 +94,8 @@ namespace ProjectArtOfAll.Core.Match
                 BuffLeftmost(
                     seller,
                     definition => definition.HasTag(CardTag.Food),
-                    SaleBuffAmount(sold.Definition));
+                    SaleBuffAmount(sold.Definition),
+                    healingOnly: false);
             }
             else if (string.Equals(baseId, FreshWaterId, StringComparison.Ordinal))
             {
@@ -97,7 +103,8 @@ namespace ProjectArtOfAll.Core.Match
                     seller,
                     definition => definition.ActiveEffects.Any(
                         effect => effect.Operation == EffectOp.Heal),
-                    SaleBuffAmount(sold.Definition));
+                    SaleBuffAmount(sold.Definition),
+                    healingOnly: true);
             }
             else if (string.Equals(baseId, GoldenChariotId, StringComparison.Ordinal))
             {
@@ -117,12 +124,16 @@ namespace ProjectArtOfAll.Core.Match
             }
         }
 
-        /// <summary>一轮结束：铜锣烧价值 +1、雪水净化器产出一张淡水。</summary>
-        public static CardDefinition OnRoundEnded(MatchPlayerState player)
+        /// <summary>
+        /// 该玩家回合结束：铜锣烧 / 占位符1成长；每张雪水净化器各产出一张淡水。
+        /// 这些是棋盘层被动，放在背包里也生效。
+        /// </summary>
+        public static List<CardDefinition> OnTurnEnded(MatchPlayerState player)
         {
+            List<CardDefinition> produced = new List<CardDefinition>();
             if (player == null)
             {
-                return null;
+                return produced;
             }
 
             foreach (CardInstance owned in player.OwnedCards)
@@ -141,12 +152,18 @@ namespace ProjectArtOfAll.Core.Match
                 }
             }
 
-            bool purifier = player.BattleCards.Any(
+            int purifierCount = player.OwnedCards.Count(
                 card => string.Equals(
                     card.Definition.BaseId,
                     SnowPurifierId,
                     StringComparison.Ordinal));
-            return purifier ? CardDatabase.Instance.Get(FreshWaterId) : null;
+            CardDefinition freshWater = CardDatabase.Instance.Get(FreshWaterId);
+            for (int index = 0; index < purifierCount; index++)
+            {
+                produced.Add(freshWater);
+            }
+
+            return produced;
         }
 
         /// <summary>六六大顺：该玩家自己的移动骰子掷出 6 时，每张六六大顺价值 +2。</summary>
@@ -232,7 +249,8 @@ namespace ProjectArtOfAll.Core.Match
         private static void BuffLeftmost(
             MatchPlayerState player,
             Predicate<CardDefinition> match,
-            int amount)
+            int amount,
+            bool healingOnly)
         {
             if (amount <= 0)
             {
@@ -245,7 +263,14 @@ namespace ProjectArtOfAll.Core.Match
                 return;
             }
 
-            target.Value.Card.PermanentDiceModifier += amount;
+            if (healingOnly)
+            {
+                target.Value.Card.PermanentHealingModifier += amount;
+            }
+            else
+            {
+                target.Value.Card.PermanentDiceModifier += amount;
+            }
         }
 
         private static CardSlot? LeftmostCardSlot(
