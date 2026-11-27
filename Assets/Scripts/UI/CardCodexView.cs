@@ -52,6 +52,11 @@ namespace ProjectArtOfAll.UI
 
         public bool IsOpen => gameObject.activeSelf;
 
+        private void Awake()
+        {
+            Bind();
+        }
+
         public static CardCodexView Create(RectTransform canvas, Font font)
         {
             GameObject rootObject = new GameObject(
@@ -90,6 +95,7 @@ namespace ProjectArtOfAll.UI
         {
             gameObject.SetActive(true);
             transform.SetAsLastSibling();
+            Bind();
             RefreshGallery();
             FocusFirstFilter();
         }
@@ -98,6 +104,144 @@ namespace ProjectArtOfAll.UI
         {
             CardTooltipHost.Hide();
             gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// Baked UnityEvent lambdas are not serialized. Rebuild every button callback when the
+        /// scene loads and again when the view opens, matching GameSettingsPanel / CombatLabView.
+        /// </summary>
+        public void Bind()
+        {
+            if (root == null)
+            {
+                root = transform as RectTransform;
+            }
+
+            if (font == null)
+            {
+                font = BoardHudOverlayFactory.CreateFont();
+            }
+
+            if (root == null)
+            {
+                return;
+            }
+
+            filterBindings.Clear();
+            BindButton("Close", Hide);
+
+            BindFilterButton("SizeAll", "全部", () => sizeFilter == 0, () =>
+            {
+                sizeFilter = 0;
+                RefreshGallery();
+            });
+            BindFilterButton(
+                "Size1",
+                "1c",
+                () => sizeFilter == 1,
+                () => { sizeFilter = 1; RefreshGallery(); });
+            BindFilterButton(
+                "Size2",
+                "2c",
+                () => sizeFilter == 2,
+                () => { sizeFilter = 2; RefreshGallery(); });
+            BindFilterButton(
+                "Size3",
+                "3c",
+                () => sizeFilter == 3,
+                () => { sizeFilter = 3; RefreshGallery(); });
+
+            BindFilterButton(
+                "TypeAll",
+                "全部",
+                () => tagFilter == CardTag.None,
+                () => { tagFilter = CardTag.None; RefreshGallery(); });
+            foreach (CardTag tag in CardCatalogMetadata.TypeFilters)
+            {
+                CardTag captured = tag;
+                BindFilterButton(
+                    "Type_" + captured,
+                    CardText.TagName(captured),
+                    () => tagFilter == captured,
+                    () => { tagFilter = captured; RefreshGallery(); });
+            }
+
+            BindFilterButton(
+                "AcqAll",
+                "全部",
+                () => !acquisitionFilter.HasValue,
+                () => { acquisitionFilter = null; RefreshGallery(); });
+            BindFilterButton(
+                "AcqNormal",
+                "正常获得",
+                () => acquisitionFilter == CardUnlockKind.Normal,
+                () => { acquisitionFilter = CardUnlockKind.Normal; RefreshGallery(); });
+            BindFilterButton(
+                "AcqEvent",
+                "事件限定",
+                () => acquisitionFilter == CardUnlockKind.EventLimited,
+                () => { acquisitionFilter = CardUnlockKind.EventLimited; RefreshGallery(); });
+            BindFilterButton(
+                "AcqUpgrade",
+                "融合升级",
+                () => acquisitionFilter == CardUnlockKind.FusionUpgrade,
+                () => { acquisitionFilter = CardUnlockKind.FusionUpgrade; RefreshGallery(); });
+        }
+
+        private void BindButton(string name, Action action)
+        {
+            Button button = FindButton(name);
+            if (button == null)
+            {
+                return;
+            }
+
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() => action?.Invoke());
+        }
+
+        private void BindFilterButton(
+            string name,
+            string label,
+            Func<bool> selected,
+            Action action)
+        {
+            Button button = FindButton(name);
+            if (button == null)
+            {
+                return;
+            }
+
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() => action?.Invoke());
+
+            Text labelText = button.GetComponentInChildren<Text>(true);
+            if (labelText != null)
+            {
+                labelText.text = label;
+                labelText.font = font;
+            }
+
+            filterBindings.Add(new FilterBinding
+            {
+                Button = button,
+                Background = button.GetComponent<Image>(),
+                Selected = selected
+            });
+        }
+
+        private Button FindButton(string name)
+        {
+            Button[] buttons = GetComponentsInChildren<Button>(true);
+            for (int index = 0; index < buttons.Length; index++)
+            {
+                if (buttons[index].gameObject.name == name)
+                {
+                    return buttons[index];
+                }
+            }
+
+            return null;
         }
 
         private void Build()

@@ -3,7 +3,9 @@ using System.IO;
 using System.Linq;
 using ProjectArtOfAll.UI;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 /// <summary>
@@ -24,6 +26,61 @@ public static class CardCodexPreview
     public static void RenderBatch()
     {
         Render();
+    }
+
+    [MenuItem("Tools/Project Art of All/Probe Baked Card Codex")]
+    public static void ProbeBakedFromMenu()
+    {
+        ProbeBaked();
+    }
+
+    public static void ProbeBakedBatch()
+    {
+        ProbeBaked();
+    }
+
+    private static void ProbeBaked()
+    {
+        EditorSceneManager.OpenScene(
+            "Assets/Scenes/StartMenu.unity",
+            OpenSceneMode.Single);
+        CardCodexView view = Object.FindObjectsOfType<CardCodexView>(true)
+            .FirstOrDefault();
+        if (view == null)
+        {
+            Debug.LogError("[codex-baked] CardCodexView missing.");
+            EditorApplication.Exit(1);
+            return;
+        }
+
+        view.Show();
+        int all = CountTiles(view.gameObject);
+        InvokeButton(view.gameObject, "AcqEvent");
+        int eventCount = CountTiles(view.gameObject);
+        InvokeButton(view.gameObject, "AcqAll");
+        InvokeButton(view.gameObject, "Size3");
+        int size3Count = CountTiles(view.gameObject);
+        InvokeButton(view.gameObject, "SizeAll");
+        InvokeButton(view.gameObject, "Type_Disease");
+        int diseaseCount = CountTiles(view.gameObject);
+        InvokeButton(view.gameObject, "TypeAll");
+        InvokeButton(view.gameObject, "Close");
+        bool closed = !view.IsOpen;
+
+        if (all != 94 || eventCount != 1 || size3Count <= 0 || diseaseCount != 1 || !closed)
+        {
+            Debug.LogError(
+                $"[codex-baked] all={all} event={eventCount} size3={size3Count} "
+                + $"disease={diseaseCount} closed={closed}");
+            EditorApplication.Exit(1);
+            return;
+        }
+
+        Debug.Log(
+            $"[codex-baked] all={all} event={eventCount} size3={size3Count} "
+            + $"disease={diseaseCount} close=yes");
+        EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        EditorApplication.Exit(0);
     }
 
     private static void Render()
