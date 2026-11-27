@@ -49,6 +49,10 @@ namespace ProjectArtOfAll.Editor
             combatLab.gameObject.SetActive(false);
             menu.EditorCombatLab = combatLab;
 
+            CardCodexView cardCodex = CardCodexView.Create(canvas, font);
+            cardCodex.gameObject.SetActive(false);
+            menu.EditorCardCodex = cardCodex;
+
             CardTooltipView cardTooltip = CardTooltipView.Create(canvas, font);
 
             EditorSceneManager.MarkSceneDirty(scene);
@@ -84,11 +88,13 @@ namespace ProjectArtOfAll.Editor
             if (canvas == null ||
                 canvas.Find("MenuButton_开始游戏") == null ||
                 canvas.Find("MenuButton_设置") == null ||
+                canvas.Find("MenuButton_卡牌图鉴") == null ||
                 canvas.Find("MenuButton_战斗模拟") == null ||
                 canvas.Find("MenuButton_退出游戏") == null ||
                 canvas.Find("ModePanel") == null ||
                 canvas.Find("GameSettingsPanel") == null ||
                 canvas.Find("CombatLab") == null ||
+                canvas.Find("CardCodex") == null ||
                 canvas.Find("CardTooltip") == null)
             {
                 throw new System.InvalidOperationException(
@@ -96,7 +102,10 @@ namespace ProjectArtOfAll.Editor
             }
 
             SerializedObject serialized = new SerializedObject(menu);
-            string[] fields = { "canvasRect", "settingsPanel", "modePanel", "combatLab" };
+            string[] fields =
+            {
+                "canvasRect", "settingsPanel", "modePanel", "combatLab", "cardCodex"
+            };
             for (int index = 0; index < fields.Length; index++)
             {
                 SerializedProperty property = serialized.FindProperty(fields[index]);

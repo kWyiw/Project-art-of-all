@@ -28,6 +28,7 @@ namespace ProjectArtOfAll.UI
         [SerializeField] private GameSettingsPanel settingsPanel;
         [SerializeField] private GameObject modePanel;
         [SerializeField] private CombatLabView combatLab;
+        [SerializeField] private CardCodexView cardCodex;
 
         private void Awake()
         {
@@ -53,11 +54,13 @@ namespace ProjectArtOfAll.UI
         {
             BindButton("MenuButton_开始游戏", ShowModePanel);
             BindButton("MenuButton_设置", OpenSettings);
+            BindButton("MenuButton_卡牌图鉴", OpenCodex);
             BindButton("MenuButton_战斗模拟", OpenCombatLab);
             BindButton("MenuButton_退出游戏", QuitGame);
             BindButton("Mode_正常模式", () => GameSession.ChooseMode(GameMode.Normal));
             BindButton("Mode_无CPU测试模式", () => GameSession.ChooseMode(GameMode.NoCpuTest));
             BindButton("Button_返回", HideModePanel);
+            EnsureCodexMenuButton();
         }
 
         private void BindButton(string objectName, System.Action action)
@@ -181,8 +184,9 @@ namespace ProjectArtOfAll.UI
         {
             CreateMenuButton("01", "开始游戏", 400f, ShowModePanel);
             CreateMenuButton("02", "设置", 492f, OpenSettings);
-            CreateMenuButton("03", "战斗模拟", 584f, OpenCombatLab);
-            CreateMenuButton("04", "退出游戏", 676f, QuitGame);
+            CreateMenuButton("03", "卡牌图鉴", 584f, OpenCodex);
+            CreateMenuButton("04", "战斗模拟", 676f, OpenCombatLab);
+            CreateMenuButton("05", "退出游戏", 768f, QuitGame);
         }
 
         private void CreateMenuButton(string index, string label, float top, System.Action onClick)
@@ -234,7 +238,8 @@ namespace ProjectArtOfAll.UI
         private void BuildFooter()
         {
             Text mode = CreateText(
-                canvasRect, "ModeHint", "01 开始游戏（正常模式 / 无CPU测试模式）　03 战斗模拟（自己组两套卡组对打）",
+                canvasRect, "ModeHint",
+                "01 开始游戏　03 卡牌图鉴　04 战斗模拟（基础牌与升级牌均可测试）",
                 new Vector2(144f, -948f), new Vector2(1200f, 28f),
                 16, FontStyle.Normal, TextAnchor.MiddleLeft);
             mode.color = MutedText;
@@ -428,6 +433,44 @@ namespace ProjectArtOfAll.UI
             combatLab.Show();
         }
 
+        public void OpenCodex()
+        {
+            if (cardCodex == null)
+            {
+                cardCodex = CardCodexView.Create(canvasRect, GetMenuFont());
+            }
+
+            cardCodex.Show();
+        }
+
+        private void EnsureCodexMenuButton()
+        {
+            if (FindButton("MenuButton_卡牌图鉴") != null)
+            {
+                return;
+            }
+
+            RepositionMenuButton("MenuButton_战斗模拟", 676f);
+            RepositionMenuButton("MenuButton_退出游戏", 768f);
+            CreateMenuButton("03", "卡牌图鉴", 584f, OpenCodex);
+            BindButton("MenuButton_卡牌图鉴", OpenCodex);
+        }
+
+        private void RepositionMenuButton(string objectName, float top)
+        {
+            Button button = FindButton(objectName);
+            if (button == null)
+            {
+                return;
+            }
+
+            RectTransform rect = button.transform as RectTransform;
+            if (rect != null)
+            {
+                rect.anchoredPosition = new Vector2(144f, -top);
+            }
+        }
+
         public void QuitGame()
         {
 #if UNITY_EDITOR
@@ -576,6 +619,12 @@ namespace ProjectArtOfAll.UI
             set => combatLab = value;
         }
 
+        public CardCodexView EditorCardCodex
+        {
+            get => cardCodex;
+            set => cardCodex = value;
+        }
+
         public void BuildMenuForEditor()
         {
             Transform existingCanvas = transform.Find("LeftMenuCanvas");
@@ -585,6 +634,8 @@ namespace ProjectArtOfAll.UI
             }
 
             settingsPanel = null;
+            combatLab = null;
+            cardCodex = null;
             BuildMenu();
             BindMenu();
             ApplyMenuFont();

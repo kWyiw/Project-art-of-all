@@ -25,6 +25,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckCombatClocks();
                 CheckEventBus();
                 CheckCardDatabase();
+                CheckCardCatalogMetadata();
                 CheckCardKeywords();
                 CheckCardText();
                 CheckLoadoutPreview();
@@ -528,6 +529,52 @@ namespace ProjectArtOfAll.Core.Checks
                 Assert(catalog.Get(id).Scope == CardScope.BagAndBattle,
                     string.Concat(id, " has a board-layer economy passive that works from the bag."));
             }
+        }
+
+        private static void CheckCardCatalogMetadata()
+        {
+            IReadOnlyList<CardDefinition> all = CardCatalogMetadata.All;
+            Assert(
+                all.Count == CardDatabase.Instance.AllDefinitions.Count &&
+                all.Count == 94,
+                "The codex catalog must include all base and upgraded definitions.");
+            Assert(
+                all.Count(card =>
+                    CardCatalogMetadata.AcquisitionOf(card) ==
+                    CardUnlockKind.FusionUpgrade) == 43,
+                "The codex must classify all 43 upgraded cards as fusion upgrades.");
+            Assert(
+                all.Count(card =>
+                    CardCatalogMetadata.AcquisitionOf(card) ==
+                    CardUnlockKind.EventLimited) == 1,
+                "Only the mystery drink is event-limited.");
+            Assert(
+                all.Count(card =>
+                    CardCatalogMetadata.AcquisitionOf(card) ==
+                    CardUnlockKind.Normal) == 50,
+                "The remaining 50 base cards are normal acquisitions.");
+
+            IReadOnlyList<CardDefinition> eventCards = CardCatalogMetadata.Filter(
+                acquisition: CardUnlockKind.EventLimited);
+            Assert(
+                eventCards.Count == 1 &&
+                eventCards[0].Id == MatchEventCatalog.MysteryDrinkCardId,
+                "Event-limited filter must return 神秘饮料.");
+            Assert(
+                CardCatalogMetadata.Filter(slotSize: 3).All(card => card.SlotSize == 3),
+                "Size filter must only return matching slot costs.");
+            Assert(
+                CardCatalogMetadata.Filter(type: CardTag.Disease).Any(
+                    card => card.Id == "food_poisoning"),
+                "Type filter must find cards by any tag.");
+            Assert(
+                CardCatalogMetadata.Filter(
+                    acquisition: CardUnlockKind.FusionUpgrade)
+                    .Any(card => card.Id == "rusted_blade+"),
+                "The catalog must expose upgraded cards individually.");
+
+            Console.WriteLine(
+                $"[codex] definitions={all.Count} normal=50 event=1 upgrades=43");
         }
 
         private static void CheckCardKeywords()

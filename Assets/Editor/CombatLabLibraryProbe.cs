@@ -54,7 +54,7 @@ public static class CombatLabLibraryProbe
         CombatLabView view = labObject.AddComponent<CombatLabView>();
         view.Bind();
 
-        int expected = CardDatabase.Instance.All.Count;
+        int expected = CardDatabase.Instance.AllDefinitions.Count;
         Transform library = labObject.transform.Find("CardLibrary");
         if (library == null)
         {
@@ -63,7 +63,15 @@ public static class CombatLabLibraryProbe
             return;
         }
 
-        string[] ids = library
+        Transform rows = library.Find("Viewport/Content");
+        if (rows == null)
+        {
+            Debug.LogError("[probe] CardLibrary has no scroll content root.");
+            EditorApplication.Exit(1);
+            return;
+        }
+
+        string[] ids = rows
             .Cast<Transform>()
             .Select(row => row.name)
             .Where(name => name.StartsWith("Card_", System.StringComparison.Ordinal))
@@ -72,19 +80,25 @@ public static class CombatLabLibraryProbe
         bool hasBarbed = ids.Contains("barbed_wire");
         bool hasRoadblock = ids.Contains("roadblock");
         bool hasRustedBlade = ids.Contains("rusted_blade");
+        bool hasRustedBladePlus = ids.Contains("rusted_blade+");
 
-        if (ids.Length != expected || !hasBarbed || !hasRoadblock || !hasRustedBlade)
+        if (ids.Length != expected ||
+            !hasBarbed ||
+            !hasRoadblock ||
+            !hasRustedBlade ||
+            !hasRustedBladePlus)
         {
             Debug.LogError(
                 $"[probe] rows={ids.Length} expected={expected} barbed={hasBarbed} "
-                + $"roadblock={hasRoadblock} rusted_blade={hasRustedBlade}");
+                + $"roadblock={hasRoadblock} rusted_blade={hasRustedBlade} "
+                + $"rusted_blade+={hasRustedBladePlus}");
             EditorApplication.Exit(1);
             return;
         }
 
         Debug.Log(
             $"[probe] rows={ids.Length} expected={expected} "
-            + "barbed=yes roadblock=yes rusted_blade=yes");
+            + "barbed=yes roadblock=yes rusted_blade=yes rusted_blade+=yes");
         EditorApplication.Exit(0);
     }
 }

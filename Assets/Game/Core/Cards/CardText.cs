@@ -42,7 +42,7 @@ namespace ProjectArtOfAll.Core.Cards
                 case CardTag.Estate:
                     return "地产";
                 case CardTag.Craft:
-                    return "合成";
+                    return "技艺";
                 case CardTag.Resource:
                     return "资源";
                 case CardTag.Mascot:

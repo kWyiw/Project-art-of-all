@@ -183,26 +183,27 @@ namespace ProjectArtOfAll.UI
 
         private void BindCardLibrary()
         {
-            Transform library = transform.Find("CardLibrary");
+            Transform panel = transform.Find("CardLibrary");
+            Transform library = FindLibraryRowsRoot(panel);
 
             // 场景里烤进去的卡牌库可能是旧卡表：卡表一旦增删，烤进去的行就凑不齐，
             // 新牌在模拟战斗里直接缺席。这里发现对不上就按数据库重建。
-            if (library != null && !LibraryMatchesCatalog(library))
+            if (panel != null && !LibraryMatchesCatalog(library))
             {
                 if (Application.isPlaying)
                 {
-                    Destroy(library.gameObject);
+                    Destroy(panel.gameObject);
                 }
                 else
                 {
-                    DestroyImmediate(library.gameObject);
+                    DestroyImmediate(panel.gameObject);
                 }
 
                 BuildCardLibrary();
                 return;
             }
 
-            if (library == null)
+            if (panel == null)
             {
                 BuildCardLibrary();
                 return;
@@ -241,6 +242,17 @@ namespace ProjectArtOfAll.UI
             }
         }
 
+        private static Transform FindLibraryRowsRoot(Transform panel)
+        {
+            if (panel == null)
+            {
+                return null;
+            }
+
+            Transform content = panel.Find("Viewport/Content");
+            return content != null ? content : panel;
+        }
+
         /// <summary>场景里烤的卡牌库是否正好覆盖当前卡表（按 id 一一对应）。</summary>
         private static bool LibraryMatchesCatalog(Transform library)
         {
@@ -253,7 +265,7 @@ namespace ProjectArtOfAll.UI
                 }
             }
 
-            IReadOnlyList<CardDefinition> cards = CardDatabase.Instance.All;
+            IReadOnlyList<CardDefinition> cards = CardCatalogMetadata.All;
             if (present.Count != cards.Count)
             {
                 return false;
@@ -338,24 +350,44 @@ namespace ProjectArtOfAll.UI
 
         private void BuildCardLibrary()
         {
-            List<CardDefinition> cards = CardDatabase.Instance.All
-                .OrderBy(card => card.SlotSize)
-                .ThenBy(card => card.DisplayName)
-                .ToList();
+            List<CardDefinition> cards = CardCatalogMetadata.Filter().ToList();
 
-            // 行数由卡表决定：51 张牌两列排下去要 26 行，写死高度会把最后几张挤出面板。
+            // 行数由完整卡表决定：94 张牌两列排下去要 47 行，必须放在滚动区内。
             const float rowHeight = 46f;
-            const float columnWidth = 262f;
-            const float listTop = 78f;
+            const float columnWidth = 248f;
             int rows = Mathf.Max(1, (cards.Count + 1) / 2);
-            float panelHeight = listTop + rows * rowHeight + 16f;
+            const float panelHeight = 844f;
 
             RectTransform panel = CreatePanel("CardLibrary", 40f, 118f, 560f, panelHeight);
 
             AddText(panel, "Header", "卡牌库", 20f, 14f, 300f, 32f,
                 24, FontStyle.Bold, TextAnchor.MiddleLeft, Brass);
-            AddText(panel, "Sub", "直接拖进战斗栏，或用「左」「右」按钮快速加入；同一张可以重复拿",
-                20f, 46f, 520f, 24f, 14, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
+            AddText(panel, "Sub", "基础牌与融合升级牌共 94 张；拖进战斗栏或用「左」「右」快速加入",
+                20f, 46f, 520f, 24f, 13, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
+
+            RectTransform viewport = CreateRect("Viewport", panel);
+            viewport.anchorMin = new Vector2(0f, 0f);
+            viewport.anchorMax = new Vector2(1f, 1f);
+            viewport.offsetMin = new Vector2(10f, 10f);
+            viewport.offsetMax = new Vector2(-10f, -76f);
+            viewport.gameObject.AddComponent<RectMask2D>();
+            Image viewportImage = viewport.gameObject.AddComponent<Image>();
+            viewportImage.color = new Color(0.018f, 0.025f, 0.03f, 0.62f);
+
+            RectTransform content = CreateRect("Content", viewport);
+            content.anchorMin = new Vector2(0f, 1f);
+            content.anchorMax = new Vector2(1f, 1f);
+            content.pivot = new Vector2(0.5f, 1f);
+            content.anchoredPosition = Vector2.zero;
+            content.sizeDelta = new Vector2(0f, rows * rowHeight + 8f);
+
+            ScrollRect scroll = panel.gameObject.AddComponent<ScrollRect>();
+            scroll.viewport = viewport;
+            scroll.content = content;
+            scroll.horizontal = false;
+            scroll.vertical = true;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+            scroll.scrollSensitivity = 30f;
 
             for (int index = 0; index < cards.Count; index++)
             {
@@ -363,9 +395,9 @@ namespace ProjectArtOfAll.UI
                 int column = index % 2;
                 int row = index / 2;
                 float x = 14f + column * (columnWidth + 8f);
-                float top = listTop + row * rowHeight;
+                float top = 6f + row * rowHeight;
 
-                RectTransform rowRect = CreateRect("Card_" + card.Id, panel);
+                RectTransform rowRect = CreateRect("Card_" + card.Id, content);
                 rowRect.anchorMin = new Vector2(0f, 1f);
                 rowRect.anchorMax = new Vector2(0f, 1f);
                 rowRect.pivot = new Vector2(0f, 1f);
@@ -380,13 +412,13 @@ namespace ProjectArtOfAll.UI
 
                 AddText(rowRect, "Name", card.DisplayName, 10f, 4f, 150f, 22f,
                     15, FontStyle.Bold, TextAnchor.MiddleLeft, TextColor);
-                AddText(rowRect, "Meta", CardText.Meta(card), 10f, 22f, 160f, 18f,
+                AddText(rowRect, "Meta", CardText.Meta(card), 10f, 22f, 146f, 18f,
                     12, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
 
                 CardDefinition captured = card;
-                CreateSmallButton(rowRect, "Left", "左", 172f, 10f, 40f, 26f, LeftTint,
+                CreateSmallButton(rowRect, "Left", "左", 160f, 10f, 38f, 26f, LeftTint,
                     () => AddCard(captured, true));
-                CreateSmallButton(rowRect, "Right", "右", 216f, 10f, 40f, 26f, RightTint,
+                CreateSmallButton(rowRect, "Right", "右", 202f, 10f, 38f, 26f, RightTint,
                     () => AddCard(captured, false));
 
                 // 整行都可以按住往战斗栏里拖。
