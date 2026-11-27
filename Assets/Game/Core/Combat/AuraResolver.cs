@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using ProjectArtOfAll.Core.Cards;
@@ -29,6 +30,16 @@ namespace ProjectArtOfAll.Core.Combat
         public int GetValueBonus(CombatantRuntime side, CombatCardRuntime target)
         {
             return GetAuraValue(side, target, AuraStat.ValueBonus);
+        }
+
+        public int GetShieldModifier(CombatantRuntime side, CombatCardRuntime target)
+        {
+            return GetAuraValue(side, target, AuraStat.ShieldBonus);
+        }
+
+        public bool HasLifesteal(CombatantRuntime side, CombatCardRuntime target)
+        {
+            return GetAuraValue(side, target, AuraStat.Lifesteal) > 0;
         }
 
         /// <summary>自噬之蛇: the target card's dice always roll their maximum face.</summary>
@@ -68,17 +79,32 @@ namespace ProjectArtOfAll.Core.Combat
                         continue;
                     }
 
-                    if (aura.Scaling == AuraScaling.PerAdjacentMatchingTag)
+                    switch (aura.Scaling)
                     {
-                        int matchingNeighbours = CountAdjacentMatching(
-                            source,
-                            aura.RequiredTag,
-                            activeCards);
-                        total += aura.Amount * matchingNeighbours;
-                    }
-                    else
-                    {
-                        total += aura.Amount;
+                        case AuraScaling.PerAdjacentMatchingTag:
+                            total += aura.Amount * CountAdjacentMatching(
+                                source,
+                                aura.RequiredTag,
+                                activeCards);
+                            break;
+                        case AuraScaling.PerOtherMatchingTag:
+                            total += aura.Amount * CountOtherMatching(
+                                source,
+                                aura.RequiredTag,
+                                activeCards);
+                            break;
+                        case AuraScaling.SelfAndAdjacentValue:
+                            total += aura.Amount * SumSelfAndAdjacentValue(
+                                source,
+                                target,
+                                activeCards);
+                            break;
+                        case AuraScaling.PerOwnerRegeneration:
+                            total += aura.Amount * Math.Max(0, side.Regeneration);
+                            break;
+                        default:
+                            total += aura.Amount;
+                            break;
                     }
                 }
             }
@@ -142,6 +168,51 @@ namespace ProjectArtOfAll.Core.Combat
             }
 
             return count;
+        }
+
+        private static int CountOtherMatching(
+            CombatCardRuntime source,
+            CardTag requiredTag,
+            IReadOnlyList<CombatCardRuntime> activeCards)
+        {
+            int count = 0;
+            foreach (CombatCardRuntime candidate in activeCards)
+            {
+                if (ReferenceEquals(candidate, source))
+                {
+                    continue;
+                }
+
+                if (requiredTag == CardTag.None ||
+                    candidate.Definition.HasTag(requiredTag))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private static int SumSelfAndAdjacentValue(
+            CombatCardRuntime source,
+            CombatCardRuntime target,
+            IReadOnlyList<CombatCardRuntime> activeCards)
+        {
+            if (!ReferenceEquals(source, target))
+            {
+                return 0;
+            }
+
+            int total = Math.Max(0, target.Instance.Value);
+            foreach (CombatCardRuntime candidate in activeCards)
+            {
+                if (candidate.IsAdjacentTo(target))
+                {
+                    total += Math.Max(0, candidate.Instance.Value);
+                }
+            }
+
+            return total;
         }
     }
 }

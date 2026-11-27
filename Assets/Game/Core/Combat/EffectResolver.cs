@@ -70,6 +70,15 @@ namespace ProjectArtOfAll.Core.Combat
                     // 提升"每次获得护盾时的增量"（特种橡胶），本身不给盾。
                     owner.ShieldBonus += RollFlat(effect);
                     return;
+                case EffectOp.ModifyDiceModifier:
+                    card.BattleDiceModifier += RollFlat(effect);
+                    return;
+                case EffectOp.ModifyCardShieldBonus:
+                    card.BattleShieldBonus += RollFlat(effect);
+                    return;
+                case EffectOp.HalveCurrentCooldownOnce:
+                    card.Cooldown.HalveRemaining();
+                    return;
                 default:
                     break;
             }
@@ -82,15 +91,30 @@ namespace ProjectArtOfAll.Core.Combat
                 case EffectOp.DealDamage:
                     // 事件增益（R-EVT-003）：本场战斗的伤害加成只加在牌造成的伤害上，
                     // 中毒/灼烧的周期结算不加。
+                    int dealtDamage = amount + owner.DamageBonus;
                     simulation.ApplyDamage(
                         owner.PlayerId,
                         target,
-                        amount + owner.DamageBonus,
+                        dealtDamage,
                         ignoresShield: false);
+                    if (auraResolver.HasLifesteal(owner, card))
+                    {
+                        simulation.ApplyHealing(owner, dealtDamage);
+                    }
+
+                    simulation.TriggerPassives(
+                        owner,
+                        card,
+                        PassiveTrigger.DamageDealt,
+                        card.Definition.Tags);
                     break;
 
                 case EffectOp.GainShield:
-                    simulation.GainShield(owner, target, amount + owner.BlockBonus);
+                    simulation.GainShield(
+                        owner,
+                        target,
+                        card,
+                        amount + owner.BlockBonus);
                     break;
 
                 case EffectOp.ApplyPoison:
@@ -99,6 +123,11 @@ namespace ProjectArtOfAll.Core.Combat
                         target.PlayerId,
                         StatusKind.Poison,
                         amount));
+                    simulation.TriggerPassives(
+                        owner,
+                        card,
+                        PassiveTrigger.PoisonApplied,
+                        CardTag.None);
                     break;
 
                 case EffectOp.ApplyBurn:
@@ -208,7 +237,8 @@ namespace ProjectArtOfAll.Core.Combat
                     owner,
                     card,
                     PassiveTrigger.HasteApplied,
-                    CardTag.None);
+                    CardTag.None,
+                    target);
             }
         }
 
@@ -241,7 +271,11 @@ namespace ProjectArtOfAll.Core.Combat
                 case EffectTarget.AdjacentOwnCards:
                     foreach (CombatCardRuntime neighbour in Neighbours(owner, card))
                     {
-                        ChargeCard(simulation, owner, neighbour, ticks, card);
+                        if (effect.RequiredTag == CardTag.None ||
+                            neighbour.Definition.HasTag(effect.RequiredTag))
+                        {
+                            ChargeCard(simulation, owner, neighbour, ticks, card);
+                        }
                     }
 
                     break;
@@ -327,6 +361,7 @@ namespace ProjectArtOfAll.Core.Combat
         {
             int perDieModifier =
                 auraResolver.GetDiceModifier(owner, card) +
+                card.BattleDiceModifier +
                 card.Instance.PermanentDiceModifier;
             int extraDice =
                 card.TotalDiceCountBonus +

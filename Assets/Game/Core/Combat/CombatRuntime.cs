@@ -62,6 +62,8 @@ namespace ProjectArtOfAll.Core.Combat
                 instance.Definition.IsActive ? instance.Definition.CooldownTicks : 0);
         }
 
+        private readonly HashSet<int> triggeredOncePassives = new HashSet<int>();
+
         public CardInstance Instance { get; }
         public CardDefinition Definition => Instance.Definition;
 
@@ -96,8 +98,19 @@ namespace ProjectArtOfAll.Core.Combat
         /// <summary>热熔切割器: dice gained inside this battle.</summary>
         public int BattleDiceBonus { get; set; }
 
+        /// <summary>Compound / Torch / Titan: per-die modifier gained inside this battle.</summary>
+        public int BattleDiceModifier { get; set; }
+
+        /// <summary>Placeholder 5 / 六六大顺: shield modifier gained or evaluated per card.</summary>
+        public int BattleShieldBonus { get; set; }
+
         public int TotalDiceCountBonus =>
             BattleDiceBonus + Instance.PermanentDiceCountBonus;
+
+        public bool TryMarkPassiveOnce(int passiveIndex)
+        {
+            return triggeredOncePassives.Add(passiveIndex);
+        }
 
         public void Destroy()
         {

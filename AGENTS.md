@@ -5,7 +5,7 @@
 ## 0. 三十秒版本
 
 - 这是一个 **Unity 2022.3.62f2c1 + Built-in 管线** 的桌面游戏原型：外圈是「大富翁式」棋盘（掷骰、逆时针走、地块结算、商店/奖励/事件/陷阱），棋盘下面常驻一条**双栏卡槽带**（背包栏 + 战斗栏，拖拽摆位），走到怪物格就进**自动战斗**（按冷却自动施放，战斗回放有血条与跳字）。
-- 玩法与数值的唯一权威是 **`规则书/` 里的八份文档** 和 **`卡牌设计稿/第一套卡牌.txt`**。代码是文档的实现；改行为先改文档，再改代码。
+- 玩法与数值的唯一权威是 **`规则书/` 里的八份文档** 和 **`卡牌设计稿/第一套卡牌.txt`、`第二套卡牌.txt`**。代码是文档的实现；改行为先改文档，再改代码。
 - 内核（`Assets/Game/Core/`）**不依赖 UnityEngine**（asmdef 里 `noEngineReferences: true`），可以用纯 `dotnet` 编译、跑测试、跑模拟。UI 与场景在 `Assets/Scripts/`。
 - 所有验证都能在命令行完成，见第 3 节。**没有跑过验证就不要说「改好了」。**
 
@@ -40,7 +40,8 @@ Tests/Game.Core.Checks/    内核断言（`dotnet run`，3000+ 行，唯一的�
 Tools/CompileChecks/       两个编译检查工程（第 3 节）
 Tools/MatchSim|BalanceSim/ 无头对局 / 数值模拟
 规则书/                    八份权威文档（见下）
-卡牌设计稿/第一套卡牌.txt   卡牌的权威文案与数值
+卡牌设计稿/第一套卡牌.txt   第一套卡牌的权威文案与数值
+卡牌设计稿/第二套卡牌.txt   第二套卡牌的权威文案与数值
 _tmp/                      本地草稿（已 gitignore）：日志、预览 PNG、临时探针
 ```
 
@@ -72,7 +73,7 @@ dotnet run --project Tests/Game.Core.Checks -c Release     # 以 Game.Core check
 
 - **内核事件驱动**：`MatchController.Submit(ICommand)` → 状态变化 → 发 `*Event`（`Assets/Game/Core/Events`、`Match/BoardEvents.cs` 等）。UI 只读状态、只听事件；`CombatPlaybackView` 回放 `BattleSnapshot` 的战斗事件。
 - **阶段机**：`MatchPhase` = `AwaitRoll / AwaitMove / AwaitNorma / AwaitReward / AwaitShop / AwaitEvent / Finished`。任何新阶段都要同时改：CPU（`CpuBrain`、`CpuMatchRunner`、`SimpleMatchAutoplayer`）、`BoardGameplayController` 的 `ResolveDeferredCorePhase`、HUD 面板、`HandleMove` 末尾的阶段判断。
-- **卡牌**：`CardDatabase` 里 35 张基础牌 + 33 张「+」升级版（`All` 只有基础牌，`AllDefinitions` 含升级版）。同名牌再获得一次会**原地融合**升级（`MatchController.AcquireOrUpgrade`）。玩家文案来自 `CardDesignText`（逐字设计稿原文），卡面本身**不写效果**，效果只在悬停窗里显示。
+- **卡牌**：`CardDatabase` 里 51 张基础牌 + 43 张「+」升级版（`All` 只有基础牌，`AllDefinitions` 含升级版）。同名牌再获得一次会**原地融合**升级（`MatchController.AcquireOrUpgrade`）。玩家文案来自 `CardDesignText`（逐字设计稿原文），卡面本身**不写效果**，效果只在悬停窗里显示。
 - **卡槽带**：`CardBandController`（拖拽/列位/高度）+ `CardRowRenderer`（单张牌绘制）+ `CardTooltip`（悬停窗）+ `BoardHudController`（弹窗与 HUD 总装）。
 - **场景化 UI**：`Map1`/`Map2`/`StartMenu` 里的 HUD 都是真实场景组件（不是运行时全建），运行时只绑回调与刷数据。
 
@@ -112,7 +113,7 @@ git -c http.schannelCheckRevoke=false -c http.sslVerify=false push origin main
 
 ## 8. 当前状态（HEAD = `49aacf5`）
 
-已具备：棋盘与四家回合、逆行走向与力直格、自家停步选择、路过/停住他人都能选开战或避开、岔路高亮预测落点、商店/奖励/事件（探险委托 + 神秘饮料）/陷阱（铁丝网 + 路障）、35 张卡表按设计稿重做 + 融合升级、棋盘层成长、战斗回放血条与状态数字条、卡槽带拖拽与悬停窗、局内弹窗让位卡槽带、CPU 四家自动对局、无头模拟工具。
+已具备：棋盘与四家回合、逆行走向与力直格、自家停步选择、路过/停住他人都能选开战或避开、岔路高亮预测落点、商店/奖励/事件（探险委托 + 神秘饮料）/陷阱（铁丝网 + 路障）、51 张基础卡表 + 融合升级、棋盘层成长、战斗回放血条与状态数字条、卡槽带拖拽与悬停窗、局内弹窗让位卡槽带、CPU 四家自动对局、无头模拟工具。
 
 已知缺口 / 可继续做的：
 

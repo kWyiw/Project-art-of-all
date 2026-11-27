@@ -520,6 +520,11 @@ namespace ProjectArtOfAll.Board
                 lines.Add("摧毁：本场战斗内不再生效。");
             }
 
+            if (text.Contains("吸血"))
+            {
+                lines.Add("吸血：这张牌造成主动攻击伤害时，回复等量生命。");
+            }
+
             return lines;
         }
     }

@@ -361,7 +361,7 @@ CanPlace(card, zone, index):
 | 生效状态 | `IsActiveInCurrentContext`（背包牌是否 `BagAndBattle`） |
 
 **UI-6.3.2** 效果行用 `{0}` 占位符渲染数值，例如 `"中毒 {value}"` + `value=16`。**新增一张牌不需要改 UI 代码**——这条是防止"卡越做越多、tooltip 写死的地方越来越多"的唯一办法。
-**UI-6.3.3** 第一套卡牌（35 张基础 + 33 张升级版）的效果行**不走 `CardDefinition` 拼装，而是直接读设计稿原文**（`CardDesignText`），因为设计稿里的措辞就是玩家该看到的版本，拼装会改写措辞。设计稿中以「（」开头的整行是写给实现者的解释，`CardDesignText.Lines` 不输出它们（`RawLines` 保留原文）。`CardText.Description` = 设计稿原文 + `BoardNote`（棋盘层被动，如「出售时给最左侧的食物 +1 永久修正」）；只有设计稿里没有的自定义牌（`mystery_drink`）才回退到 `CardText.GeneratedDescription` 的自动拼装。数据驱动那条规则仍然成立：自动拼装路径依旧是「新增一张牌不改 UI 代码」。
+**UI-6.3.3** 当前两套卡牌（51 张基础 + 43 张升级版）的效果行**不走 `CardDefinition` 拼装，而是直接读设计稿原文**（`CardDesignText`），因为设计稿里的措辞就是玩家该看到的版本，拼装会改写措辞。设计稿中以「（」开头的整行是写给实现者的解释，`CardDesignText.Lines` 不输出它们（`RawLines` 保留原文）。`CardText.Description` = 设计稿原文 + `BoardNote`（棋盘层被动，如「出售时给最左侧的食物 +1 永久修正」）；只有设计稿里没有的自定义牌（`mystery_drink`）才回退到 `CardText.GeneratedDescription` 的自动拼装。数据驱动那条规则仍然成立：自动拼装路径依旧是「新增一张牌不改 UI 代码」。
 
 ### 6.4 状态标（战斗中）
 

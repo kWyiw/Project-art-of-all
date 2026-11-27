@@ -21,6 +21,9 @@ namespace ProjectArtOfAll.Core.Match
         public const string DorayakiId = "dorayaki";
         public const string FortuneCookieId = "fortune_cookie";
         public const string GoldenChariotId = "golden_chariot";
+        public const string SixSixStreakId = "six_six_streak";
+        public const string ValuePlaceholder7Id = "placeholder_7";
+        public const string DamageCompanionId = "placeholder_1";
 
         /// <summary>出售这张牌时，给「最左侧的某类牌」加多少永久修正（升级版翻倍）。</summary>
         public static int SaleBuffAmount(CardDefinition sold)
@@ -124,6 +127,14 @@ namespace ProjectArtOfAll.Core.Match
 
             foreach (CardInstance owned in player.OwnedCards)
             {
+                if (string.Equals(
+                        owned.Definition.BaseId,
+                        DamageCompanionId,
+                        StringComparison.Ordinal))
+                {
+                    owned.PermanentDiceModifier += 1;
+                }
+
                 if (string.Equals(owned.Definition.BaseId, DorayakiId, StringComparison.Ordinal))
                 {
                     owned.ModifyValue(1);
@@ -136,6 +147,48 @@ namespace ProjectArtOfAll.Core.Match
                     SnowPurifierId,
                     StringComparison.Ordinal));
             return purifier ? CardDatabase.Instance.Get(FreshWaterId) : null;
+        }
+
+        /// <summary>六六大顺：该玩家自己的移动骰子掷出 6 时，每张六六大顺价值 +2。</summary>
+        public static void OnDiceRolled(
+            MatchPlayerState player,
+            int roll)
+        {
+            if (player == null || roll != 6)
+            {
+                return;
+            }
+
+            foreach (CardInstance owned in player.OwnedCards)
+            {
+                if (string.Equals(
+                        owned.Definition.BaseId,
+                        SixSixStreakId,
+                        StringComparison.Ordinal))
+                {
+                    owned.ModifyValue(2);
+                }
+            }
+        }
+
+        /// <summary>占位符7：每次真正停在奖励地块，每张占位符7价值 +1。</summary>
+        public static void OnRewardStopped(MatchPlayerState player)
+        {
+            if (player == null)
+            {
+                return;
+            }
+
+            foreach (CardInstance owned in player.OwnedCards)
+            {
+                if (string.Equals(
+                        owned.Definition.BaseId,
+                        ValuePlaceholder7Id,
+                        StringComparison.Ordinal))
+                {
+                    owned.ModifyValue(1);
+                }
+            }
         }
 
         /// <summary>

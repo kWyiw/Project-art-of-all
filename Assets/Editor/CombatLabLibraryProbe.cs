@@ -71,16 +71,20 @@ public static class CombatLabLibraryProbe
             .ToArray();
         bool hasBarbed = ids.Contains("barbed_wire");
         bool hasRoadblock = ids.Contains("roadblock");
+        bool hasRustedBlade = ids.Contains("rusted_blade");
 
-        if (ids.Length != expected || !hasBarbed || !hasRoadblock)
+        if (ids.Length != expected || !hasBarbed || !hasRoadblock || !hasRustedBlade)
         {
             Debug.LogError(
-                $"[probe] rows={ids.Length} expected={expected} barbed={hasBarbed} roadblock={hasRoadblock}");
+                $"[probe] rows={ids.Length} expected={expected} barbed={hasBarbed} "
+                + $"roadblock={hasRoadblock} rusted_blade={hasRustedBlade}");
             EditorApplication.Exit(1);
             return;
         }
 
-        Debug.Log($"[probe] rows={ids.Length} expected={expected} barbed=yes roadblock=yes");
+        Debug.Log(
+            $"[probe] rows={ids.Length} expected={expected} "
+            + "barbed=yes roadblock=yes rusted_blade=yes");
         EditorApplication.Exit(0);
     }
 }

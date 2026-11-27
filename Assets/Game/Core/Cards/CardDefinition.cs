@@ -16,7 +16,9 @@ namespace ProjectArtOfAll.Core.Cards
         Trap = 1 << 5,
         Estate = 1 << 6,
         Craft = 1 << 7,
-        Resource = 1 << 8
+        Resource = 1 << 8,
+        Mascot = 1 << 9,
+        Disease = 1 << 10
     }
 
     public enum CardScope
@@ -49,13 +51,22 @@ namespace ProjectArtOfAll.Core.Cards
         /// <summary>
         /// 结算出来的最终数值直接 +N（不夹到骰面）：自噬之蛇的「所有数值 +100」用它。
         /// </summary>
-        ValueBonus = 4
+        ValueBonus = 4,
+
+        /// <summary>This card's shield gains an extra modifier.</summary>
+        ShieldBonus = 5,
+
+        /// <summary>Attack damage dealt by this card restores the same amount of health.</summary>
+        Lifesteal = 6
     }
 
     public enum AuraScaling
     {
         Flat = 0,
-        PerAdjacentMatchingTag = 1
+        PerAdjacentMatchingTag = 1,
+        PerOtherMatchingTag = 2,
+        SelfAndAdjacentValue = 3,
+        PerOwnerRegeneration = 4
     }
 
     public sealed class AuraDefinition

@@ -236,6 +236,7 @@ namespace ProjectArtOfAll.Core.Match
         {
             State.LastRoll = value;
             Publish(new DiceRolledEvent(playerId, State.LastRoll));
+            BoardCardEconomy.OnDiceRolled(State.CurrentPlayer, value);
 
             currentCandidates.Clear();
             currentCandidates.AddRange(
@@ -724,6 +725,7 @@ namespace ProjectArtOfAll.Core.Match
 
                     break;
                 case TileType.Reward:
+                    BoardCardEconomy.OnRewardStopped(player);
                     BeginReward(player);
                     break;
                 case TileType.Monster:

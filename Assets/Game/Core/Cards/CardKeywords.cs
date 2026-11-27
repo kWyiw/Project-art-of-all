@@ -21,6 +21,8 @@ namespace ProjectArtOfAll.Core.Cards
         public const string MultiplyColor = "#BE8CEB";
         public const string DiceColor = "#7FCBBA";
         public const string MutedColor = "#9C9A92";
+        public const string MascotColor = "#E9B85C";
+        public const string DiseaseColor = "#A5C86B";
 
         private static readonly Dictionary<string, string> Colors =
             new Dictionary<string, string>
@@ -46,6 +48,9 @@ namespace ProjectArtOfAll.Core.Cards
                 { "摧毁", MutedColor },
                 { "销毁", MutedColor },
                 { "价值", ShieldColor },
+                { "吉祥物", MascotColor },
+                { "疾病", DiseaseColor },
+                { "吸血", HealColor },
                 { "伤害", DamageColor }
             };
 

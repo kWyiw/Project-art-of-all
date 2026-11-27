@@ -26,7 +26,16 @@ namespace ProjectArtOfAll.Core.Cards
         ModifyDiceCount = 12,
 
         /// <summary>特种橡胶: every shield this side gains is +N.</summary>
-        ModifyShieldBonus = 13
+        ModifyShieldBonus = 13,
+
+        /// <summary>Compound / Torch / Titan: raise this card's dice modifier for this battle.</summary>
+        ModifyDiceModifier = 14,
+
+        /// <summary>Placeholder 5: raise only this card's shield modifier.</summary>
+        ModifyCardShieldBonus = 15,
+
+        /// <summary>Chainsaw: halve the remaining cooldown after its first cast.</summary>
+        HalveCurrentCooldownOnce = 16
     }
 
     /// <summary>Who or what an effect lands on.</summary>
@@ -46,7 +55,8 @@ namespace ProjectArtOfAll.Core.Cards
     {
         Constant = 0,
         Dice = 1,
-        ValueScaledDice = 2
+        ValueScaledDice = 2,
+        CardValue = 3
     }
 
     /// <summary>
@@ -104,6 +114,12 @@ namespace ProjectArtOfAll.Core.Cards
             return new EffectAmount(AmountKind.ValueScaledDice, 0, faces, 0);
         }
 
+        /// <summary>Uses the card's current value directly as the resolved amount.</summary>
+        public static EffectAmount FromCardValue()
+        {
+            return new EffectAmount(AmountKind.CardValue, 0, 0, 0);
+        }
+
         public int DiceCountFor(int value)
         {
             switch (Kind)
@@ -117,7 +133,8 @@ namespace ProjectArtOfAll.Core.Cards
             }
         }
 
-        public bool IsDice => Kind != AmountKind.Constant;
+        public bool IsDice =>
+            Kind == AmountKind.Dice || Kind == AmountKind.ValueScaledDice;
 
         /// <summary>
         /// Rolls the amount. Per-die modifiers clamp inside [1, faces] as the rules require
@@ -130,6 +147,11 @@ namespace ProjectArtOfAll.Core.Cards
             bool forceMaximum = false,
             int extraDice = 0)
         {
+            if (Kind == AmountKind.CardValue)
+            {
+                return Math.Max(0, value);
+            }
+
             if (!IsDice)
             {
                 return Constant;
@@ -213,7 +235,9 @@ namespace ProjectArtOfAll.Core.Cards
         ShieldGained = 9,
 
         /// <summary>棋盘层事件；战斗中不会触发（幸运饼干）。</summary>
-        CardSold = 10
+        CardSold = 10,
+        PoisonApplied = 11,
+        EnemyCardCast = 12
     }
 
     /// <summary>
@@ -228,7 +252,10 @@ namespace ProjectArtOfAll.Core.Cards
             CardTag castTag = CardTag.None,
             bool ownSideOnly = true,
             bool requiresAdjacentSource = false,
-            bool excludesSource = false)
+            bool excludesSource = false,
+            bool sourceCardOnly = false,
+            bool targetCardOnly = false,
+            bool oncePerBattle = false)
         {
             Trigger = trigger;
             Effect = effect ?? throw new ArgumentNullException(nameof(effect));
@@ -236,6 +263,9 @@ namespace ProjectArtOfAll.Core.Cards
             OwnSideOnly = ownSideOnly;
             RequiresAdjacentSource = requiresAdjacentSource;
             ExcludesSource = excludesSource;
+            SourceCardOnly = sourceCardOnly;
+            TargetCardOnly = targetCardOnly;
+            OncePerBattle = oncePerBattle;
         }
 
         public PassiveTrigger Trigger { get; }
@@ -246,5 +276,14 @@ namespace ProjectArtOfAll.Core.Cards
 
         /// <summary>企鹅: 「使用其他伙伴或食物时」——触发的牌本身不能是这张牌。</summary>
         public bool ExcludesSource { get; }
+
+        /// <summary>Compound / Torch / Chainsaw: only an event caused by this same card.</summary>
+        public bool SourceCardOnly { get; }
+
+        /// <summary>Compound: only when this same card receives the haste.</summary>
+        public bool TargetCardOnly { get; }
+
+        /// <summary>Chainsaw: the passive can fire only once in one battle.</summary>
+        public bool OncePerBattle { get; }
     }
 }

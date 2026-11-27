@@ -12,9 +12,8 @@ namespace ProjectArtOfAll.Core.Cards
     }
 
     /// <summary>
-    /// The whole first card set, imported from 卡牌设计稿\第一套卡牌.txt (34 cards plus the
-    /// event-only 神秘饮料). Every card is pure data: adding a 36th card must not require
-    /// new C# code.
+    /// The full card catalog, imported from 卡牌设计稿\第一套卡牌.txt and 第二套卡牌.txt
+    /// plus the event-only 神秘饮料. Every card is pure data.
     ///
     /// 卡面写「1d4/1d6」的地方是同一张牌的两级：基础版用斜杠前的数值，升级版用斜杠后的
     /// 数值，升级版 id 是基础版 id 加一个 "+"、名字加一个 "+"（CJ-5.11 融合升级）。
@@ -23,6 +22,7 @@ namespace ProjectArtOfAll.Core.Cards
     public sealed class CardDatabase : ICardCatalog
     {
         public const string SourceFile = "卡牌设计稿/第一套卡牌.txt";
+        public const string SecondSourceFile = "卡牌设计稿/第二套卡牌.txt";
 
         private const int TicksPerSecond = 60;
 
@@ -532,6 +532,257 @@ namespace ProjectArtOfAll.Core.Cards
                         EffectTarget.Enemy)
                 }));
 
+            // ── 四、吉祥物 / 价值系列 ───────────────────────────────────────
+            Add(
+                all,
+                Card(
+                    "six_six_streak", "六六大顺", 2, 6, CardTag.Mascot, 2, battle,
+                    effects: new[] { Shield(2, 20) },
+                    auras: new[]
+                    {
+                        new AuraDefinition(
+                            AuraTarget.Self,
+                            AuraStat.ShieldBonus,
+                            1,
+                            scaling: AuraScaling.SelfAndAdjacentValue)
+                    }));
+
+            Add(
+                all,
+                Card(
+                    "placeholder_7", "占位符7", 1, 6, CardTag.Mascot, 2, battle,
+                    effects: new[]
+                    {
+                        new CardEffect(
+                            EffectOp.ApplyRegeneration,
+                            EffectAmount.FromCardValue(),
+                            EffectTarget.Self)
+                    }));
+
+            // ── 五、第二套：武器 / 废料 / 伙伴 / 疾病 ──────────────────────
+            Add(
+                all,
+                Card(
+                    "rusted_blade", "锈刃", 3, 5, CardTag.Weapon, 4, battle,
+                    effects: new[] { Damage(1, 10) },
+                    passives: new[]
+                    {
+                        new PassiveDefinition(
+                            PassiveTrigger.DamageDealt,
+                            Status(EffectOp.ApplyPoison, 1, 2))
+                    }),
+                new Upgrade(passives: new[]
+                {
+                    new PassiveDefinition(
+                        PassiveTrigger.DamageDealt,
+                        Status(EffectOp.ApplyPoison, 1, 4))
+                }));
+
+            Add(
+                all,
+                Card(
+                    "compound", "化合物", 2, 4, CardTag.Waste, 2, battle,
+                    effects: new[] { Status(EffectOp.ApplyPoison, 1, 6) },
+                    passives: new[]
+                    {
+                        new PassiveDefinition(
+                            PassiveTrigger.HasteApplied,
+                            ModifyDiceModifier(1),
+                            targetCardOnly: true)
+                    }));
+
+            Add(
+                all,
+                Card(
+                    "torch", "火炬", 2, 4, CardTag.Waste, 2, battle,
+                    effects: new[] { Status(EffectOp.ApplyBurn, 1, 6) },
+                    passives: new[]
+                    {
+                        new PassiveDefinition(
+                            PassiveTrigger.OwnCardCast,
+                            ModifyDiceModifier(1),
+                            sourceCardOnly: true)
+                    }),
+                new Upgrade(effects: new[] { Status(EffectOp.ApplyBurn, 1, 10) }));
+
+            Add(
+                all,
+                Card(
+                    "catalyst", "催化剂", 1, 5, CardTag.Waste, 1, battle,
+                    effects: new[] { Haste(1, 2) },
+                    passives: new[]
+                    {
+                        new PassiveDefinition(
+                            PassiveTrigger.PoisonApplied,
+                            Charge(1, EffectTarget.SelfCard)),
+                        new PassiveDefinition(
+                            PassiveTrigger.BurnApplied,
+                            Charge(1, EffectTarget.SelfCard))
+                    }),
+                new Upgrade(effects: new[] { Haste(1, 3) }));
+
+            Add(
+                all,
+                Card(
+                    "placeholder_1", "占位符1", 1, 5,
+                    CardTag.Weapon | CardTag.Companion, 1, battle,
+                    effects: new[] { Damage(1, 8) },
+                    auras: new[]
+                    {
+                        new AuraDefinition(
+                            AuraTarget.Self,
+                            AuraStat.Lifesteal,
+                            1)
+                    }),
+                new Upgrade(effects: new[] { Damage(1, 12) }));
+
+            Add(
+                all,
+                Card(
+                    "placeholder_2", "占位符2", 2, 0, CardTag.Tool, 2, battle,
+                    auras: new[]
+                    {
+                        new AuraDefinition(
+                            AuraTarget.AdjacentRight,
+                            AuraStat.Lifesteal,
+                            1,
+                            CardTag.Weapon)
+                    }),
+                new Upgrade(auras: new[]
+                {
+                    new AuraDefinition(
+                        AuraTarget.AllAdjacent,
+                        AuraStat.Lifesteal,
+                        1,
+                        CardTag.Weapon)
+                }));
+
+            Add(
+                all,
+                Card(
+                    "placeholder_3", "占位符3", 3, 10, CardTag.Weapon, 4, battle,
+                    effects: new[] { Damage(1, 100) },
+                    auras: new[]
+                    {
+                        new AuraDefinition(
+                            AuraTarget.Self,
+                            AuraStat.DiceFlatModifier,
+                            10,
+                            CardTag.Weapon,
+                            AuraScaling.PerOtherMatchingTag)
+                    }),
+                new Upgrade(cooldownSeconds: 8));
+
+            Add(
+                all,
+                Card(
+                    "placeholder_4", "占位符4", 3, 7,
+                    CardTag.Weapon | CardTag.Companion, 4, battle,
+                    effects: new[]
+                    {
+                        Damage(1, 20),
+                        Haste(1, 1)
+                    },
+                    passives: new[]
+                    {
+                        new PassiveDefinition(
+                            PassiveTrigger.EnemyCardCast,
+                            Charge(2, EffectTarget.SelfCard))
+                    }),
+                new Upgrade(cooldownSeconds: 5));
+
+            Add(
+                all,
+                Card(
+                    "chainsaw", "链锯", 3, 6, CardTag.Weapon | CardTag.Tool, 4, battle,
+                    effects: new[] { Damage(2, 20) },
+                    passives: new[]
+                    {
+                        new PassiveDefinition(
+                            PassiveTrigger.OwnCardCast,
+                            HalveCurrentCooldown(),
+                            sourceCardOnly: true,
+                            oncePerBattle: true)
+                    }));
+
+            Add(
+                all,
+                Card(
+                    "nail_gun", "射钉枪", 2, 3, CardTag.Weapon | CardTag.Tool, 2, battle,
+                    effects: new[]
+                    {
+                        Damage(1, 6),
+                        Slow(1, 1)
+                    }),
+                new Upgrade(effects: new[]
+                {
+                    Damage(1, 8),
+                    Slow(1, 2)
+                }));
+
+            // 设计稿没有给占位符5词条；它是护盾支援牌，暂归“工具”。
+            Add(
+                all,
+                Card(
+                    "placeholder_5", "占位符5", 2, 5, CardTag.Tool, 2, battle,
+                    effects: new[] { Shield(1, 20) },
+                    passives: new[]
+                    {
+                        new PassiveDefinition(
+                            PassiveTrigger.OwnCardCast,
+                            ModifyCardShieldBonus(2),
+                            requiresAdjacentSource: true)
+                    }),
+                new Upgrade(passives: new[]
+                {
+                    new PassiveDefinition(
+                        PassiveTrigger.OwnCardCast,
+                        ModifyCardShieldBonus(4),
+                        requiresAdjacentSource: true)
+                }));
+
+            Add(
+                all,
+                Card(
+                    "titan", "泰坦", 3, 25, CardTag.Weapon | CardTag.Companion, 4, battle,
+                    effects: new[] { Damage(2, 100) },
+                    passives: TitanPassives(4)),
+                new Upgrade(passives: TitanPassives(6)));
+
+            Add(
+                all,
+                Card(
+                    "fruit_knife", "水果刀", 1, 6, CardTag.Tool | CardTag.Weapon, 1, battle,
+                    effects: new[] { Damage(1, 12) },
+                    auras: new[]
+                    {
+                        new AuraDefinition(
+                            AuraTarget.Self,
+                            AuraStat.DiceFlatModifier,
+                            1,
+                            scaling: AuraScaling.PerOwnerRegeneration)
+                    }));
+
+            Add(
+                all,
+                Card(
+                    "food_poisoning", "食物中毒", 2, 6, CardTag.Disease, 2, battle,
+                    effects: new[]
+                    {
+                        new CardEffect(
+                            EffectOp.Charge,
+                            EffectAmount.Flat(2 * TicksPerSecond),
+                            EffectTarget.AdjacentOwnCards,
+                            CardTag.Food)
+                    },
+                    passives: new[]
+                    {
+                        new PassiveDefinition(
+                            PassiveTrigger.OwnCardCast,
+                            Status(EffectOp.ApplyPoison, 1, 2),
+                            CardTag.Food)
+                    }));
+
             // 事件「神秘饮料」打包带走的那瓶：战斗栏里开局回 8 点生命，也可以直接卖掉（R-EVT-002）。
             // 没有设计升级版，所以同名第二瓶不会融合。
             all.Add(
@@ -725,6 +976,54 @@ namespace ProjectArtOfAll.Core.Cards
                 EffectOp.ModifyShieldBonus,
                 EffectAmount.Flat(amount),
                 EffectTarget.Self);
+        }
+
+        private static CardEffect ModifyDiceModifier(int amount)
+        {
+            return new CardEffect(
+                EffectOp.ModifyDiceModifier,
+                EffectAmount.Flat(amount),
+                EffectTarget.SelfCard);
+        }
+
+        private static CardEffect ModifyCardShieldBonus(int amount)
+        {
+            return new CardEffect(
+                EffectOp.ModifyCardShieldBonus,
+                EffectAmount.Flat(amount),
+                EffectTarget.SelfCard);
+        }
+
+        private static CardEffect HalveCurrentCooldown()
+        {
+            return new CardEffect(
+                EffectOp.HalveCurrentCooldownOnce,
+                EffectAmount.Flat(1),
+                EffectTarget.SelfCard);
+        }
+
+        private static PassiveDefinition[] TitanPassives(int diceModifier)
+        {
+            PassiveTrigger[] triggers =
+            {
+                PassiveTrigger.PoisonApplied,
+                PassiveTrigger.BurnApplied,
+                PassiveTrigger.HasteApplied,
+                PassiveTrigger.SlowApplied
+            };
+            PassiveDefinition[] passives =
+                new PassiveDefinition[triggers.Length * 2];
+            for (int index = 0; index < triggers.Length; index++)
+            {
+                passives[index * 2] = new PassiveDefinition(
+                    triggers[index],
+                    Charge(2, EffectTarget.SelfCard));
+                passives[index * 2 + 1] = new PassiveDefinition(
+                    triggers[index],
+                    ModifyDiceModifier(diceModifier));
+            }
+
+            return passives;
         }
 
         private static PassiveDefinition PenguinCharge(CardTag tag)

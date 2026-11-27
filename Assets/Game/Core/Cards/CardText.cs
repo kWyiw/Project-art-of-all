@@ -18,7 +18,9 @@ namespace ProjectArtOfAll.Core.Cards
             CardTag.Trap,
             CardTag.Estate,
             CardTag.Craft,
-            CardTag.Resource
+            CardTag.Resource,
+            CardTag.Mascot,
+            CardTag.Disease
         };
 
         public static string TagName(CardTag tag)
@@ -43,6 +45,10 @@ namespace ProjectArtOfAll.Core.Cards
                     return "合成";
                 case CardTag.Resource:
                     return "资源";
+                case CardTag.Mascot:
+                    return "吉祥物";
+                case CardTag.Disease:
+                    return "疾病";
                 default:
                     return "无";
             }
@@ -103,6 +109,8 @@ namespace ProjectArtOfAll.Core.Cards
                         amount.Faces.ToString());
                 case AmountKind.ValueScaledDice:
                     return string.Concat("Xd", amount.Faces.ToString());
+                case AmountKind.CardValue:
+                    return "X";
                 default:
                     return amount.Constant.ToString();
             }
@@ -183,6 +191,15 @@ namespace ProjectArtOfAll.Core.Cards
                 case EffectOp.ModifyShieldBonus:
                     body = string.Concat("护盾获得 +", amount);
                     break;
+                case EffectOp.ModifyDiceModifier:
+                    body = string.Concat("骰值修正 +", amount);
+                    break;
+                case EffectOp.ModifyCardShieldBonus:
+                    body = string.Concat("本牌护盾修正 +", amount);
+                    break;
+                case EffectOp.HalveCurrentCooldownOnce:
+                    body = "首次使用后冷却减半";
+                    break;
                 default:
                     body = effect.Operation.ToString();
                     break;
@@ -203,13 +220,28 @@ namespace ProjectArtOfAll.Core.Cards
                 return string.Concat(AuraTargetName(aura), "骰值必定取最大值");
             }
 
-            string stat = aura.Stat == AuraStat.MultiCast
-                ? "额外施放"
-                : aura.Stat == AuraStat.DiceCount
-                    ? "骰数"
-                    : aura.Stat == AuraStat.ValueBonus
-                        ? "数值"
-                        : "骰值";
+            string stat;
+            switch (aura.Stat)
+            {
+                case AuraStat.MultiCast:
+                    stat = "额外施放";
+                    break;
+                case AuraStat.DiceCount:
+                    stat = "骰数";
+                    break;
+                case AuraStat.ValueBonus:
+                    stat = "数值";
+                    break;
+                case AuraStat.ShieldBonus:
+                    stat = "护盾修正";
+                    break;
+                case AuraStat.Lifesteal:
+                    stat = "吸血";
+                    break;
+                default:
+                    stat = "骰值";
+                    break;
+            }
             string amount = aura.Amount >= 0
                 ? string.Concat("+", aura.Amount.ToString())
                 : aura.Amount.ToString();
@@ -264,6 +296,10 @@ namespace ProjectArtOfAll.Core.Cards
                     return "获得护盾后";
                 case PassiveTrigger.CardSold:
                     return "被出售时";
+                case PassiveTrigger.PoisonApplied:
+                    return "中毒命中时";
+                case PassiveTrigger.EnemyCardCast:
+                    return "敌人使用卡牌时";
                 default:
                     return "触发时";
             }
@@ -330,6 +366,12 @@ namespace ProjectArtOfAll.Core.Cards
                     return "棋盘层：每回合结束价值 +1，恢复的骰数跟着涨。";
                 case "golden_chariot":
                     return "棋盘层：你每卖掉一张牌，它的价值 +1。";
+                case "six_six_streak":
+                    return "棋盘层：你每次移动骰掷出 6，此牌价值 +2。";
+                case "placeholder_7":
+                    return "棋盘层：每次停在奖励地块，此牌价值 +1。";
+                case "placeholder_1":
+                    return "棋盘层：每轮结束永久 +1 伤害修正。";
                 case "barbed_wire":
                     return card.IsUpgraded
                         ? "棋盘层：出售时在当前地块留下陷阱，停留者 3 回合不能移动。"

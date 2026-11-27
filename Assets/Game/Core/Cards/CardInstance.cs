@@ -24,14 +24,30 @@ namespace ProjectArtOfAll.Core.Cards
         /// <summary>这张牌当前的定义：融合升级后指向升级版（CJ-5.11）。</summary>
         public CardDefinition Definition { get; private set; }
 
-        /// <summary>铜锣烧 / 黄金战车: value grows during a run.</summary>
-        public int ValueBonus { get; set; }
+        private int valueBonus;
+        private int permanentDiceModifier;
+        private int permanentDiceCountBonus;
+
+        /// <summary>铜锣烧 / 黄金战车: value grows during a run, capped at 20.</summary>
+        public int ValueBonus
+        {
+            get => valueBonus;
+            set => valueBonus = Math.Max(-Definition.Value, Math.Min(20 - Definition.Value, value));
+        }
 
         /// <summary>幸运饼干 / 淡水: permanent per-die modifier (clamped by the resolver).</summary>
-        public int PermanentDiceModifier { get; set; }
+        public int PermanentDiceModifier
+        {
+            get => permanentDiceModifier;
+            set => permanentDiceModifier = Math.Max(-5, Math.Min(5, value));
+        }
 
         /// <summary>粉碎机: permanently adds whole dice to this card.</summary>
-        public int PermanentDiceCountBonus { get; set; }
+        public int PermanentDiceCountBonus
+        {
+            get => permanentDiceCountBonus;
+            set => permanentDiceCountBonus = Math.Max(-2, Math.Min(4, value));
+        }
 
         public int Value => Math.Max(0, Definition.Value + ValueBonus);
 
@@ -42,7 +58,7 @@ namespace ProjectArtOfAll.Core.Cards
 
         public void ModifyValue(int delta)
         {
-            ValueBonus = Math.Max(0, ValueBonus + delta);
+            ValueBonus += delta;
         }
 
         /// <summary>

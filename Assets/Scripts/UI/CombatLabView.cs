@@ -343,7 +343,7 @@ namespace ProjectArtOfAll.UI
                 .ThenBy(card => card.DisplayName)
                 .ToList();
 
-            // 行数由卡表决定：35 张牌两列排下去要 18 行，写死高度会把最后几张挤出面板。
+            // 行数由卡表决定：51 张牌两列排下去要 26 行，写死高度会把最后几张挤出面板。
             const float rowHeight = 46f;
             const float columnWidth = 262f;
             const float listTop = 78f;

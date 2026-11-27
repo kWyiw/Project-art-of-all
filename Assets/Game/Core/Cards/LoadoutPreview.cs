@@ -196,7 +196,7 @@ namespace ProjectArtOfAll.Core.Cards
                         continue;
                     }
 
-                    total += aura.Amount * ScalingFactor(row, i, aura);
+                    total += aura.Amount * ScalingFactor(row, i, index, aura);
                 }
             }
 
@@ -240,29 +240,65 @@ namespace ProjectArtOfAll.Core.Cards
         private static int ScalingFactor(
             IReadOnlyList<Placed> row,
             int sourceIndex,
+            int targetIndex,
             AuraDefinition aura)
         {
-            if (aura.Scaling != AuraScaling.PerAdjacentMatchingTag)
+            switch (aura.Scaling)
             {
-                return 1;
-            }
-
-            int count = 0;
-            for (int i = 0; i < row.Count; i++)
-            {
-                if (i == sourceIndex || !row[i].IsAdjacentTo(row[sourceIndex]))
+                case AuraScaling.PerAdjacentMatchingTag:
                 {
-                    continue;
-                }
+                    int count = 0;
+                    for (int i = 0; i < row.Count; i++)
+                    {
+                        if (i == sourceIndex || !row[i].IsAdjacentTo(row[sourceIndex]))
+                        {
+                            continue;
+                        }
 
-                if (aura.RequiredTag == CardTag.None ||
-                    (row[i].Card.Definition.Tags & aura.RequiredTag) != 0)
+                        if (aura.RequiredTag == CardTag.None ||
+                            (row[i].Card.Definition.Tags & aura.RequiredTag) != 0)
+                        {
+                            count++;
+                        }
+                    }
+
+                    return count;
+                }
+                case AuraScaling.PerOtherMatchingTag:
                 {
-                    count++;
-                }
-            }
+                    int count = 0;
+                    for (int i = 0; i < row.Count; i++)
+                    {
+                        if (i == sourceIndex)
+                        {
+                            continue;
+                        }
 
-            return count;
+                        if (aura.RequiredTag == CardTag.None ||
+                            (row[i].Card.Definition.Tags & aura.RequiredTag) != 0)
+                        {
+                            count++;
+                        }
+                    }
+
+                    return count;
+                }
+                case AuraScaling.SelfAndAdjacentValue:
+                {
+                    int total = row[targetIndex].Card.Value;
+                    for (int i = 0; i < row.Count; i++)
+                    {
+                        if (i != sourceIndex && row[i].IsAdjacentTo(row[sourceIndex]))
+                        {
+                            total += row[i].Card.Value;
+                        }
+                    }
+
+                    return total;
+                }
+                default:
+                    return 1;
+            }
         }
 
         private static List<Placed> Pack(IReadOnlyList<CardInstance> row)

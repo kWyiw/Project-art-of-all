@@ -33,6 +33,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckSlotAdjacencyInCombat();
                 CheckCustomMaxHealth();
                 CheckCardMechanics();
+                CheckSecondSetMechanics();
                 CheckM1MatchDurability();
                 CheckRandomness();
                 CheckDebugRollRange();
@@ -418,17 +419,23 @@ namespace ProjectArtOfAll.Core.Checks
                 "回收站必须给场上的废料 +1 多重释放。");
             Assert(LoadoutPreview.BonusDice(new[] { recycler, crowbar }, 1) == 0,
                 "回收站只影响废料，武器不额外获得骰数。");
+
+            CardInstance weaponCounter =
+                new CardInstance(9, CardDatabase.Instance.Get("placeholder_3"));
+            Assert(
+                LoadoutPreview.DiceModifier(new[] { weaponCounter, crowbar, axe }, 0) == 20,
+                "占位符3的构筑预览必须按其他武器数量显示 +10。");
         }
 
         private static void CheckCardDatabase()
         {
             CardDatabase catalog = CardDatabase.Instance;
-            // 35 张基础牌 + 其中 33 张各自的「+」升级版（雪水净化器 / 神秘饮料没有升级版）。
-            Assert(catalog.All.Count == 35,
-                "The catalog must expose all thirty-five base cards of the first set.");
+            // 51 张基础牌 + 其中 43 张各自的「+」升级版。
+            Assert(catalog.All.Count == 51,
+                "The catalog must expose all fifty-one base cards.");
             Assert(catalog.All.All(card => !card.IsUpgraded),
                 "The shop / reward pool must never list upgraded cards.");
-            Assert(catalog.AllDefinitions.Count == 68,
+            Assert(catalog.AllDefinitions.Count == 94,
                 "Every upgradable base card must ship its upgraded twin.");
 
             // 商店 / 奖励的随机池直接取 catalog.All，只滤掉事件专属牌；任何新牌掉队都会在这里炸。
@@ -469,6 +476,16 @@ namespace ProjectArtOfAll.Core.Checks
                 "神秘饮料 must have no upgrade (it is a sellable bottle).");
             Assert(catalog.Get("recycler+") != null && catalog.Get("recycler+").IsUpgraded,
                 "回收站 must ship 回收站+ (its sell bonus doubles).");
+            Assert(catalog.Get("rusted_blade+") != null,
+                "锈刃 must ship its stronger poison upgrade.");
+            Assert(catalog.Get("six_six_streak").HasTag(CardTag.Mascot),
+                "六六大顺 must carry the Mascot tag.");
+            Assert(catalog.Get("food_poisoning").HasTag(CardTag.Disease),
+                "食物中毒 must carry the Disease tag.");
+            Assert(catalog.Get("placeholder_2").Upgraded != null,
+                "占位符2 must upgrade from right-side to adjacent lifesteal.");
+            Assert(CardText.Description(catalog.Get("titan")).Contains("2d100"),
+                "泰坦 design text must remain visible in the tooltip.");
 
             // 棋盘层被动必须写在卡面上（BoardNote），否则玩家会以为这些牌没有效果。
             Assert(CardText.Description(catalog.Get("fortune_cookie")).Contains("最左侧的食物"),
@@ -1936,6 +1953,279 @@ namespace ProjectArtOfAll.Core.Checks
                         !gameEvent.IgnoresShield);
             Assert(chariotHit.Amount >= 4 && chariotHit.Amount <= 24,
                 "Golden chariot must roll one die per point of value (4d6).");
+        }
+
+        private static void CheckSecondSetMechanics()
+        {
+            CardDatabase catalog = CardDatabase.Instance;
+
+            // 棋盘层成长：掷出6、停在奖励地块、每轮结束。
+            MatchController board = new MatchController(CreateM3Graph(), 20261127UL);
+            MatchPlayerState owner = board.State.Players[0];
+            CardInstance six = SeedLoadout(owner, 9000, "six_six_streak")[0];
+            CardInstance rewardValue = SeedLoadout(owner, 9010, "placeholder_7")[0];
+            CardInstance roundDamage = SeedLoadout(owner, 9020, "placeholder_1")[0];
+
+            board.Submit(new DebugRollCommand(owner.Id, 6));
+            Assert(six.Value == 4, "六六大顺 must gain 2 value when the owner rolls a 6.");
+            BoardCardEconomy.OnDiceRolled(owner, 5);
+            Assert(six.Value == 4, "六六大顺 must ignore non-6 rolls.");
+            BoardCardEconomy.OnRewardStopped(owner);
+            Assert(rewardValue.Value == 3, "占位符7 must gain 1 value on a Reward stop.");
+            BoardCardEconomy.OnRoundEnded(owner);
+            Assert(
+                roundDamage.PermanentDiceModifier == 1,
+                "占位符1 must gain 1 permanent dice modifier each round.");
+
+            CardInstance capped = new CardInstance(9030, catalog.Get("six_six_streak"));
+            capped.ModifyValue(999);
+            Assert(capped.Value == 20, "Permanent value growth must stop at 20.");
+
+            BattleSnapshot Duel(params CardInstance[] cards)
+            {
+                return new BattleSnapshot(
+                    new CombatantSnapshot(0, 5, cards, maxHealth: 5000),
+                    new CombatantSnapshot(
+                        1,
+                        5,
+                        new[] { new CardInstance(9999, catalog.Get("car_door")) },
+                        maxHealth: 5000));
+            }
+
+            // 六六大顺：护盾修正 = 自身价值 + 左右邻价值。
+            CardInstance sixBattle = new CardInstance(9100, catalog.Get("six_six_streak"));
+            CardInstance leftNeighbour = new CardInstance(9101, catalog.Get("crowbar"));
+            CardInstance rightNeighbour = new CardInstance(9102, catalog.Get("car_door"));
+            sixBattle.ModifyValue(6);       // 8g
+            leftNeighbour.ModifyValue(1);   // 2g
+            rightNeighbour.ModifyValue(2);  // 4g
+            CombatSimulation sixSimulation = new CombatSimulation(
+                Duel(leftNeighbour, sixBattle, rightNeighbour),
+                31UL);
+            CombatCardRuntime sixRuntime = sixSimulation.Left.Cards
+                .First(card => card.Instance.Uid == sixBattle.Uid);
+            AuraResolver aura = new AuraResolver();
+            int sixShieldModifier =
+                aura.GetShieldModifier(sixSimulation.Left, sixRuntime);
+            Assert(
+                sixShieldModifier == 14,
+                "六六大顺 shield modifier must equal self plus both adjacent values, got "
+                + sixShieldModifier + ".");
+
+            // 占位符3：其他武器每张 +10；水果刀：每层再生 +1。
+            CardInstance placeholder3 = new CardInstance(9110, catalog.Get("placeholder_3"));
+            CombatSimulation weaponCounter = new CombatSimulation(
+                Duel(
+                    placeholder3,
+                    new CardInstance(9111, catalog.Get("crowbar")),
+                    new CardInstance(9112, catalog.Get("fireman_axe"))),
+                32UL);
+            CombatCardRuntime placeholder3Runtime = weaponCounter.Left.Cards
+                .First(card => card.Instance.Uid == placeholder3.Uid);
+            Assert(
+                aura.GetDiceModifier(weaponCounter.Left, placeholder3Runtime) == 20,
+                "占位符3 must gain +10 for each other weapon.");
+
+            CardInstance fruitKnife = new CardInstance(9120, catalog.Get("fruit_knife"));
+            CombatSimulation regenerationCounter = new CombatSimulation(
+                Duel(fruitKnife),
+                33UL);
+            regenerationCounter.Left.Regeneration = 5;
+            CombatCardRuntime fruitKnifeRuntime = regenerationCounter.Left.Cards[0];
+            Assert(
+                aura.GetDiceModifier(regenerationCounter.Left, fruitKnifeRuntime) == 5,
+                "水果刀 must gain +1 dice modifier per Regeneration layer.");
+
+            // 占位符2：右邻武器获得吸血。
+            CardInstance lifestealAura = new CardInstance(9130, catalog.Get("placeholder_2"));
+            CardInstance lifestealWeapon = new CardInstance(9131, catalog.Get("crowbar"));
+            CombatSimulation lifestealAuraSimulation = new CombatSimulation(
+                Duel(lifestealAura, lifestealWeapon),
+                34UL);
+            CombatCardRuntime lifestealWeaponRuntime = lifestealAuraSimulation.Left.Cards
+                .First(card => card.Instance.Uid == lifestealWeapon.Uid);
+            Assert(
+                aura.HasLifesteal(lifestealAuraSimulation.Left, lifestealWeaponRuntime),
+                "占位符2 must grant lifesteal to its right-side weapon.");
+
+            // 占位符1：主动攻击吸血。
+            CardInstance lifestealSelf = new CardInstance(9140, catalog.Get("placeholder_1"));
+            CombatSimulation lifestealSimulation = new CombatSimulation(
+                Duel(lifestealSelf),
+                35UL);
+            for (int tick = 0; tick < 360; tick++)
+            {
+                lifestealSimulation.TickOnce();
+            }
+
+            Assert(
+                lifestealSimulation.Events.History
+                    .OfType<HealthRestoredEvent>()
+                    .Any(gameEvent => gameEvent.PlayerId == 0 && gameEvent.Amount > 0),
+                "占位符1 must heal from its attack damage through lifesteal.");
+
+            // 占位符7：再生层数等于当前价值。
+            CardInstance valueRegeneration = new CardInstance(9150, catalog.Get("placeholder_7"));
+            valueRegeneration.ModifyValue(3);
+            CombatSimulation regenerationValueSimulation = new CombatSimulation(
+                Duel(valueRegeneration),
+                36UL);
+            for (int tick = 0; tick < 360; tick++)
+            {
+                regenerationValueSimulation.TickOnce();
+            }
+
+            Assert(
+                regenerationValueSimulation.Events.History
+                    .OfType<StatusAppliedEvent>()
+                    .Any(gameEvent =>
+                        gameEvent.PlayerId == 0 &&
+                        gameEvent.Status == StatusKind.Regeneration &&
+                        gameEvent.Layers == 5),
+                "占位符7 must gain Regeneration equal to its current value.");
+
+            // 锈刃：任意己方攻击伤害后追加中毒。
+            CardInstance rustedBlade = new CardInstance(9160, catalog.Get("rusted_blade"));
+            CombatSimulation rustedSimulation = new CombatSimulation(
+                Duel(rustedBlade),
+                37UL);
+            for (int tick = 0; tick < 320; tick++)
+            {
+                rustedSimulation.TickOnce();
+            }
+
+            Assert(
+                rustedSimulation.Events.History.OfType<StatusAppliedEvent>()
+                    .Any(gameEvent =>
+                        gameEvent.PlayerId == 1 &&
+                        gameEvent.Status == StatusKind.Poison),
+                "锈刃 must apply Poison after its own damage.");
+
+            // 催化剂：己方造成中毒时给自己充能。
+            CardInstance catalyst = new CardInstance(9170, catalog.Get("catalyst"));
+            CombatSimulation catalystSimulation = new CombatSimulation(
+                Duel(catalyst, new CardInstance(9171, catalog.Get("nuclear_water"))),
+                38UL);
+            for (int tick = 0; tick < 260; tick++)
+            {
+                catalystSimulation.TickOnce();
+            }
+
+            Assert(
+                catalystSimulation.Events.History.OfType<ChargeAppliedEvent>()
+                    .Any(gameEvent =>
+                        gameEvent.PlayerId == 0 &&
+                        gameEvent.CardUid == catalyst.Uid),
+                "催化剂 must charge itself when poison is applied.");
+
+            // 占位符4：敌人施法时充能自己。
+            CardInstance enemyCastCharge = new CardInstance(9180, catalog.Get("placeholder_4"));
+            CombatSimulation enemyCastSimulation = new CombatSimulation(
+                new BattleSnapshot(
+                    new CombatantSnapshot(0, 5, new[] { enemyCastCharge }, maxHealth: 5000),
+                    new CombatantSnapshot(
+                        1,
+                        5,
+                        new[] { new CardInstance(9181, catalog.Get("crowbar")) },
+                        maxHealth: 5000)),
+                39UL);
+            for (int tick = 0; tick < 200; tick++)
+            {
+                enemyCastSimulation.TickOnce();
+            }
+
+            Assert(
+                enemyCastSimulation.Events.History.OfType<ChargeAppliedEvent>()
+                    .Any(gameEvent =>
+                        gameEvent.PlayerId == 0 &&
+                        gameEvent.CardUid == enemyCastCharge.Uid),
+                "占位符4 must charge when the enemy casts a card.");
+
+            // 食物中毒：己方使用食物时给敌方中毒。
+            CombatSimulation foodSimulation = new CombatSimulation(
+                Duel(
+                    new CardInstance(9190, catalog.Get("food_poisoning")),
+                    new CardInstance(9191, catalog.Get("mineral_water"))),
+                40UL);
+            for (int tick = 0; tick < 220; tick++)
+            {
+                foodSimulation.TickOnce();
+            }
+
+            Assert(
+                foodSimulation.Events.History.OfType<StatusAppliedEvent>()
+                    .Any(gameEvent =>
+                        gameEvent.PlayerId == 1 &&
+                        gameEvent.Status == StatusKind.Poison),
+                "食物中毒 must poison the enemy when food is cast.");
+
+            // 占位符5：相邻牌施放后只提高自身护盾修正。
+            CardInstance shieldPlaceholder = new CardInstance(9200, catalog.Get("placeholder_5"));
+            CombatSimulation shieldSimulation = new CombatSimulation(
+                Duel(shieldPlaceholder, new CardInstance(9201, catalog.Get("crowbar"))),
+                41UL);
+            for (int tick = 0; tick < 200; tick++)
+            {
+                shieldSimulation.TickOnce();
+            }
+
+            CombatCardRuntime shieldRuntime = shieldSimulation.Left.Cards
+                .First(card => card.Instance.Uid == shieldPlaceholder.Uid);
+            Assert(
+                shieldRuntime.BattleShieldBonus == 2,
+                "占位符5 must gain +2 shield modifier after an adjacent cast.");
+
+            // 链锯：首次施法后当次 CD 90 tick，之后恢复 180 tick 的节奏。
+            CardInstance chainsaw = new CardInstance(9210, catalog.Get("chainsaw"));
+            CombatSimulation chainsawSimulation = new CombatSimulation(
+                Duel(chainsaw),
+                42UL);
+            for (int tick = 0; tick < 1000; tick++)
+            {
+                chainsawSimulation.TickOnce();
+            }
+
+            List<CardCastEvent> chainsawCasts = chainsawSimulation.Events.History
+                .OfType<CardCastEvent>()
+                .Where(gameEvent => gameEvent.CardUid == chainsaw.Uid)
+                .ToList();
+            Assert(chainsawCasts.Count >= 3, "链锯 must cast at least three times.");
+            Assert(
+                chainsawCasts[1].Tick - chainsawCasts[0].Tick == 180,
+                "链锯 first cooldown after cast must be halved.");
+            Assert(
+                chainsawCasts[2].Tick - chainsawCasts[1].Tick == 360,
+                "链锯 cooldown must return to full after the first halved cycle.");
+
+            // 泰坦：己方中毒事件同时触发充能与伤害修正。
+            CardInstance titan = new CardInstance(9220, catalog.Get("titan"));
+            CombatSimulation titanSimulation = new CombatSimulation(
+                Duel(titan, new CardInstance(9221, catalog.Get("nuclear_water"))),
+                43UL);
+            for (int tick = 0; tick < 260; tick++)
+            {
+                titanSimulation.TickOnce();
+            }
+
+            CombatCardRuntime titanRuntime = titanSimulation.Left.Cards
+                .First(card => card.Instance.Uid == titan.Uid);
+            Assert(
+                titanRuntime.BattleDiceModifier == 4,
+                "泰坦 must gain +4 damage modifier when poison is applied.");
+            Assert(
+                titanSimulation.Events.History.OfType<ChargeAppliedEvent>()
+                    .Any(gameEvent =>
+                        gameEvent.PlayerId == 0 &&
+                        gameEvent.CardUid == titan.Uid),
+                "泰坦 must charge itself when poison is applied.");
+
+            Assert(catalog.Get("rusted_blade+").Passives.Count == 1,
+                "锈刃+ must retain the damage-triggered poison passive.");
+            Assert(catalog.Get("placeholder_2+").Auras[0].Target == AuraTarget.AllAdjacent,
+                "占位符2+ must affect all adjacent weapons.");
+
+            Console.WriteLine(
+                "[second-set] board-growth, lifesteal, triggers and dynamic modifiers verified");
         }
 
         private readonly struct SceneCell

@@ -49,6 +49,12 @@ namespace ProjectArtOfAll.Core.Combat
             RemainingTicks = Math.Max(0, cooldownTicks);
         }
 
+        public void HalveRemaining()
+        {
+            RemainingTicks /= 2;
+            speedAccumulator = 0L;
+        }
+
         /// <summary>
         /// 充能：冷却读秒瞬间前进 <paramref name="ticks"/>。溢出部分记为 chargeCarry，
         /// 在该牌下一次进入冷却时扣掉。

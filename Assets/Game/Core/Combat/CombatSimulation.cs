@@ -147,9 +147,13 @@ namespace ProjectArtOfAll.Core.Combat
         internal void GainShield(
             CombatantRuntime owner,
             CombatantRuntime target,
+            CombatCardRuntime sourceCard,
             int amount)
         {
-            int granted = Math.Max(0, amount) + Math.Max(0, owner.ShieldBonus);
+            int granted = Math.Max(0, amount) +
+                          Math.Max(0, owner.ShieldBonus) +
+                          Math.Max(0, sourceCard?.BattleShieldBonus ?? 0) +
+                          Math.Max(0, auraResolver.GetShieldModifier(owner, sourceCard));
             if (granted <= 0)
             {
                 return;
@@ -181,7 +185,8 @@ namespace ProjectArtOfAll.Core.Combat
             CombatantRuntime owner,
             CombatCardRuntime sourceCard,
             PassiveTrigger trigger,
-            CardTag castTag)
+            CardTag castTag,
+            CombatCardRuntime targetCard = null)
         {
             if (passiveDepth >= MaxPassiveDepth)
             {
@@ -193,8 +198,11 @@ namespace ProjectArtOfAll.Core.Combat
             {
                 foreach (CombatCardRuntime card in owner.ActiveCards())
                 {
-                    foreach (PassiveDefinition passive in card.Definition.Passives)
+                    for (int passiveIndex = 0;
+                         passiveIndex < card.Definition.Passives.Count;
+                         passiveIndex++)
                     {
+                        PassiveDefinition passive = card.Definition.Passives[passiveIndex];
                         if (passive.Trigger != trigger)
                         {
                             continue;
@@ -216,6 +224,24 @@ namespace ProjectArtOfAll.Core.Combat
                         if (passive.ExcludesSource &&
                             sourceCard != null &&
                             ReferenceEquals(card, sourceCard))
+                        {
+                            continue;
+                        }
+
+                        if (passive.SourceCardOnly &&
+                            !ReferenceEquals(card, sourceCard))
+                        {
+                            continue;
+                        }
+
+                        if (passive.TargetCardOnly &&
+                            !ReferenceEquals(card, targetCard))
+                        {
+                            continue;
+                        }
+
+                        if (passive.OncePerBattle &&
+                            !card.TryMarkPassiveOnce(passiveIndex))
                         {
                             continue;
                         }
@@ -280,6 +306,11 @@ namespace ProjectArtOfAll.Core.Combat
                     CardTag castTag = card.Definition.Tags;
                     TriggerPassives(source, card, PassiveTrigger.OwnCardCast, castTag);
                     TriggerPassives(source, card, PassiveTrigger.AnyCardCast, castTag);
+                    TriggerPassives(
+                        enemy,
+                        card,
+                        PassiveTrigger.EnemyCardCast,
+                        castTag);
                 }
             }
         }
