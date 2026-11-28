@@ -42,7 +42,9 @@ namespace ProjectArtOfAll.Player
             }
 
             yaw = transform.eulerAngles.y;
-            pitch = 0f;
+            pitch = head != null
+                ? Mathf.DeltaAngle(0f, head.localEulerAngles.x)
+                : 0f;
             LockCursor();
         }
 
