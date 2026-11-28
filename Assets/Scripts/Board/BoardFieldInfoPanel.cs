@@ -101,7 +101,7 @@ namespace ProjectArtOfAll.Board
                     "怪物阶段：" + MonsterPhaseLabel(state.MonsterPhase) + "\n" +
                     "每 " + MatchController.GlobalGrantInterval + " 轮：全员各得 " +
                     MatchController.GlobalShardGrant + " 碎片\n" +
-                    "任意玩家到 4 级：进入后期并触发 Boss 演化";
+                    "任意玩家到 4 级：进入后期，所有怪物恒为首领";
             }
 
             if (normaLabel != null)
@@ -320,8 +320,14 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
-            string title = TitleOf(tile.TileType, tile.OwnerPlayerId);
-            string body = BodyOf(tile.TileType);
+            bool bossEncounter =
+                gameplay.CurrentMonsterPhase == MonsterPhase.Late &&
+                MatchState.IsMonsterTile(tile.TileType);
+            string title = TitleOf(
+                tile.TileType,
+                tile.OwnerPlayerId,
+                bossEncounter);
+            string body = BodyOf(tile.TileType, bossEncounter);
             if (titleLabel.text != title)
             {
                 titleLabel.text = title;
@@ -399,8 +405,16 @@ namespace ProjectArtOfAll.Board
             visible = false;
         }
 
-        public static string TitleOf(TileType type, int ownerPlayerId)
+        public static string TitleOf(
+            TileType type,
+            int ownerPlayerId,
+            bool bossEncounter = false)
         {
+            if (bossEncounter && MatchState.IsMonsterTile(type))
+            {
+                return "首领";
+            }
+
             switch (type)
             {
                 case TileType.Home:
@@ -412,9 +426,8 @@ namespace ProjectArtOfAll.Board
                 case TileType.Shop:
                     return "商店";
                 case TileType.Monster:
-                    return "怪物";
                 case TileType.Boss:
-                    return "首领";
+                    return "怪物";
                 case TileType.Warp:
                     return "传送";
                 case TileType.Event:
@@ -426,8 +439,13 @@ namespace ProjectArtOfAll.Board
             }
         }
 
-        public static string BodyOf(TileType type)
+        public static string BodyOf(TileType type, bool bossEncounter = false)
         {
+            if (bossEncounter && MatchState.IsMonsterTile(type))
+            {
+                return "阶段③首领：胜利获得 10 碎片与 3 胜场；碎片池不消耗。";
+            }
+
             switch (type)
             {
                 case TileType.Home:
@@ -437,9 +455,8 @@ namespace ProjectArtOfAll.Board
                 case TileType.Shop:
                     return "三张随机货可买，每件有标价；可花 2 碎片重掷一次。";
                 case TileType.Monster:
-                    return "打一场：赢了拿战利品和 1 点胜场，输了碎片减半。";
                 case TileType.Boss:
-                    return "打首领：赢了得 3 点胜场，输了碎片减半。";
+                    return "打一场：赢了拿战利品和 1 点胜场，输了碎片减半。";
                 case TileType.Warp:
                     return "随机传送到另一处传送格，并在落点再结算一次。";
                 case TileType.Event:

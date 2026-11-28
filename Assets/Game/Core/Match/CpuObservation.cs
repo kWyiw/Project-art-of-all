@@ -211,7 +211,13 @@ namespace ProjectArtOfAll.Core.Match
 
         public int WinThreshold { get; private set; }
 
-        public bool BossEvolutionTriggered { get; private set; }
+        public MonsterPhase MonsterPhase { get; private set; }
+
+        public bool MeetsCurrentNorma =>
+            Level < 6 &&
+            (Norma == NormaType.Shard
+                ? Shards >= ShardThreshold
+                : Wins >= WinThreshold);
 
         public bool ShopRerollUsed { get; private set; }
 
@@ -261,6 +267,7 @@ namespace ProjectArtOfAll.Core.Match
             StringBuilder builder = new StringBuilder();
             builder.Append("P").Append(PlayerId + 1);
             builder.Append(" phase=").Append(Phase);
+            builder.Append(" monsterPhase=").Append(MonsterPhase);
             builder.Append(" Lv.").Append(Level);
             builder.Append(" 碎片 ").Append(Shards).Append("/").Append(ShardThreshold);
             builder.Append(" 胜场 ").Append(Wins).Append("/").Append(WinThreshold);
@@ -324,7 +331,7 @@ namespace ProjectArtOfAll.Core.Match
                 BagCapacity = LoadoutRules.BagCapacity,
                 ShardThreshold = NormaRules.GetThreshold(self.Level, NormaType.Shard),
                 WinThreshold = NormaRules.GetThreshold(self.Level, NormaType.Wins),
-                BossEvolutionTriggered = state.BossEvolutionTriggered
+                MonsterPhase = state.MonsterPhase
             };
 
             List<CpuOwnCard> battle = new List<CpuOwnCard>();

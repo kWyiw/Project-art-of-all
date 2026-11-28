@@ -227,19 +227,27 @@ namespace ProjectArtOfAll.Board
                     return "玩家 " + (immobilized.PlayerId + 1)
                         + " 被铁丝网困住，这回合不能移动";
                 case BossEvolutionEvent boss:
-                    return "玩家 " + (boss.TriggeredByPlayerId + 1) + " 触发 Boss 演化：怪物格全部变 BOSS";
+                    return "玩家 " + (boss.TriggeredByPlayerId + 1)
+                        + " 令游戏进入阶段③：所有怪物恒为首领";
                 case CombatResolvedEvent combat:
-                    return CombatText(combat);
+                    return CombatText(combat, match);
                 default:
                     return null;
             }
         }
 
-        private static string CombatText(CombatResolvedEvent combat)
+        private static string CombatText(
+            CombatResolvedEvent combat,
+            MatchController match)
         {
             CombatResult result = combat.Result;
             string defender = combat.DefenderId >= 1000
-                ? result.Battle.Right.DisplayName
+                ? string.Concat(
+                    match != null &&
+                    match.State.MonsterPhase == MonsterPhase.Late
+                        ? "首领 "
+                        : string.Empty,
+                    result.Battle.Right.DisplayName)
                 : "玩家 " + (combat.DefenderId + 1);
             string who = "玩家 " + (combat.AttackerId + 1) + " 对 " + defender;
             if (result.IsDraw)

@@ -774,13 +774,11 @@ namespace ProjectArtOfAll.Core.Match
                     BeginReward(player);
                     break;
                 case TileType.Monster:
+                case TileType.Boss:
                     ResolveMonster(
                         player,
                         arrival,
-                        boss: State.IsBossNode(arrival.Id));
-                    break;
-                case TileType.Boss:
-                    ResolveMonster(player, arrival, boss: true);
+                        boss: State.MonsterPhase == MonsterPhase.Late);
                     break;
                 case TileType.Shop:
                     BeginShop(player);
@@ -1166,15 +1164,11 @@ namespace ProjectArtOfAll.Core.Match
 
             if (result.WinnerPlayerId == player.Id)
             {
-                int poolReward = State.TakeMonsterPool(arrival.Id);
+                int poolReward = boss
+                    ? State.GetMonsterPool(arrival.Id)
+                    : State.TakeMonsterPool(arrival.Id);
                 AddShards(player, poolReward);
                 AddWins(player, boss ? 3 : 1);
-
-                if (boss)
-                {
-                    // R-TILE-004：Boss 被击败后**所有** BOSS 格恢复为怪物格。
-                    State.RestoreAllBosses();
-                }
             }
             else if (!result.IsDraw)
             {
@@ -1298,12 +1292,12 @@ namespace ProjectArtOfAll.Core.Match
                 return;
             }
 
+            bool bossPhaseBefore = State.MonsterPhase == MonsterPhase.Late;
             player.Level++;
             Publish(new PlayerLeveledUpEvent(player.Id, player.Level));
 
-            if (player.Level == 4 && !State.BossEvolutionTriggered)
+            if (!bossPhaseBefore && State.MonsterPhase == MonsterPhase.Late)
             {
-                State.EvolveAllMonstersToBosses();
                 Publish(new BossEvolutionEvent(player.Id));
             }
 

@@ -39,6 +39,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckM1MatchDurability();
                 CheckRandomness();
                 CheckMonsterPhases();
+                CheckBossPhase();
                 CheckDebugRollRange();
                 CheckHomeProgression();
                 CheckRewardChoice();
@@ -961,6 +962,72 @@ namespace ProjectArtOfAll.Core.Checks
             Console.WriteLine(
                 $"[monster] early={early.Count} mid={mid.Count} late={late.Count} "
                 + $"picked={picked.Count}");
+        }
+
+        private static void CheckBossPhase()
+        {
+            MapGraph graph = MapGraph.Create(
+                new[]
+                {
+                    new MapNode(0, TileType.Home, 0, 1),
+                    new MapNode(1, TileType.Home, 1, 2),
+                    new MapNode(2, TileType.Monster, -1, 3),
+                    new MapNode(3, TileType.Home, 2, 4),
+                    new MapNode(4, TileType.Boss, -1, 5),
+                    new MapNode(5, TileType.Home, 3, 6),
+                    new MapNode(6, TileType.Neutral, -1, 7),
+                    new MapNode(7, TileType.Monster, -1, 0)
+                },
+                playerCount: 4);
+            MatchController controller =
+                new MatchController(graph, 20261201UL);
+            Assert(controller.State.MonsterPhase == MonsterPhase.Early,
+                "The Boss probe must start before phase three.");
+            Assert(!controller.State.IsBossNode(2) &&
+                   !controller.State.IsBossNode(4),
+                "Monster and legacy Boss tiles are not Boss before phase three.");
+
+            MatchPlayerState trigger = controller.State.CurrentPlayer;
+            trigger.Level = 3;
+            trigger.Shards = 30;
+            trigger.Norma = NormaType.Shard;
+            controller.Submit(new DebugRollCommand(trigger.Id, 1));
+            controller.Submit(new MoveCommand(trigger.Id));
+            Assert(trigger.Level == 4 &&
+                   controller.State.MonsterPhase == MonsterPhase.Late,
+                "Stopping on Home at the threshold must enter phase three.");
+            Assert(controller.Events.History
+                    .OfType<BossEvolutionEvent>()
+                    .Count() == 1,
+                "Entering phase three must publish exactly one boss phase event.");
+
+            for (int nodeId = 0; nodeId < graph.Nodes.Count; nodeId++)
+            {
+                MapNode node = graph.GetNode(nodeId);
+                if (!MatchState.IsMonsterTile(node.TileType))
+                {
+                    continue;
+                }
+
+                Assert(controller.State.IsBossNode(nodeId),
+                    $"Monster tile {nodeId} must be a Boss in phase three.");
+                Assert(controller.State.GetMonsterPool(nodeId) == 10,
+                    $"Boss tile {nodeId} must expose a permanent 10-shard pool.");
+            }
+
+            Assert(controller.State.TakeMonsterPool(2) == 10,
+                "Reading a phase-three Boss pool must award 10.");
+            Assert(controller.State.GetMonsterPool(2) == 10,
+                "A phase-three Boss pool must not be consumed.");
+
+            CpuObservation observation = CpuObservation.Capture(controller);
+            Assert(observation.MonsterPhase == MonsterPhase.Late,
+                "CPU observations must receive the same global monster phase.");
+            Assert(observation.Tiles
+                    .Where(tile => MatchState.IsMonsterTile(tile.Type))
+                    .All(tile => tile.IsBoss && tile.MonsterPool == 10),
+                "CPU tiles must treat every phase-three monster as a Boss.");
+            Console.WriteLine("[boss] phase=late pool=10 permanent=yes cpu=yes");
         }
 
         private static void CheckDebugRollRange()

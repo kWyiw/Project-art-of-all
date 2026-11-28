@@ -275,8 +275,21 @@ namespace ProjectArtOfAll.Core.Match
                 ? 1.0
                 : observation.Wins / (double)observation.WinThreshold;
 
-            double shardScore = shardProgress + (Personality.ShardRouteBias * 0.35) + ApplyNoise(0.0) * 0.25;
-            double winScore = winProgress + (Personality.Aggression * 0.10) + ApplyNoise(0.0) * 0.25;
+            double shardScore =
+                shardProgress +
+                (Personality.ShardRouteBias * 0.12) +
+                ApplyNoise(0.0) * 0.08;
+            double winScore =
+                winProgress +
+                (Personality.Aggression * 0.08) +
+                ApplyNoise(0.0) * 0.08;
+            if (observation.MonsterPhase == MonsterPhase.Late)
+            {
+                // Phase-three Bosses award +3 wins and never consume their pool.
+                // The old fixed shard-route personality bias must not deadlock a seat
+                // on an unreachable shard threshold.
+                winScore += 0.15;
+            }
 
             if (shardScore >= winScore)
             {
@@ -406,6 +419,11 @@ namespace ProjectArtOfAll.Core.Match
                     score += (tile.OwnerPlayerId == observation.PlayerId ? 9.0 : 7.0)
                              * Personality.Growth
                              * UpgradeWorth(observation);
+                    if (observation.MeetsCurrentNorma)
+                    {
+                        score += (observation.Level >= 5 ? 50.0 : 30.0)
+                                 * Personality.Growth;
+                    }
                     break;
 
                 case TileType.Reward:
@@ -428,11 +446,8 @@ namespace ProjectArtOfAll.Core.Match
                     break;
 
                 case TileType.Monster:
-                    score += ScoreMonster(observation, tile, false);
-                    break;
-
                 case TileType.Boss:
-                    score += ScoreMonster(observation, tile, true);
+                    score += ScoreMonster(observation, tile, tile.IsBoss);
                     break;
 
                 case TileType.Warp:
@@ -509,7 +524,7 @@ namespace ProjectArtOfAll.Core.Match
                 return 1.9;
             }
 
-            if (observation.BossEvolutionTriggered)
+            if (observation.MonsterPhase == MonsterPhase.Late)
             {
                 return 1.3;
             }

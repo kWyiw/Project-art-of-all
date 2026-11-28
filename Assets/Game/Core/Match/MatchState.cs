@@ -11,7 +11,6 @@ namespace ProjectArtOfAll.Core.Match
         private readonly List<MatchPlayerState> players;
         private readonly Dictionary<int, int> monsterPools =
             new Dictionary<int, int>();
-        private readonly HashSet<int> bossNodes = new HashSet<int>();
         private readonly List<BoardTrap> traps = new List<BoardTrap>();
 
         internal MatchState(MapGraph graph, ulong seed)
@@ -27,14 +26,9 @@ namespace ProjectArtOfAll.Core.Match
 
             foreach (MapNode node in graph.Nodes)
             {
-                if (node.TileType == TileType.Monster)
+                if (IsMonsterTile(node.TileType))
                 {
                     monsterPools[node.Id] = 3;
-                }
-                else if (node.TileType == TileType.Boss)
-                {
-                    monsterPools[node.Id] = 10;
-                    bossNodes.Add(node.Id);
                 }
             }
         }
@@ -48,8 +42,6 @@ namespace ProjectArtOfAll.Core.Match
         public MatchPhase Phase { get; internal set; }
         public int WinnerPlayerId { get; internal set; }
         public int LastRoll { get; internal set; }
-        public bool BossEvolutionTriggered { get; internal set; }
-
         public MatchPlayerState CurrentPlayer => Players[CurrentPlayerIndex];
 
         /// <summary>
@@ -122,58 +114,54 @@ namespace ProjectArtOfAll.Core.Match
 
         public int GetMonsterPool(int nodeId)
         {
+            MapNode node = Map.GetNode(nodeId);
+            if (IsMonsterTile(node.TileType) && MonsterPhase == MonsterPhase.Late)
+            {
+                return 10;
+            }
+
             return monsterPools.TryGetValue(nodeId, out int value) ? value : 0;
         }
 
         public bool IsBossNode(int nodeId)
         {
-            return bossNodes.Contains(nodeId);
+            MapNode node = Map.GetNode(nodeId);
+            return IsMonsterTile(node.TileType) && MonsterPhase == MonsterPhase.Late;
         }
 
         internal int TakeMonsterPool(int nodeId)
         {
+            if (IsBossNode(nodeId))
+            {
+                return 10;
+            }
+
             int value = GetMonsterPool(nodeId);
             monsterPools[nodeId] = 0;
             return value;
-        }
-
-        internal void EvolveAllMonstersToBosses()
-        {
-            if (BossEvolutionTriggered)
-            {
-                return;
-            }
-
-            BossEvolutionTriggered = true;
-            foreach (MapNode node in Map.Nodes.Where(node => node.TileType == TileType.Monster))
-            {
-                bossNodes.Add(node.Id);
-                monsterPools[node.Id] = 10;
-            }
-        }
-
-        internal void RestoreAllBosses()
-        {
-            foreach (int nodeId in bossNodes.ToArray())
-            {
-                monsterPools[nodeId] = 3;
-            }
-
-            bossNodes.Clear();
         }
 
         internal void RefillMonsterPools()
         {
             foreach (MapNode node in Map.Nodes)
             {
-                if (node.TileType == TileType.Monster || node.TileType == TileType.Boss)
+                if (IsMonsterTile(node.TileType))
                 {
-                    if (GetMonsterPool(node.Id) <= 0)
+                    if (!monsterPools.ContainsKey(node.Id))
                     {
-                        monsterPools[node.Id] = IsBossNode(node.Id) ? 10 : 3;
+                        monsterPools[node.Id] = 3;
+                    }
+                    else if (monsterPools[node.Id] <= 0)
+                    {
+                        monsterPools[node.Id] = 3;
                     }
                 }
             }
+        }
+
+        public static bool IsMonsterTile(TileType type)
+        {
+            return type == TileType.Monster || type == TileType.Boss;
         }
 
         public ulong ComputeHash(ulong randomState)
@@ -187,17 +175,12 @@ namespace ProjectArtOfAll.Core.Match
             hash = StableHash.Add(hash, (long)Phase);
             hash = StableHash.Add(hash, WinnerPlayerId);
             hash = StableHash.Add(hash, LastRoll);
-            hash = StableHash.Add(hash, BossEvolutionTriggered ? 1L : 0L);
+            hash = StableHash.Add(hash, (long)MonsterPhase);
 
             foreach (int nodeId in monsterPools.Keys.OrderBy(id => id))
             {
                 hash = StableHash.Add(hash, nodeId);
                 hash = StableHash.Add(hash, monsterPools[nodeId]);
-            }
-
-            foreach (int nodeId in bossNodes.OrderBy(id => id))
-            {
-                hash = StableHash.Add(hash, nodeId);
             }
 
             foreach (BoardTrap trap in traps

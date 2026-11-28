@@ -98,6 +98,7 @@ namespace ProjectArtOfAll.Board
         private bool awaitingShop;
         private bool awaitingEvent;
         private bool awaitingEncounterAcceptance;
+        private MonsterPhase lastMonsterPhase = (MonsterPhase)(-1);
 
         /// <summary>真人席位数：正常模式固定 0；无CPU测试模式为 -1（表示"当前行动者"）。</summary>
         private int humanSeat = -1;
@@ -185,6 +186,9 @@ namespace ProjectArtOfAll.Board
         public MatchPlayerState HumanPlayer => match == null
             ? null
             : match.State.Players[humanPlayerId];
+
+        public MonsterPhase CurrentMonsterPhase =>
+            match == null ? MonsterPhase.Early : match.State.MonsterPhase;
 
         /// <summary>棋盘上的全部地块（悬停说明用；运行时生成的板也能取到）。</summary>
         public IReadOnlyCollection<BoardTileView> Tiles => tilesByNode.Values;
@@ -745,7 +749,9 @@ namespace ProjectArtOfAll.Board
                 " · Lv.",
                 attacker.Level.ToString());
             string rightTitle = defenderPlayer == null
-                ? combat.Result.Battle.Right.DisplayName
+                ? string.Concat(
+                    CurrentMonsterPhase == MonsterPhase.Late ? "首领 · " : string.Empty,
+                    combat.Result.Battle.Right.DisplayName)
                 : string.Concat(
                     "玩家 ",
                     (defenderPlayer.Id + 1).ToString(),
@@ -777,7 +783,9 @@ namespace ProjectArtOfAll.Board
                 .Any(other => other.Id == combat.DefenderId);
             string defenderLabel = opponentIsPlayer
                 ? string.Concat("玩家 ", (combat.DefenderId + 1).ToString())
-                : combat.Result.Battle.Right.DisplayName;
+                : string.Concat(
+                    CurrentMonsterPhase == MonsterPhase.Late ? "首领 · " : string.Empty,
+                    combat.Result.Battle.Right.DisplayName);
             string title = result.IsDraw
                 ? "战斗平局"
                 : result.WinnerPlayerId == player.Id
@@ -1495,7 +1503,20 @@ namespace ProjectArtOfAll.Board
 
         private void Update()
         {
-            if (!Application.isPlaying || match == null || match.IsFinished)
+            if (!Application.isPlaying || match == null)
+            {
+                return;
+            }
+
+            if (lastMonsterPhase != match.State.MonsterPhase)
+            {
+                RefreshMonsterPresentation();
+                hud?.RefreshFieldInfo(match.State, mapDisplayName);
+                hud?.RefreshPlayerPanels(match.State);
+                hud?.PumpEvents(match);
+            }
+
+            if (match.IsFinished)
             {
                 return;
             }
@@ -1614,7 +1635,13 @@ namespace ProjectArtOfAll.Board
 
         private void UpdateHudStatus(string action = null)
         {
-            if (match == null || hud == null)
+            if (match == null)
+            {
+                return;
+            }
+
+            RefreshMonsterPresentation();
+            if (hud == null)
             {
                 return;
             }
@@ -1650,6 +1677,25 @@ namespace ProjectArtOfAll.Board
             hud.RefreshPlayerPanels(match.State);
             hud.PumpEvents(match);
             hud.RefreshFieldInfo(match.State, mapDisplayName);
+        }
+
+        private void RefreshMonsterPresentation()
+        {
+            if (match == null)
+            {
+                return;
+            }
+
+            bool boss = match.State.MonsterPhase == MonsterPhase.Late;
+            lastMonsterPhase = match.State.MonsterPhase;
+            foreach (KeyValuePair<int, BoardTileView> pair in tilesByNode)
+            {
+                BoardTileView tile = pair.Value;
+                if (tile != null && MatchState.IsMonsterTile(tile.TileType))
+                {
+                    tile.SetBossPresentation(boss);
+                }
+            }
         }
 
         private int ResolveEntryPlayerId()
