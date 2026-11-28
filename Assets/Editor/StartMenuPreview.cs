@@ -156,15 +156,15 @@ public static class StartMenuPreview
             new Vector2(rect.xMin + rect.width * 0.25f, rect.center.y));
         bool rightBlank = Hits(raycaster, camera, hitArea,
             new Vector2(rect.xMax + 40f, rect.center.y));
-        bool slantCorner = Hits(raycaster, camera, hitArea,
+        bool bottomRight = Hits(raycaster, camera, hitArea,
             new Vector2(rect.xMax - 4f, rect.yMin + 4f));
         bool bottomLeft = Hits(raycaster, camera, hitArea,
             new Vector2(rect.xMin + 4f, rect.yMin + 4f));
 
         Debug.Log(
             $"[startmenu-hit] inside={inside} rightBlank={rightBlank} "
-            + $"slantCorner={slantCorner} bottomLeft={bottomLeft}");
-        return inside && !rightBlank && !slantCorner && bottomLeft;
+            + $"bottomRight={bottomRight} bottomLeft={bottomLeft}");
+        return inside && !rightBlank && bottomRight && bottomLeft;
     }
 
     private static bool Hits(

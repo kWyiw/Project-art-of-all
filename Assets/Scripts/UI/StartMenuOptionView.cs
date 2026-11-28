@@ -6,7 +6,7 @@ using UnityEngine.UI;
 namespace ProjectArtOfAll.UI
 {
     /// <summary>
-    /// 主菜单单个选项：入场、悬停文字渐变、金线、梯形灰底和悬停音效。
+    /// 主菜单单个选项：入场、悬停文字渐变、蓝色竖条、矩形灰底和悬停音效。
     /// 菜单列只需按数据列表创建它，后续新增选项会自动复用全部行为。
     /// </summary>
     [DisallowMultipleComponent]
@@ -15,10 +15,14 @@ namespace ProjectArtOfAll.UI
         IPointerEnterHandler,
         IPointerExitHandler
     {
-        public static readonly Color HoverBottom = new Color(0.769f, 0.537f, 0.184f, 1f);
-        public static readonly Color HoverTop = new Color(0.957f, 0.894f, 0.722f, 1f);
-        public static readonly Color GoldLine = new Color(0.91f, 0.776f, 0.294f, 1f);
-        public static readonly Color HoverGray = new Color(0.424f, 0.424f, 0.424f, 0.55f);
+        private static readonly Color Accent =
+            new Color32(0x4A, 0xB8, 0xFD, 0xFF);
+        public static readonly Color HoverBottom = Accent;
+        public static readonly Color HoverTop =
+            new Color32(0xC8, 0xED, 0xFF, 0xFF);
+        public static readonly Color GoldLine = Accent;
+        public static readonly Color HoverGray =
+            new Color(0.424f, 0.424f, 0.424f, 0.55f);
         public static readonly Color Outline = Color.black;
         public static readonly Color Shadow = new Color(0f, 0f, 0f, 0.46f);
 

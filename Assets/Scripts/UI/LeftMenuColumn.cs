@@ -23,7 +23,7 @@ namespace ProjectArtOfAll.UI
         private const float ItemTextLeft = 28f;
         private const float HoverInset = 4f;
         private const float HoverLineWidth = 3f;
-        private const float HoverSlant = 16f;
+        private const float HoverSlant = 0f;
         private const float HoverRightBlankRatio = 0.28f;
         private const float HoverRightBlankExtra = 24f;
         private const int MenuTextSize = 38;
@@ -334,20 +334,27 @@ namespace ProjectArtOfAll.UI
                 Transform item = options[index].transform;
                 Transform hit = item.Find("HitArea");
                 Transform hover = item.Find("HoverBackground");
+                Transform line = item.Find("GoldLine");
                 if (item.GetComponent<Image>() != null ||
-                    hit == null || hover == null)
+                    hit == null || hover == null || line == null)
                 {
                     return false;
                 }
 
                 TrapezoidGraphic hitGraphic = hit.GetComponent<TrapezoidGraphic>();
                 TrapezoidGraphic hoverGraphic = hover.GetComponent<TrapezoidGraphic>();
+                StartMenuWipeGraphic lineGraphic =
+                    line.GetComponent<StartMenuWipeGraphic>();
                 RectTransform hitRect = hit as RectTransform;
                 RectTransform hoverRect = hover as RectTransform;
                 if (hitGraphic == null || hoverGraphic == null ||
+                    lineGraphic == null ||
                     hit.GetComponent<StartMenuOptionHitArea>() == null ||
                     hitRect == null || hoverRect == null ||
                     hitGraphic.raycastTarget == false ||
+                    !Mathf.Approximately(hoverGraphic.RightSlant, HoverSlant) ||
+                    hoverGraphic.color != StartMenuOptionView.HoverGray ||
+                    lineGraphic.color != StartMenuOptionView.GoldLine ||
                     !Mathf.Approximately(
                         hitRect.anchoredPosition.x,
                         hoverRect.anchoredPosition.x) ||

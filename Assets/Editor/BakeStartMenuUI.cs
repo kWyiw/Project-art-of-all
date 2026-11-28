@@ -248,7 +248,13 @@ namespace ProjectArtOfAll.Editor
                 RectTransform hitRect = hitArea as RectTransform;
                 TrapezoidGraphic hoverGraphic = hover.GetComponent<TrapezoidGraphic>();
                 TrapezoidGraphic hitGraphic = hitArea.GetComponent<TrapezoidGraphic>();
+                StartMenuWipeGraphic lineGraphic =
+                    line.GetComponent<StartMenuWipeGraphic>();
                 if (hoverRect == null || hitRect == null ||
+                    lineGraphic == null ||
+                    hoverGraphic.color != StartMenuOptionView.HoverGray ||
+                    lineGraphic.color != StartMenuOptionView.GoldLine ||
+                    !Mathf.Approximately(hoverGraphic.RightSlant, 0f) ||
                     !Mathf.Approximately(
                         hoverRect.anchoredPosition.x,
                         hitRect.anchoredPosition.x) ||
