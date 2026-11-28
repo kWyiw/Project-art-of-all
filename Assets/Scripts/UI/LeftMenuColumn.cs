@@ -27,7 +27,7 @@ namespace ProjectArtOfAll.UI
         private const float HoverSlant = 0f;
         private const float HoverRightBlankRatio = 0.28f;
         private const float HoverRightBlankExtra = 24f;
-        private const float StartTransitionDuration = 0.22f;
+        private const float StartTransitionDuration = 0.44f;
         private const int MenuTextSize = 38;
         private const int TitleTextSize = 64;
         private const string ProjectTitle = "Project : Art of All";
