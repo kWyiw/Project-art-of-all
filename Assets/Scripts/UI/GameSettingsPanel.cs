@@ -7,7 +7,7 @@ namespace ProjectArtOfAll.UI
 {
     /// <summary>
     /// 通用设置面板：主菜单与游戏内暂停菜单共用同一份（同名、同布局、同 <see cref="GameSettings"/>）。
-    /// 所有设置只影响表现——卡槽大小、镜头跟随、自动降档——不改任何规则数值。
+    /// 表现设置与本地开发工具开关共用这一面板；开发者模式只开放调试入口，不改正常规则。
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class GameSettingsPanel : MonoBehaviour
@@ -30,6 +30,8 @@ namespace ProjectArtOfAll.UI
         [SerializeField] private Text autoLabel;
         [SerializeField] private Button difficultyButton;
         [SerializeField] private Text difficultyLabel;
+        [SerializeField] private Button developerButton;
+        [SerializeField] private Text developerLabel;
         [SerializeField] private Button resetButton;
         [SerializeField] private Button backButton;
 
@@ -75,7 +77,7 @@ namespace ProjectArtOfAll.UI
             Label(panelObject.transform, "Title", "设置", 24f, 22f, PanelWidth - 48f, 34f,
                 26, FontStyle.Bold, TextAnchor.MiddleCenter).color = Brass;
 
-            Label(panelObject.transform, "Hint", "只影响表现，不改任何规则数值",
+            Label(panelObject.transform, "Hint", "表现选项与本地开发工具",
                     24f, 58f, PanelWidth - 48f, 22f,
                     13, FontStyle.Normal, TextAnchor.MiddleCenter).color = MutedText;
 
@@ -101,7 +103,7 @@ namespace ProjectArtOfAll.UI
                 GameSettings.CardScale = value;
             });
 
-            // 三个开关 --------------------------------------------------------
+            // 开关 ------------------------------------------------------------
             followButton = MakeToggle(panelObject.transform, "镜头跟随", 150f, () =>
                 GameSettings.CameraFollow = !GameSettings.CameraFollow);
             followLabel = followButton.GetComponentInChildren<Text>();
@@ -114,6 +116,14 @@ namespace ProjectArtOfAll.UI
             difficultyButton = MakeToggle(panelObject.transform, "CPU 难度", 238f, () =>
                 GameSettings.CpuDifficultyLevel = (GameSettings.CpuDifficultyLevel + 1) % 3);
             difficultyLabel = difficultyButton.GetComponentInChildren<Text>();
+
+            developerButton = MakeToggle(
+                panelObject.transform,
+                "开发者模式",
+                282f,
+                () => GameSettings.DeveloperMode = !GameSettings.DeveloperMode,
+                "Button_DeveloperMode");
+            developerLabel = developerButton.GetComponentInChildren<Text>();
 
             BoardHudOverlayFactory.CreateBar(
                 panelObject.transform, "Divider",
@@ -140,11 +150,12 @@ namespace ProjectArtOfAll.UI
                     12, FontStyle.Normal, TextAnchor.MiddleCenter).color = MutedText;
 
             RefreshControls();
-            GameSettings.Changed += OnSettingsChanged;
         }
 
         public void Bind()
         {
+            EnsureDeveloperToggle();
+
             if (cardScaleSlider != null)
             {
                 cardScaleSlider.onValueChanged.RemoveAllListeners();
@@ -161,6 +172,8 @@ namespace ProjectArtOfAll.UI
                 GameSettings.AutoQuality = !GameSettings.AutoQuality);
             BindToggle(difficultyButton, () =>
                 GameSettings.CpuDifficultyLevel = (GameSettings.CpuDifficultyLevel + 1) % 3);
+            BindToggle(developerButton, () =>
+                GameSettings.DeveloperMode = !GameSettings.DeveloperMode);
 
             if (resetButton != null)
             {
@@ -179,6 +192,44 @@ namespace ProjectArtOfAll.UI
             }
 
             RefreshControls();
+            GameSettings.Changed -= OnSettingsChanged;
+            GameSettings.Changed += OnSettingsChanged;
+        }
+
+        private void EnsureDeveloperToggle()
+        {
+            if (developerButton != null && developerLabel != null)
+            {
+                return;
+            }
+
+            Transform panel = transform.Find("Panel");
+            if (panel == null)
+            {
+                return;
+            }
+
+            if (font == null)
+            {
+                font = BoardHudOverlayFactory.CreateFont();
+            }
+
+            Transform label = panel.Find("DeveloperModeLabel");
+            Transform button = panel.Find("Button_DeveloperMode");
+            if (label == null || button == null)
+            {
+                developerButton = MakeToggle(
+                    panel,
+                    "开发者模式",
+                    282f,
+                    () => GameSettings.DeveloperMode = !GameSettings.DeveloperMode,
+                    "Button_DeveloperMode");
+                developerLabel = developerButton.GetComponentInChildren<Text>();
+                return;
+            }
+
+            developerLabel = label.GetComponent<Text>();
+            developerButton = button.GetComponent<Button>();
         }
 
         private static void BindToggle(Button button, System.Action action)
@@ -231,6 +282,11 @@ namespace ProjectArtOfAll.UI
             {
                 difficultyLabel.text = GameSettings.CpuDifficultyLabel;
             }
+
+            if (developerLabel != null)
+            {
+                developerLabel.text = GameSettings.DeveloperMode ? "开" : "关";
+            }
         }
 
         public void Show()
@@ -275,12 +331,28 @@ namespace ProjectArtOfAll.UI
         }
 
         /// <summary>一行「标签 + 开关按钮」，返回按钮本身。</summary>
-        private Button MakeToggle(Transform parent, string label, float y, System.Action onClick)
+        private Button MakeToggle(
+            Transform parent,
+            string label,
+            float y,
+            System.Action onClick,
+            string objectName = null)
         {
-            Label(parent, label + "Label", label, 24f, y, 200f, 26f,
+            string labelObjectName = string.IsNullOrEmpty(objectName)
+                ? label + "Label"
+                : objectName.Replace("Button_", string.Empty) + "Label";
+            Label(parent, labelObjectName, label, 24f, y, 200f, 26f,
                 14, FontStyle.Normal, TextAnchor.MiddleLeft).color = TextColor;
 
-            return MakeButton(parent, "开", PanelWidth - 24f - 120f, y - 2f, 120f, 30f, onClick);
+            return MakeButton(
+                parent,
+                "开",
+                PanelWidth - 24f - 120f,
+                y - 2f,
+                120f,
+                30f,
+                onClick,
+                objectName);
         }
 
         private Button MakeButton(
@@ -290,10 +362,12 @@ namespace ProjectArtOfAll.UI
             float y,
             float width,
             float height,
-            System.Action onClick)
+            System.Action onClick,
+            string objectName = null)
         {
             GameObject buttonObject = BoardHudOverlayFactory.CreateBar(
-                parent, "Button_" + label,
+                parent,
+                string.IsNullOrEmpty(objectName) ? "Button_" + label : objectName,
                 new Vector2(0f, 1f), new Vector2(0f, 1f),
                 new Vector2(x, -(y + height)), new Vector2(x + width, -y),
                 new Color(0.89f, 0.64f, 0.20f, 1f));

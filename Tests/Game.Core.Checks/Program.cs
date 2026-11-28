@@ -45,7 +45,8 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckWarpTeleport();
                 CheckCardBandCommands();
                 CheckCardFusion();
-            CheckBagCapacity();
+                CheckDeveloperGrantCard();
+                CheckBagCapacity();
                 CheckFreeActionsDuringAnotherTurn();
                 CheckSceneMapTeleport();
                 CheckSweetRingMovementRules();
@@ -1309,6 +1310,44 @@ namespace ProjectArtOfAll.Core.Checks
             Console.WriteLine(
                 "[fusion] lighter -> lighter+ fused in place, bag=" +
                 player.OwnedCards.Count + " cost=" + first.Definition.CooldownTicks);
+        }
+
+        private static void CheckDeveloperGrantCard()
+        {
+            MatchController controller =
+                new MatchController(CreateTestGraph(), 20261128UL);
+            MatchPlayerState player = controller.State.CurrentPlayer;
+            int countBefore = player.OwnedCards.Count;
+
+            controller.Submit(new GrantCardCommand(player.Id, "crowbar"));
+            Assert(player.OwnedCards.Any(card => card.Definition.Id == "crowbar"),
+                "Developer grant must add the requested card.");
+            Assert(controller.Events.History
+                    .OfType<CardAddedEvent>()
+                    .Any(gameEvent =>
+                        gameEvent.PlayerId == player.Id &&
+                        gameEvent.Source == "Developer"),
+                "Developer grant must publish a Developer card event.");
+
+            controller.Submit(new GrantCardCommand(player.Id, "crowbar"));
+            Assert(player.OwnedCards.Any(card => card.Definition.Id == "crowbar+"),
+                "Granting an owned base card must use the normal fusion upgrade path.");
+            Assert(player.OwnedCards.Count == countBefore + 1,
+                "Fusion from a developer grant must not create a duplicate base card.");
+
+            bool rejected = false;
+            try
+            {
+                controller.Submit(new GrantCardCommand(player.Id, "missing_card"));
+            }
+            catch (ArgumentException)
+            {
+                rejected = true;
+            }
+
+            Assert(rejected, "Developer grant must reject unknown card ids.");
+            Console.WriteLine(
+                $"[developer] cards={player.OwnedCards.Count} upgraded=crowbar+");
         }
 
         private static void CheckBagCapacity()

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using ProjectArtOfAll.Core.Match;
 using ProjectArtOfAll.Flow;
+using ProjectArtOfAll.UI;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -80,6 +81,9 @@ namespace ProjectArtOfAll.Board
         private bool encounterButtonBound;
         private bool testUiVisible;
         private Button[] diceRangeButtons;
+        private GameObject diceDebugRoot;
+        private Button developerCodexButton;
+        private CardCodexView developerCodex;
         private CardBandController cardBand;
         private Action<bool> homeStopHandler;
         private Action<NormaType> normaChoiceHandler;
@@ -155,8 +159,18 @@ namespace ProjectArtOfAll.Board
             Font font = diceResult != null
                 ? diceResult.font
                 : BoardHudOverlayFactory.CreateFont();
+            RectTransform debugRoot = new GameObject(
+                "DeveloperRollControls",
+                typeof(RectTransform)).GetComponent<RectTransform>();
+            debugRoot.SetParent(diceRect, false);
+            debugRoot.anchorMin = Vector2.zero;
+            debugRoot.anchorMax = Vector2.one;
+            debugRoot.offsetMin = Vector2.zero;
+            debugRoot.offsetMax = Vector2.zero;
+            diceDebugRoot = debugRoot.gameObject;
+
             BoardHudOverlayFactory.CreateBar(
-                diceRect,
+                debugRoot,
                 "DebugRule",
                 new Vector2(0f, 1f),
                 new Vector2(0f, 1f),
@@ -164,7 +178,7 @@ namespace ProjectArtOfAll.Board
                 new Vector2(180f, -83f),
                 new Color(0.88f, 0.66f, 0.28f, 0.72f));
             Text title = BoardHudOverlayFactory.CreateText(
-                diceRect,
+                debugRoot,
                 "DebugTitle",
                 "调试前进范围",
                 font,
@@ -183,7 +197,7 @@ namespace ProjectArtOfAll.Board
                 float x = 14f + column * 42f;
                 float top = 110f + row * 40f;
                 GameObject buttonObject = BoardHudOverlayFactory.CreateBar(
-                    diceRect,
+                    debugRoot,
                     "DebugRange_" + (index + 1),
                     new Vector2(0f, 1f),
                     new Vector2(0f, 1f),
@@ -229,12 +243,93 @@ namespace ProjectArtOfAll.Board
 
         private void SelectDebugRange(int steps)
         {
+            if (!GameSettings.DeveloperMode)
+            {
+                return;
+            }
+
             if (boardGameplay == null)
             {
                 boardGameplay = FindObjectOfType<BoardGameplayController>();
             }
 
             boardGameplay?.DebugRollDice(steps);
+        }
+
+        private void EnsureDeveloperCodexButton()
+        {
+            if (developerCodexButton != null)
+            {
+                return;
+            }
+
+            developerCodexButton = BoardHudOverlayFactory.CreateDebugToggleButton(
+                (RectTransform)transform,
+                BoardHudOverlayFactory.CreateFont(),
+                "DeveloperCodexToggle",
+                "图鉴",
+                88f);
+            developerCodexButton.onClick.RemoveAllListeners();
+            developerCodexButton.onClick.AddListener(OpenDeveloperCodex);
+        }
+
+        public void OpenDeveloperCodex()
+        {
+            if (!GameSettings.DeveloperMode)
+            {
+                return;
+            }
+
+            if (boardGameplay == null)
+            {
+                boardGameplay = FindObjectOfType<BoardGameplayController>();
+            }
+
+            RectTransform canvas = CardTooltipHost.CanvasRect(transform);
+            if (canvas == null)
+            {
+                return;
+            }
+
+            if (developerCodex == null)
+            {
+                developerCodex = CardCodexView.Create(
+                    canvas,
+                    BoardHudOverlayFactory.CreateFont());
+            }
+
+            developerCodex.ConfigureDeveloper(
+                true,
+                card => boardGameplay == null
+                    ? "当前没有进行中的对局"
+                    : boardGameplay.GrantDeveloperCard(card.Id));
+            developerCodex.Show();
+        }
+
+        private void ApplyDeveloperMode()
+        {
+            bool enabled = GameSettings.DeveloperMode;
+            EnsureDeveloperCodexButton();
+            if (testUiButton != null)
+            {
+                testUiButton.gameObject.SetActive(enabled);
+            }
+
+            if (developerCodexButton != null)
+            {
+                developerCodexButton.gameObject.SetActive(enabled);
+            }
+
+            if (diceDebugRoot != null)
+            {
+                diceDebugRoot.SetActive(enabled);
+            }
+
+            if (!enabled)
+            {
+                SetTestUiVisible(false);
+                developerCodex?.Hide();
+            }
         }
 
         /// <summary>
@@ -252,6 +347,12 @@ namespace ProjectArtOfAll.Board
         {
             if (Application.isPlaying && Input.GetKeyDown(KeyCode.Escape))
             {
+                if (developerCodex != null && developerCodex.IsOpen)
+                {
+                    developerCodex.Hide();
+                    return;
+                }
+
                 TogglePause();
             }
 
@@ -291,6 +392,11 @@ namespace ProjectArtOfAll.Board
         /// <summary>测试信息默认收起，通过左侧居中的“调试”按钮切换。</summary>
         public void ToggleTestUi()
         {
+            if (!GameSettings.DeveloperMode)
+            {
+                return;
+            }
+
             SetTestUiVisible(!testUiVisible);
         }
 
@@ -1273,6 +1379,7 @@ namespace ProjectArtOfAll.Board
             }
 
             GameSettings.EnsureLoaded();
+            ApplyDeveloperMode();
 
             if (boardGameplay == null)
             {

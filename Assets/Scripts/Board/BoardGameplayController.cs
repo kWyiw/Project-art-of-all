@@ -260,6 +260,64 @@ namespace ProjectArtOfAll.Board
             hud?.RefreshCardBand(HumanPlayer);
         }
 
+        /// <summary>
+        /// 开发者图鉴发牌入口：只发给本地真人，不推进当前阶段或回合。
+        /// </summary>
+        public string GrantDeveloperCard(string cardId)
+        {
+            if (!GameSettings.DeveloperMode)
+            {
+                return "开发者模式未开启";
+            }
+
+            if (match == null || HumanPlayer == null)
+            {
+                return "当前没有可接收卡牌的玩家";
+            }
+
+            if (match.IsFinished)
+            {
+                return "对局已经结束";
+            }
+
+            if (!CardDatabase.Instance.TryGet(cardId, out CardDefinition definition))
+            {
+                return "未知卡牌：" + cardId;
+            }
+
+            int eventStart = match.Events.History.Count;
+            try
+            {
+                match.Submit(new GrantCardCommand(humanPlayerId, cardId));
+            }
+            catch (InvalidOperationException error)
+            {
+                string failure = string.Concat("获得失败：", error.Message);
+                hud?.SetMatchStatus(failure);
+                return failure;
+            }
+
+            CardUpgradedEvent upgraded = match.Events.History
+                .Skip(eventStart)
+                .OfType<CardUpgradedEvent>()
+                .LastOrDefault();
+            CardDefinition resultDefinition = upgraded == null
+                ? definition
+                : CardDatabase.Instance.Get(upgraded.UpgradedId);
+            string message = upgraded == null
+                ? string.Concat("已获得【", definition.DisplayName, "】")
+                : string.Concat(
+                    "已升级为【",
+                    resultDefinition == null ? upgraded.UpgradedId : resultDefinition.DisplayName,
+                    "】");
+            hud?.ShowCards(HumanPlayer);
+            hud?.RefreshPlayerPanels(match.State);
+            hud?.PumpEvents(match);
+            hud?.RefreshFieldInfo(match.State, mapDisplayName);
+            UpdateHudStatus(message);
+            return message;
+        }
+
         public void RollDice()
         {
             RollDice(null);
@@ -268,7 +326,7 @@ namespace ProjectArtOfAll.Board
         /// <summary>调试入口：跳过随机 D6，并按指定值执行完整移动流程。</summary>
         public void DebugRollDice(int steps)
         {
-            if (steps < 1 || steps > 12)
+            if (!GameSettings.DeveloperMode || steps < 1 || steps > 12)
             {
                 return;
             }

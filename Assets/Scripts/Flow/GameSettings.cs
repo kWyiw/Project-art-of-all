@@ -5,7 +5,7 @@ using UnityEngine;
 namespace ProjectArtOfAll.Flow
 {
     /// <summary>
-    /// 玩家设置（只影响表现，不改任何规则数值）。用 PlayerPrefs 持久化，主菜单与暂停菜单共用同一份。
+    /// 玩家设置与本地开发工具开关。用 PlayerPrefs 持久化，主菜单、暂停菜单与棋盘共用同一份。
     /// 之所以做成静态类：设置被多个场景读写，而 Unity 的跨场景引用要么走 Resources 要么走 DontDestroyOnLoad，
     /// 对一个只有四个标量的东西来说都不值得。
     /// </summary>
@@ -18,12 +18,14 @@ namespace ProjectArtOfAll.Flow
         private const string CameraFollowKey = "paoa.settings.cameraFollow";
         private const string AutoQualityKey = "paoa.settings.autoQuality";
         private const string CpuDifficultyKey = "paoa.settings.cpuDifficulty";
+        private const string DeveloperModeKey = "paoa.settings.developerMode";
 
         private static bool loaded;
         private static float cardScale = 1f;
         private static bool cameraFollow = true;
         private static bool autoQuality = true;
         private static int cpuDifficulty = 1;
+        private static bool developerMode;
 
         /// <summary>任何一项设置变化后触发（参数为变化项的名字，便于日志）。</summary>
         public static event Action<string> Changed;
@@ -128,6 +130,32 @@ namespace ProjectArtOfAll.Flow
             }
         }
 
+        /// <summary>
+        /// 本地开发工具：调试步数、棋盘内图鉴与直接获得卡牌。默认关闭并持久化。
+        /// </summary>
+        public static bool DeveloperMode
+        {
+            get
+            {
+                EnsureLoaded();
+                return developerMode;
+            }
+
+            set
+            {
+                EnsureLoaded();
+                if (developerMode == value)
+                {
+                    return;
+                }
+
+                developerMode = value;
+                PlayerPrefs.SetInt(DeveloperModeKey, developerMode ? 1 : 0);
+                PlayerPrefs.Save();
+                Changed?.Invoke(nameof(DeveloperMode));
+            }
+        }
+
         /// <summary>难度按钮上的中文标签。</summary>
         public static string CpuDifficultyLabel
         {
@@ -166,6 +194,7 @@ namespace ProjectArtOfAll.Flow
             cameraFollow = PlayerPrefs.GetInt(CameraFollowKey, 1) != 0;
             autoQuality = PlayerPrefs.GetInt(AutoQualityKey, 1) != 0;
             cpuDifficulty = Mathf.Clamp(PlayerPrefs.GetInt(CpuDifficultyKey, 1), 0, 2);
+            developerMode = PlayerPrefs.GetInt(DeveloperModeKey, 0) != 0;
         }
 
         /// <summary>测试/重开用：把设置恢复默认并落盘。</summary>
@@ -176,10 +205,12 @@ namespace ProjectArtOfAll.Flow
             cameraFollow = true;
             autoQuality = true;
             cpuDifficulty = 1;
+            developerMode = false;
             PlayerPrefs.SetFloat(CardScaleKey, cardScale);
             PlayerPrefs.SetInt(CameraFollowKey, 1);
             PlayerPrefs.SetInt(AutoQualityKey, 1);
             PlayerPrefs.SetInt(CpuDifficultyKey, cpuDifficulty);
+            PlayerPrefs.SetInt(DeveloperModeKey, 0);
             PlayerPrefs.Save();
             Changed?.Invoke("Reset");
         }

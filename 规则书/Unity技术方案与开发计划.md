@@ -622,6 +622,7 @@ DiceBazaar/
 - **StartMenu UI 场景化**：`StartMenu` 的 `LeftMenuCanvas`、主菜单按钮、模式选择、设置面板和战斗模拟页均作为真实场景组件保存，`LeftMenuColumn.Awake` 不再删除和重建 Canvas，只重新绑定按钮与拖拽回调。可用 `Tools/Project Art of All/Rebake Start Menu UI` 重建，`Validate Start Menu UI` 校验场景层级和序列化引用。
 - **移动规则（`MapGraph.LegalNextNodes`，R-MAP-002）**：走廊（只有前后两格）只有一个前进方向、不能折返；岔路口**只允许「直行」或「右拐」**，两者都在时由玩家选（R-MOVE-004）；**没有直行时直接右拐，不询问**；连右拐都没有（地图上出现只能左拐的形状）时退回唯一可行方向，避免卡死。方向由 `(row, column)` 网格位移判定：`right = (dc, -dr)`。**开局特例**：每位玩家在自家 Home 上的**第一次移动**不给选择，强制走该格的逆时针邻格（`MapGraph.CounterClockwiseNeighbour`，按棋盘中心的极角取最小正角差）——`MatchController.ForcedFirstStepNodeId()` 只在 `!HasMoved && CurrentNode == HomeNode` 时返回该格，`MovementSolver.FindStopCandidates/FindPaths` 收到它后第一步不再分叉，`MatchController.LegalNextNodes` 对 UI/CPU 也只暴露这一条边，所以不会弹选择框；`CheckFirstMoveFromHome` 已断言「开局第一步只能走逆时针」并验证真实移动事件落点。`Tests/Game.Core.Checks` 的 `CheckSceneMapTeleport` 已按这条口径断言「每个岔口的可选项都必须是直行或右拐」。注意：这是一条**单向交通**规则，环形地图里必须左拐才能进的支路会变成永远走不到的格（经典广场 60/68、甜点回廊 26/36 每个家如此），按用户决定先不动地图。
 - 设置（帧率上限、卡槽缩放、镜头跟随、音量）与局内暂停菜单，`PlayerPrefs` 持久化。
+- **开发者模式**：`GameSettings.DeveloperMode` 持久化在设置面板。开启后棋盘显示 1–12 步数调试按钮、测试信息开关和「图鉴」入口；游戏内图鉴卡位出现「获得」按钮，通过 `GrantCardCommand` 发给当前真人玩家，保留正常容量校验、融合升级与事件流，不推进回合。旧场景的设置面板和棋盘入口均运行时自愈创建。
 - **验收**：一个没看过文档的人能自己玩完一整局；且**能只靠拖拽把一张牌从背包换到战斗栏、拖到区外自动回弹、并看到相邻加成从"未生效"变"生效"**（出售是终态，**没有撤销**，见 `棋盘层双栏卡槽UI与拖拽交互规格.md` §4）。
 
 ### M5 · CPU 对手与平衡（4 周）："能一个人玩了"

@@ -1689,15 +1689,18 @@ namespace ProjectArtOfAll.Board
         /// <summary>左侧居中的测试 UI 开关；面板默认收起，由这个按钮统一切换。</summary>
         public static Button CreateDebugToggleButton(
             RectTransform parent,
-            Font font)
+            Font font,
+            string objectName = "TestUiToggle",
+            string labelText = "调试",
+            float left = 16f)
         {
             GameObject buttonObject = CreateBar(
                 parent,
-                "TestUiToggle",
+                objectName,
                 new Vector2(0f, 0.5f),
                 new Vector2(0f, 0.5f),
-                new Vector2(16f, -32f),
-                new Vector2(80f, 32f),
+                new Vector2(left, -32f),
+                new Vector2(left + 64f, 32f),
                 new Color(0.89f, 0.64f, 0.20f, 1f));
             buttonObject.transform.SetAsLastSibling();
 
@@ -1720,7 +1723,7 @@ namespace ProjectArtOfAll.Board
             Text label = CreateText(
                 buttonObject.transform,
                 "Label",
-                "调试",
+                labelText,
                 font,
                 15,
                 FontStyle.Bold,

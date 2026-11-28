@@ -42,6 +42,9 @@ namespace ProjectArtOfAll.UI
         private int sizeFilter;
         private CardTag tagFilter = CardTag.None;
         private CardUnlockKind? acquisitionFilter;
+        private Func<CardDefinition, string> acquireHandler;
+        private string closeLabel = "返回主页面";
+        private bool closeOnEscape = true;
 
         private sealed class FilterBinding
         {
@@ -85,7 +88,7 @@ namespace ProjectArtOfAll.UI
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.Escape))
+            if (closeOnEscape && Input.GetKeyDown(KeyCode.Escape))
             {
                 Hide();
             }
@@ -98,6 +101,23 @@ namespace ProjectArtOfAll.UI
             Bind();
             RefreshGallery();
             FocusFirstFilter();
+        }
+
+        /// <summary>
+        /// 棋盘内开发者图鉴：每张牌出现「获得」按钮，并回调内核发牌。
+        /// </summary>
+        public void ConfigureDeveloper(
+            bool enabled,
+            Func<CardDefinition, string> onAcquire)
+        {
+            acquireHandler = enabled ? onAcquire : null;
+            closeLabel = enabled ? "返回游戏" : "返回主页面";
+            closeOnEscape = !enabled;
+            if (IsOpen)
+            {
+                Bind();
+                RefreshGallery();
+            }
         }
 
         public void Hide()
@@ -129,6 +149,7 @@ namespace ProjectArtOfAll.UI
 
             filterBindings.Clear();
             BindButton("Close", Hide);
+            SetButtonLabel("Close", closeLabel);
 
             BindFilterButton("SizeAll", "全部", () => sizeFilter == 0, () =>
             {
@@ -242,6 +263,17 @@ namespace ProjectArtOfAll.UI
             }
 
             return null;
+        }
+
+        private void SetButtonLabel(string name, string label)
+        {
+            Button button = FindButton(name);
+            Text text = button == null ? null : button.GetComponentInChildren<Text>(true);
+            if (text != null)
+            {
+                text.text = label;
+                text.font = font;
+            }
         }
 
         private void Build()
@@ -451,7 +483,8 @@ namespace ProjectArtOfAll.UI
                 cards.Count,
                 " / ",
                 CardCatalogMetadata.All.Count,
-                " 张 · 基础牌与融合升级牌均计入");
+                " 张 · 基础牌与融合升级牌均计入",
+                acquireHandler == null ? string.Empty : " · 开发者模式：可点击获得");
 
             for (int index = 0; index < cards.Count; index++)
             {
@@ -520,8 +553,32 @@ namespace ProjectArtOfAll.UI
                 summary = summary.Substring(0, 84) + "…";
             }
 
-            AddText(tile, "Body", summary, 16f, 88f, 454f, 54f,
+            float bodyWidth = acquireHandler == null ? 454f : 350f;
+            AddText(tile, "Body", summary, 16f, 88f, bodyWidth, 54f,
                 13, FontStyle.Normal, TextAnchor.UpperLeft, MutedText);
+
+            if (acquireHandler != null)
+            {
+                CardDefinition captured = card;
+                Button acquire = CreateButton(
+                    tile,
+                    "Acquire",
+                    "获得",
+                    378f,
+                    102f,
+                    90f,
+                    38f,
+                    new Color(0.55f, 0.38f, 0.10f, 1f),
+                    () =>
+                    {
+                        string result = acquireHandler?.Invoke(captured);
+                        if (!string.IsNullOrEmpty(result) && galleryCount != null)
+                        {
+                            galleryCount.text = result;
+                        }
+                    });
+                acquire.transform.SetAsLastSibling();
+            }
 
             CardHoverTarget hover = tile.gameObject.AddComponent<CardHoverTargetSceneView>();
             hover.Bind(card, CardTooltipHost.CanvasRect(root), font, false);

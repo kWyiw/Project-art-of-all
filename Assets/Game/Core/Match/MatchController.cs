@@ -151,6 +151,9 @@ namespace ProjectArtOfAll.Core.Match
                 case UnequipCardCommand unequip:
                     HandleUnequip(unequip);
                     break;
+                case GrantCardCommand grant:
+                    HandleDeveloperGrantCard(grant);
+                    break;
                 default:
                     throw new NotSupportedException(
                         $"Command type {command.GetType().Name} is not supported.");
@@ -422,6 +425,29 @@ namespace ProjectArtOfAll.Core.Match
                     refund));
             BoardCardEconomy.OnCardSold(actor, card);
             PlaceTrap(actor, card);
+        }
+
+        private void HandleDeveloperGrantCard(GrantCardCommand command)
+        {
+            MatchPlayerState player = State.Players.FirstOrDefault(
+                seat => seat.Id == command.PlayerId);
+            if (player == null)
+            {
+                throw new ArgumentOutOfRangeException(nameof(command.PlayerId));
+            }
+
+            if (!cardCatalog.TryGet(command.CardId, out CardDefinition definition))
+            {
+                throw new ArgumentException(
+                    $"Unknown card id '{command.CardId}'.",
+                    nameof(command.CardId));
+            }
+
+            AcquireOrUpgrade(
+                player,
+                definition,
+                "Developer",
+                "The developer grant does not fit in the player's Bag.");
         }
 
         /// <summary>

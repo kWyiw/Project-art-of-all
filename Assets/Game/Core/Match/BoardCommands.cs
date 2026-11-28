@@ -140,6 +140,22 @@ namespace ProjectArtOfAll.Core.Match
     }
 
     /// <summary>
+    /// Local developer-only card injection. The UI gates this command behind
+    /// GameSettings.DeveloperMode; it never advances the turn.
+    /// </summary>
+    public sealed class GrantCardCommand : IMatchCommand
+    {
+        public GrantCardCommand(int playerId, string cardId)
+        {
+            PlayerId = playerId;
+            CardId = cardId;
+        }
+
+        public int PlayerId { get; }
+        public string CardId { get; }
+    }
+
+    /// <summary>
     /// 事件格上的选择（R-EVT-001）。<see cref="OptionIndex"/> 取 -1 表示不参与、
     /// 直接走完这一轮，所以碎片不够时永远有出路。
     /// </summary>
