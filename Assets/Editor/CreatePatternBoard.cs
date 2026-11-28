@@ -17,12 +17,11 @@ namespace ProjectArtOfAll.Editor
         private const string MaterialsFolder = "Assets/Materials";
 
         private const int GridSize = 12;
-        private const int GroundGridCells = 96;
-        private const float CellPitch = 1.62f;
-        private const float TileSize = 1.5f;
-        private const float TileHeight = 0.18f;
-        private const float BaseHeight = 0.08f;
-        private const float GridLineWidth = 0.025f;
+        private const float CellPitch = BoardMapBuilder.GridCellSize;
+        private const float TileSize = BoardMapBuilder.TileFootprint;
+        private const float TileHeight = BoardMapBuilder.TileHeight;
+        private const float TileGroundSurfaceHeight =
+            BoardMapBuilder.TileGroundSurfaceHeight;
         private const float PlayerWidth = 0.58f;
         private const float PlayerHeight = 1.35f;
         private const int MapGenerationSeed = 20261031;
@@ -117,25 +116,12 @@ namespace ProjectArtOfAll.Editor
                 metallic: 0f,
                 smoothness: 0.12f);
 
-            Material baseMaterial = CreateOrUpdateMaterial(
-                $"{MaterialsFolder}/BoardBaseWhite.mat",
-                new Color(0.985f, 0.99f, 0.995f, 1f),
-                metallic: 0f,
-                smoothness: 0.04f);
-            Material gridMaterial = CreateOrUpdateMaterial(
-                $"{MaterialsFolder}/BoardGridLine.mat",
-                new Color(0.72f, 0.76f, 0.80f, 1f),
-                metallic: 0f,
-                smoothness: 0.05f);
-
             GameObject boardRoot = new GameObject(BoardRootName);
             Undo.RegisterCreatedObjectUndo(boardRoot, "Create pattern board");
             boardRoot.transform.SetPositionAndRotation(
                 Vector3.zero,
                 Quaternion.identity);
 
-            CreateBase(boardRoot.transform, baseMaterial);
-            CreateGridLines(boardRoot.transform, gridMaterial);
             int tileCount = CreatePatternTiles(
                 boardRoot.transform,
                 tileMaterials,
@@ -178,65 +164,6 @@ namespace ProjectArtOfAll.Editor
             serializedController.FindProperty("boardCamera").objectReferenceValue = camera;
             serializedController.FindProperty("followTarget").objectReferenceValue = target;
             serializedController.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        private static void CreateBase(Transform parent, Material material)
-        {
-            float boardSize = GroundGridCells * CellPitch;
-            GameObject boardBase = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            boardBase.name = "BoardBase";
-            boardBase.transform.SetParent(parent, false);
-            boardBase.transform.localPosition = new Vector3(0f, -BaseHeight * 0.5f + 0.01f, 0f);
-            boardBase.transform.localScale = new Vector3(
-                boardSize,
-                BaseHeight,
-                boardSize);
-            boardBase.GetComponent<MeshRenderer>().sharedMaterial = material;
-            Undo.RegisterCreatedObjectUndo(boardBase, "Create board base");
-        }
-
-        private static void CreateGridLines(Transform parent, Material material)
-        {
-            float boardSize = GroundGridCells * CellPitch;
-            float lineHeight = 0.01f;
-            float lineY = TileHeight + 0.008f;
-            int halfCells = GroundGridCells / 2;
-
-            for (int index = -halfCells; index <= halfCells; index++)
-            {
-                float offset = index * CellPitch;
-                int lineNumber = index + halfCells;
-
-                CreateLine(
-                    parent,
-                    $"GridV_{lineNumber:00}",
-                    new Vector3(offset, lineY, 0f),
-                    new Vector3(GridLineWidth, lineHeight, boardSize),
-                    material);
-                CreateLine(
-                    parent,
-                    $"GridH_{lineNumber:00}",
-                    new Vector3(0f, lineY, -offset),
-                    new Vector3(boardSize, lineHeight, GridLineWidth),
-                    material);
-            }
-        }
-
-        private static void CreateLine(
-            Transform parent,
-            string name,
-            Vector3 localPosition,
-            Vector3 localScale,
-            Material material)
-        {
-            GameObject line = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            line.name = name;
-            line.transform.SetParent(parent, false);
-            line.transform.localPosition = localPosition;
-            line.transform.localScale = localScale;
-            line.GetComponent<MeshRenderer>().sharedMaterial = material;
-            Object.DestroyImmediate(line.GetComponent<Collider>());
-            Undo.RegisterCreatedObjectUndo(line, "Create grid line");
         }
 
         private static int CreatePatternTiles(
@@ -312,7 +239,7 @@ namespace ProjectArtOfAll.Editor
                     tile.transform.SetParent(parent, false);
                     tile.transform.localPosition = new Vector3(
                         (column - (GridSize - 1) * 0.5f) * CellPitch,
-                        TileHeight * 0.5f + 0.01f,
+                        TileHeight * 0.5f + TileGroundSurfaceHeight,
                         ((GridSize - 1) * 0.5f - row) * CellPitch);
                     tile.transform.localScale = new Vector3(
                         TileSize,
@@ -423,7 +350,7 @@ namespace ProjectArtOfAll.Editor
             token.transform.SetParent(parent, false);
             token.transform.localPosition = new Vector3(
                 tilePosition.x,
-                TileHeight + 0.01f + PlayerHeight * 0.5f,
+                TileHeight + TileGroundSurfaceHeight + PlayerHeight * 0.5f,
                 tilePosition.z);
             token.transform.localRotation = Quaternion.identity;
             token.transform.localScale = new Vector3(

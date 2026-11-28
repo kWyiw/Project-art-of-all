@@ -118,29 +118,6 @@ namespace ProjectArtOfAll.UI
             LobbyState.Changed -= OnLobbyChanged;
         }
 
-        private void Update()
-        {
-            if (!Input.GetKeyDown(KeyCode.Escape))
-            {
-                return;
-            }
-
-            if (page == Page.ModeSelect)
-            {
-                CancelModeSelection();
-                return;
-            }
-
-            if (page == Page.MapSelect && GameSession.Mode == GameMode.Normal)
-            {
-                page = Page.Lobby;
-                Rebuild();
-                return;
-            }
-
-            GameSession.BackToMenu();
-        }
-
         private void OnLobbyChanged()
         {
             if (page == Page.Lobby)
@@ -315,7 +292,7 @@ namespace ProjectArtOfAll.UI
                 360f, 104f, 1200f, 30f,
                 18, FontStyle.Normal, TextAnchor.MiddleCenter, TextColor);
 
-            Label(holder, "Controls", "WASD 移动 · 鼠标观察 · Esc 返回主页面",
+            Label(holder, "Controls", "WASD 移动 · 鼠标观察 · Esc 打开设置",
                 360f, 1000f, 1200f, 30f,
                 17, FontStyle.Normal, TextAnchor.MiddleCenter, MutedText);
         }

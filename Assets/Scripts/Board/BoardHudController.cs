@@ -345,17 +345,6 @@ namespace ProjectArtOfAll.Board
 
         private void Update()
         {
-            if (Application.isPlaying && Input.GetKeyDown(KeyCode.Escape))
-            {
-                if (developerCodex != null && developerCodex.IsOpen)
-                {
-                    developerCodex.Hide();
-                    return;
-                }
-
-                TogglePause();
-            }
-
             RefreshModalFit();
 
             TickAutoQuality();
@@ -1455,7 +1444,10 @@ namespace ProjectArtOfAll.Board
 
         }
 
-        /// <summary>Esc 暂停（只遮输入；内核没有暂停态，重开走重载场景）。</summary>
+        /// <summary>
+        /// 旧的暂停面板入口，仍可由其他页面操作调用；Esc 现已统一交给
+        /// <see cref="GlobalSettingsOverlay"/> 打开设置。
+        /// </summary>
         public void TogglePause()
         {
             if (pauseOverlay == null || !Application.isPlaying)

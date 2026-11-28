@@ -23,6 +23,8 @@ namespace ProjectArtOfAll.UI
 
         private RectTransform mask;
 
+        public static bool IsActive => active != null;
+
         public static bool Play(string sceneName, Action beforeLoad)
         {
             if (active != null || string.IsNullOrEmpty(sceneName))

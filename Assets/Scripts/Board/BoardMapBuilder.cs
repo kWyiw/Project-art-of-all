@@ -13,9 +13,13 @@ namespace ProjectArtOfAll.Board
     /// </summary>
     public static class BoardMapBuilder
     {
-        public const float GridCellSize = 1.62f;
-        private const float GridCellHalfSize = GridCellSize * 0.5f;
-        private const float TileHeight = 0.1f;
+        public const float TileScaleMultiplier = 1.875f;
+        public const float TileGroundSurfaceHeight = 0.01f;
+        public const float GridCellSize = 1.62f * TileScaleMultiplier;
+        public const float TileFootprint = 1.5f * TileScaleMultiplier;
+        public const float TileHeight = 0.18f * TileScaleMultiplier;
+        private const float TileCenterHeight =
+            TileGroundSurfaceHeight + TileHeight * 0.5f;
         private const string GeneratedRootName = "GeneratedBoard";
 
         private static readonly TileType[] MaterialFallbacks =
@@ -68,9 +72,7 @@ namespace ProjectArtOfAll.Board
 
             Transform root = new GameObject(GeneratedRootName).transform;
             root.SetParent(parent, false);
-            // The baked grid lines run through the cell boundaries. Shift generated
-            // tiles by half a cell so every tile sits in the centre of a grid cell.
-            root.localPosition = new Vector3(GridCellHalfSize, 0f, GridCellHalfSize);
+            root.localPosition = Vector3.zero;
             root.localRotation = Quaternion.Euler(0f, definition.RotationYDegrees, 0f);
             // 旋转 45° 的菱形环对角线比场景里那张方阵更长，整体缩一点才不会被
             // 固定机位的相机切掉顶点（两角正好是玩家的 home）。
@@ -137,11 +139,11 @@ namespace ProjectArtOfAll.Board
 
         /// <summary>
         /// Keeps a generated board inside the footprint of the baked board: the furthest tile
-        /// corner may reach 9 world units from the centre, which the fixed camera frames.
+        /// corner may reach the map's camera-safe radius, which scales with the tile art size.
         /// </summary>
         private static float FitScale(BoardMapDefinition definition)
         {
-            const float MaxRadius = 9.2f;
+            const float MaxRadius = 9.2f * TileScaleMultiplier;
 
             float minRow = float.MaxValue;
             float maxRow = float.MinValue;
@@ -181,7 +183,7 @@ namespace ProjectArtOfAll.Board
         {
             return new Vector3(
                 (column - centreColumn) * GridCellSize,
-                TileHeight,
+                TileCenterHeight,
                 (centreRow - row) * GridCellSize);
         }
 

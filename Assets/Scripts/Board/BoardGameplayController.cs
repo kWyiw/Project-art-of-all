@@ -145,6 +145,8 @@ namespace ProjectArtOfAll.Board
             cameraController = Camera.main != null
                 ? Camera.main.GetComponent<BoardCameraController>()
                 : null;
+            // Replace only player 1's visible block; movement data stays on the token.
+            BoardStandeeVisual.ApplyMainCharacter(tokensByPlayer, Camera.main);
             ConfigureCameraMap();
             humanSeat = GameSession.HumanSeat;
             BuildCpuBrains();

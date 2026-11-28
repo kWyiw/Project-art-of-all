@@ -447,7 +447,7 @@ namespace ProjectArtOfAll.Board
     }
 
     /// <summary>
-    /// 暂停面板（Esc）：继续 / 重开本局。暂停只遮输入，不改对局状态——内核是纯函数，没有"暂停"这个概念。
+    /// 局内辅助面板：继续 / 重开本局。Esc 已改为全局设置入口，此面板保留给后续页面操作调用。
     /// </summary>
     public class PauseOverlayView : MonoBehaviour
     {
@@ -511,7 +511,7 @@ namespace ProjectArtOfAll.Board
             title.color = Brass;
 
             Text hint = Label(
-                panelObject.transform, "Hint", "玩法进行中 · Esc 继续", 24f, 60f, 472f, 22f,
+                panelObject.transform, "Hint", "玩法进行中 · 点击继续返回对局", 24f, 60f, 472f, 22f,
                 13, FontStyle.Normal, TextAnchor.MiddleCenter);
             hint.color = MutedText;
 

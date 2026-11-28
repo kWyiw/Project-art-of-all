@@ -1,3 +1,4 @@
+using ProjectArtOfAll.Board;
 using UnityEngine;
 
 namespace ProjectArtOfAll.View
@@ -5,7 +6,12 @@ namespace ProjectArtOfAll.View
     [DisallowMultipleComponent]
     public sealed class BoardCameraController : MonoBehaviour
     {
-        private const float InitialOverviewFraction = 0.2f;
+        public const float BaseFullMapPadding = 1.08f;
+        public const float MaximumViewHeightMultiplier = 1.2f;
+        public const float MinimumZoom = 2.8f;
+        public const float CloseUpCameraHeight = 8f;
+        public const float CloseUpCameraPitch = 30f;
+        public const float CloseUpFocusHeight = 2f;
         private const float OverviewFocusBlendStart = 0.78f;
 
         [Header("References")]
@@ -17,13 +23,29 @@ namespace ProjectArtOfAll.View
         [SerializeField, Min(0.01f)] private float followSmoothTime = 0.12f;
 
         [Header("Zoom")]
-        [SerializeField, Min(1f)] private float minimumZoom = 6f;
-        [SerializeField, Min(1f)] private float maximumZoom = 30f;
+        [SerializeField, Min(1f)]
+        private float minimumZoom = MinimumZoom;
+        [SerializeField, Min(1f)]
+        private float maximumZoom =
+            30f * BoardMapBuilder.TileScaleMultiplier * MaximumViewHeightMultiplier;
         [SerializeField, Min(0.1f)] private float zoomStep = 1.1f;
-        [SerializeField, Min(1f)] private float fullMapPadding = 1.08f;
+        [SerializeField, Min(1f)]
+        private float fullMapPadding =
+            BaseFullMapPadding * MaximumViewHeightMultiplier;
+
+        [Header("Close-up Camera")]
+        [SerializeField, Min(0.1f)]
+        private float minimumCameraHeight = CloseUpCameraHeight;
+        [SerializeField, Range(5f, 85f)]
+        private float minimumCameraPitch = CloseUpCameraPitch;
+        [SerializeField, Min(0f)]
+        private float minimumFocusHeight = CloseUpFocusHeight;
+        [SerializeField, Min(0.01f)] private float closeUpSmoothTime = 0.18f;
 
         [Header("Manual View")]
-        [SerializeField, Min(1f)] private float panLimit = 70f;
+        [SerializeField, Min(1f)]
+        private float panLimit =
+            70f * BoardMapBuilder.TileScaleMultiplier * MaximumViewHeightMultiplier;
 
         private Vector3 previousTargetPosition;
         private Vector3 followVelocity;
@@ -35,6 +57,12 @@ namespace ProjectArtOfAll.View
         private bool manualView;
         private bool viewInitialized;
         private float fullMapOrthographicSize;
+        private float overviewHeight;
+        private float overviewPitch;
+        private float overviewYaw;
+        private float closeUpBlend;
+        private float closeUpVelocity;
+        private Vector3 groundFocus;
 
         private void Awake()
         {
@@ -48,7 +76,21 @@ namespace ProjectArtOfAll.View
             fullMapOrthographicSize = Mathf.Max(minimumZoom, maximumZoom);
             if (boardCamera != null)
             {
+                Vector3 overviewEuler = boardCamera.transform.eulerAngles;
+                overviewHeight = boardCamera.transform.position.y;
+                overviewPitch = overviewEuler.x;
+                overviewYaw = overviewEuler.y;
+                minimumCameraHeight = Mathf.Clamp(
+                    minimumCameraHeight,
+                    0.1f,
+                    Mathf.Max(0.1f, overviewHeight));
+                minimumCameraPitch = Mathf.Clamp(
+                    minimumCameraPitch,
+                    5f,
+                    Mathf.Max(5f, overviewPitch));
+                boardCamera.orthographic = true;
                 boardCamera.orthographicSize = minimumZoom;
+                groundFocus = GetGroundFocusPoint();
             }
 
             CaptureTargetPosition();
@@ -70,10 +112,8 @@ namespace ProjectArtOfAll.View
             {
                 FollowTarget();
             }
-            else if (manualView)
-            {
-                ClampCameraPosition();
-            }
+
+            ApplyZoomView();
         }
 
         public void SetFollowTarget(Transform target)
@@ -119,21 +159,13 @@ namespace ProjectArtOfAll.View
                 return;
             }
 
-            if (!viewInitialized)
-            {
-                boardCamera.orthographicSize = Mathf.Lerp(
-                    minimumZoom,
-                    fullMapOrthographicSize,
-                    InitialOverviewFraction);
-                viewInitialized = true;
-            }
-            else
-            {
-                boardCamera.orthographicSize = Mathf.Clamp(
+            boardCamera.orthographicSize = viewInitialized
+                ? Mathf.Clamp(
                     boardCamera.orthographicSize,
                     minimumZoom,
-                    fullMapOrthographicSize);
-            }
+                    fullMapOrthographicSize)
+                : fullMapOrthographicSize;
+            viewInitialized = true;
         }
 
         private void DetectTargetMovement()
@@ -170,28 +202,25 @@ namespace ProjectArtOfAll.View
 
         private void MoveGroundFocus(Vector3 targetFocus)
         {
-            Vector3 groundFocus = GetGroundFocusPoint();
-            Vector3 delta = new Vector3(
-                targetFocus.x - groundFocus.x,
+            Vector3 desiredFocus = new Vector3(
+                targetFocus.x,
                 0f,
-                targetFocus.z - groundFocus.z);
-            Vector3 desiredPosition = boardCamera.transform.position + delta;
-            desiredPosition.y = boardCamera.transform.position.y;
-
-            boardCamera.transform.position = Vector3.SmoothDamp(
-                boardCamera.transform.position,
-                desiredPosition,
+                targetFocus.z);
+            groundFocus = Vector3.SmoothDamp(
+                groundFocus,
+                desiredFocus,
                 ref followVelocity,
                 followSmoothTime,
                 Mathf.Infinity,
                 Time.unscaledDeltaTime);
-            ClampCameraPosition();
+            ClampGroundFocus();
         }
 
         private Vector3 ResolveFollowFocus()
         {
             Vector3 targetFocus = followTarget.position;
-            if (!hasMapBounds || fullMapOrthographicSize <= minimumZoom + 0.001f)
+            if (!hasMapBounds ||
+                fullMapOrthographicSize <= minimumZoom + 0.001f)
             {
                 return targetFocus;
             }
@@ -217,7 +246,7 @@ namespace ProjectArtOfAll.View
                 return;
             }
 
-            // Wheel up magnifies (smaller orthographic size); wheel down zooms out.
+            // Wheel up magnifies by reducing the orthographic size.
             float requestedSize = boardCamera.orthographicSize *
                                   Mathf.Pow(zoomStep, -scroll);
             boardCamera.orthographicSize = Mathf.Clamp(
@@ -253,18 +282,18 @@ namespace ProjectArtOfAll.View
             previousMousePosition = currentMouse;
 
             float worldPerPixel =
-                2f * boardCamera.orthographicSize / Mathf.Max(1f, Screen.height);
+                2f * boardCamera.orthographicSize /
+                Mathf.Max(1f, Screen.height);
             Vector3 right = Vector3.ProjectOnPlane(
                 boardCamera.transform.right,
                 Vector3.up).normalized;
             Vector3 forward = Vector3.ProjectOnPlane(
                 boardCamera.transform.forward,
                 Vector3.up).normalized;
-            Vector3 position = boardCamera.transform.position -
-                               right * (mouseDelta.x * worldPerPixel) -
-                               forward * (mouseDelta.y * worldPerPixel);
-            boardCamera.transform.position = position;
-            ClampCameraPosition();
+            groundFocus -= right * (mouseDelta.x * worldPerPixel);
+            groundFocus -= forward * (mouseDelta.y * worldPerPixel);
+            groundFocus.y = 0f;
+            ClampGroundFocus();
         }
 
         private void RefreshZoomLimits()
@@ -291,9 +320,12 @@ namespace ProjectArtOfAll.View
 
         private float CalculateFullMapOrthographicSize()
         {
-            Transform cameraTransform = boardCamera.transform;
-            Vector3 right = cameraTransform.right;
-            Vector3 up = cameraTransform.up;
+            Quaternion overviewRotation = Quaternion.Euler(
+                overviewPitch,
+                overviewYaw,
+                0f);
+            Vector3 right = overviewRotation * Vector3.right;
+            Vector3 up = overviewRotation * Vector3.up;
             Vector3 center = mapBounds.center;
             float maximumRight = 0f;
             float maximumUp = 0f;
@@ -322,7 +354,9 @@ namespace ProjectArtOfAll.View
             }
 
             float aspect = Mathf.Max(0.1f, boardCamera.aspect);
-            float fittedHalfHeight = Mathf.Max(maximumUp, maximumRight / aspect);
+            float fittedHalfHeight = Mathf.Max(
+                maximumUp,
+                maximumRight / aspect);
             return Mathf.Max(
                 minimumZoom,
                 fittedHalfHeight * Mathf.Max(1f, fullMapPadding));
@@ -338,6 +372,52 @@ namespace ProjectArtOfAll.View
 
             previousTargetPosition = followTarget.position;
             hasTargetPosition = true;
+        }
+
+        private void ApplyZoomView()
+        {
+            if (!hasMapBounds ||
+                fullMapOrthographicSize <= minimumZoom + 0.001f)
+            {
+                closeUpBlend = 0f;
+                closeUpVelocity = 0f;
+                return;
+            }
+
+            float targetBlend = 1f - Mathf.InverseLerp(
+                minimumZoom,
+                fullMapOrthographicSize,
+                boardCamera.orthographicSize);
+            closeUpBlend = Mathf.SmoothDamp(
+                closeUpBlend,
+                targetBlend,
+                ref closeUpVelocity,
+                closeUpSmoothTime,
+                Mathf.Infinity,
+                Time.unscaledDeltaTime);
+            float easedBlend = Mathf.SmoothStep(0f, 1f, closeUpBlend);
+
+            float cameraHeight = Mathf.Lerp(
+                overviewHeight,
+                minimumCameraHeight,
+                easedBlend);
+            float cameraPitch = Mathf.Lerp(
+                overviewPitch,
+                minimumCameraPitch,
+                easedBlend);
+            Quaternion rotation = Quaternion.Euler(
+                cameraPitch,
+                overviewYaw,
+                0f);
+            Vector3 focus = groundFocus;
+            focus.y = Mathf.Lerp(0f, minimumFocusHeight, easedBlend);
+
+            Vector3 forward = rotation * Vector3.forward;
+            float downward = Mathf.Max(0.001f, -forward.y);
+            float distance = (cameraHeight - focus.y) / downward;
+            boardCamera.transform.SetPositionAndRotation(
+                focus - forward * distance,
+                rotation);
         }
 
         private Vector3 GetGroundFocusPoint()
@@ -357,12 +437,11 @@ namespace ProjectArtOfAll.View
             return focus;
         }
 
-        private void ClampCameraPosition()
+        private void ClampGroundFocus()
         {
-            Vector3 position = boardCamera.transform.position;
-            position.x = Mathf.Clamp(position.x, -panLimit, panLimit);
-            position.z = Mathf.Clamp(position.z, -panLimit, panLimit);
-            boardCamera.transform.position = position;
+            groundFocus.x = Mathf.Clamp(groundFocus.x, -panLimit, panLimit);
+            groundFocus.z = Mathf.Clamp(groundFocus.z, -panLimit, panLimit);
+            groundFocus.y = 0f;
         }
     }
 }

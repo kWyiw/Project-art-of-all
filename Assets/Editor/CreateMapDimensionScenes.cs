@@ -1,12 +1,16 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using ProjectArtOfAll.Board;
 using ProjectArtOfAll.Core.Board;
 using ProjectArtOfAll.Flow;
+using ProjectArtOfAll.View;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using Object = UnityEngine.Object;
 
 namespace ProjectArtOfAll.Editor
 {
@@ -20,6 +24,14 @@ namespace ProjectArtOfAll.Editor
         private const string MainGamePath = "Assets/Scenes/MainGame.unity";
         private const string Map1Path = "Assets/Scenes/Map1.unity";
         private const string Map2Path = "Assets/Scenes/Map2.unity";
+        private const string GroundCleanupResultPath =
+            "_tmp/map-ground-cleanup.result.txt";
+        private const string TileScaleResultPath =
+            "_tmp/map-tile-scale.result.txt";
+        private const string CameraFrameResultPath =
+            "_tmp/map-camera-frame.result.txt";
+        private const string Map1PreviewPath = "_tmp/map1-no-white-ground.png";
+        private const string Map2PreviewPath = "_tmp/map2-no-white-ground.png";
 
         [MenuItem("Tools/Project Art of All/Rebuild Map Dimension Scenes")]
         public static void RebuildAll()
@@ -51,8 +63,8 @@ namespace ProjectArtOfAll.Editor
                 return;
             }
 
-            ValidateMapScene(Map1Path, MapCatalog.ClassicId, 68, 194);
-            ValidateMapScene(Map2Path, MapCatalog.SweetRingId, 36, 194);
+            ValidateMapScene(Map1Path, MapCatalog.ClassicId, 68);
+            ValidateMapScene(Map2Path, MapCatalog.SweetRingId, 36);
 
             Scene transit = EditorSceneManager.OpenScene(MainGamePath, OpenSceneMode.Single);
             if (!transit.IsValid() ||
@@ -68,6 +80,633 @@ namespace ProjectArtOfAll.Editor
 
             ValidateBuildSettings();
             Debug.Log("[MapDimension] Validation passed.");
+        }
+
+        [MenuItem("Tools/Project Art of All/Remove White Map Ground")]
+        public static void RemoveWhiteMapGround()
+        {
+            RemoveWhiteMapGroundInternal(throwOnFailure: true);
+        }
+
+        [MenuItem("Tools/Project Art of All/Apply Map Tile Scale")]
+        public static void ApplyMapTileScale()
+        {
+            ApplyMapTileScaleInternal();
+        }
+
+        [MenuItem("Tools/Project Art of All/Reframe Map Cameras")]
+        public static void ReframeMapCameras()
+        {
+            ReframeMapCamerasInternal();
+        }
+
+        private static void ReframeMapCamerasInternal()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                throw new InvalidOperationException(
+                    "Exit Play Mode before reframing the map cameras.");
+            }
+
+            Scene previousActive = SceneManager.GetActiveScene();
+            List<SceneCameraFrame> scenes = new List<SceneCameraFrame>();
+            try
+            {
+                scenes.Add(FrameMapCamera(Map1Path));
+                scenes.Add(FrameMapCamera(Map2Path));
+
+                if (previousActive.IsValid() && previousActive.isLoaded)
+                {
+                    SceneManager.SetActiveScene(previousActive);
+                }
+
+                string result = string.Format(
+                    "PASS\r\n{0}: orthographic {1:F2}, height {2:F2}\r\n{3}: orthographic {4:F2}, height {5:F2}",
+                    Map1Path,
+                    scenes[0].OrthographicSize,
+                    scenes[0].CameraHeight,
+                    Map2Path,
+                    scenes[1].OrthographicSize,
+                    scenes[1].CameraHeight);
+                File.WriteAllText(CameraFrameResultPath, result);
+                Debug.Log("[MapArt] " + result.Replace(System.Environment.NewLine, " | "));
+            }
+            catch
+            {
+                if (previousActive.IsValid() && previousActive.isLoaded)
+                {
+                    SceneManager.SetActiveScene(previousActive);
+                }
+
+                throw;
+            }
+            finally
+            {
+                for (int index = 0; index < scenes.Count; index++)
+                {
+                    if (scenes[index].OpenedForEdit &&
+                        scenes[index].Scene.IsValid() &&
+                        scenes[index].Scene.isLoaded)
+                    {
+                        EditorSceneManager.CloseScene(scenes[index].Scene, true);
+                    }
+                }
+            }
+        }
+
+        private static SceneCameraFrame FrameMapCamera(string scenePath)
+        {
+            Scene scene = SceneManager.GetSceneByPath(scenePath);
+            bool openedForEdit = !scene.IsValid() || !scene.isLoaded;
+            if (openedForEdit)
+            {
+                scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
+            }
+            else if (scene.isDirty)
+            {
+                throw new InvalidOperationException(
+                    string.Concat(
+                        "Save or close the modified scene before reframing it: ",
+                        scenePath));
+            }
+
+            Camera camera = null;
+            BoardGameplayController controller = null;
+            GameObject[] roots = scene.GetRootGameObjects();
+            for (int rootIndex = 0; rootIndex < roots.Length; rootIndex++)
+            {
+                if (camera == null)
+                {
+                    Camera candidate = roots[rootIndex].GetComponentInChildren<Camera>(true);
+                    if (candidate != null && candidate.CompareTag("MainCamera"))
+                    {
+                        camera = candidate;
+                    }
+                }
+
+                if (controller == null)
+                {
+                    controller = roots[rootIndex]
+                        .GetComponentInChildren<BoardGameplayController>(true);
+                }
+            }
+
+            if (camera == null || controller == null)
+            {
+                throw new InvalidOperationException(
+                    string.Concat("Map camera reframing is missing data: ", scenePath));
+            }
+
+            BoardTileView[] tiles = controller.GetComponentsInChildren<BoardTileView>(true);
+            if (tiles.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    string.Concat("Map camera reframing found no tiles: ", scenePath));
+            }
+
+            bool hasBounds = false;
+            Bounds bounds = default;
+            for (int index = 0; index < tiles.Length; index++)
+            {
+                Renderer renderer = tiles[index].GetComponent<Renderer>();
+                Bounds tileBounds = renderer != null
+                    ? renderer.bounds
+                    : new Bounds(tiles[index].transform.position, Vector3.one);
+                if (!hasBounds)
+                {
+                    bounds = tileBounds;
+                    hasBounds = true;
+                }
+                else
+                {
+                    bounds.Encapsulate(tileBounds);
+                }
+            }
+
+            const float aspect = 16f / 9f;
+            float padding =
+                BoardCameraController.BaseFullMapPadding *
+                BoardCameraController.MaximumViewHeightMultiplier;
+            Vector3 right = camera.transform.right;
+            Vector3 up = camera.transform.up;
+            Vector3 center = bounds.center;
+            float maximumRight = 0f;
+            float maximumUp = 0f;
+            Vector3 min = bounds.min;
+            Vector3 max = bounds.max;
+            for (int x = 0; x < 2; x++)
+            {
+                for (int y = 0; y < 2; y++)
+                {
+                    for (int z = 0; z < 2; z++)
+                    {
+                        Vector3 corner = new Vector3(
+                            x == 0 ? min.x : max.x,
+                            y == 0 ? min.y : max.y,
+                            z == 0 ? min.z : max.z);
+                        Vector3 offset = corner - center;
+                        maximumRight = Mathf.Max(
+                            maximumRight,
+                            Mathf.Abs(Vector3.Dot(offset, right)));
+                        maximumUp = Mathf.Max(
+                            maximumUp,
+                            Mathf.Abs(Vector3.Dot(offset, up)));
+                    }
+                }
+            }
+
+            float fittedHalfHeight = Mathf.Max(maximumUp, maximumRight / aspect);
+            float targetSize = Mathf.Max(
+                BoardCameraController.MinimumZoom,
+                fittedHalfHeight * padding);
+            float previousSize = Mathf.Max(0.001f, camera.orthographicSize);
+
+            float forwardY = camera.transform.forward.y;
+            if (forwardY < -0.0001f)
+            {
+                float distance = (center.y - camera.transform.position.y) / forwardY;
+                Vector3 viewCenter =
+                    camera.transform.position + camera.transform.forward * distance;
+                camera.transform.position += center - viewCenter;
+            }
+
+            float physicalScale = targetSize / previousSize;
+            Vector3 offsetFromCenter = camera.transform.position - center;
+            camera.transform.position = center + offsetFromCenter * physicalScale;
+            camera.orthographic = true;
+            camera.orthographicSize = targetSize;
+
+            BoardCameraController cameraController =
+                camera.GetComponent<BoardCameraController>();
+            if (cameraController != null)
+            {
+                SerializedObject serialized = new SerializedObject(cameraController);
+                serialized.FindProperty("minimumZoom").floatValue =
+                    BoardCameraController.MinimumZoom;
+                serialized.FindProperty("maximumZoom").floatValue =
+                    30f *
+                    BoardMapBuilder.TileScaleMultiplier *
+                    BoardCameraController.MaximumViewHeightMultiplier;
+                serialized.FindProperty("fullMapPadding").floatValue = padding;
+                serialized.FindProperty("panLimit").floatValue =
+                    70f *
+                    BoardMapBuilder.TileScaleMultiplier *
+                    BoardCameraController.MaximumViewHeightMultiplier;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+            }
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            if (!EditorSceneManager.SaveScene(scene))
+            {
+                throw new InvalidOperationException(
+                    string.Concat("Could not save reframed scene ", scenePath, "."));
+            }
+
+            Debug.Log(string.Format(
+                "[MapArt] Reframed {0}: orthographic {1:F2}, camera height {2:F2}.",
+                scenePath,
+                targetSize,
+                camera.transform.position.y));
+            return new SceneCameraFrame(
+                scene,
+                openedForEdit,
+                targetSize,
+                camera.transform.position.y);
+        }
+
+        private static void ApplyMapTileScaleInternal()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                throw new InvalidOperationException(
+                    "Exit Play Mode before scaling the map tiles.");
+            }
+
+            Scene previousActive = SceneManager.GetActiveScene();
+            List<SceneTileScaleResult> scenes = new List<SceneTileScaleResult>();
+            try
+            {
+                scenes.Add(ScaleMapTiles(Map1Path));
+                scenes.Add(ScaleMapTiles(Map2Path));
+
+                if (previousActive.IsValid() && previousActive.isLoaded)
+                {
+                    SceneManager.SetActiveScene(previousActive);
+                }
+
+                string result = string.Format(
+                    "PASS\r\n{0}: tiles {1}, scale {2}x\r\n{3}: tiles {4}, scale {5}x",
+                    Map1Path,
+                    scenes[0].TileCount,
+                    scenes[0].AppliedScale,
+                    Map2Path,
+                    scenes[1].TileCount,
+                    scenes[1].AppliedScale);
+                File.WriteAllText(TileScaleResultPath, result);
+                Debug.Log("[MapArt] " + result.Replace(System.Environment.NewLine, " | "));
+            }
+            catch
+            {
+                if (previousActive.IsValid() && previousActive.isLoaded)
+                {
+                    SceneManager.SetActiveScene(previousActive);
+                }
+
+                throw;
+            }
+            finally
+            {
+                for (int index = 0; index < scenes.Count; index++)
+                {
+                    if (scenes[index].OpenedForEdit &&
+                        scenes[index].Scene.IsValid() &&
+                        scenes[index].Scene.isLoaded)
+                    {
+                        EditorSceneManager.CloseScene(scenes[index].Scene, true);
+                    }
+                }
+            }
+        }
+
+        private static SceneTileScaleResult ScaleMapTiles(string scenePath)
+        {
+            Scene scene = SceneManager.GetSceneByPath(scenePath);
+            bool openedForEdit = !scene.IsValid() || !scene.isLoaded;
+            if (openedForEdit)
+            {
+                scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
+            }
+            else if (scene.isDirty)
+            {
+                throw new InvalidOperationException(
+                    string.Concat(
+                        "Save or close the modified scene before scaling it: ",
+                        scenePath));
+            }
+
+            BoardGameplayController controller = null;
+            HashSet<BoardTileView> tiles = new HashSet<BoardTileView>();
+            GameObject[] roots = scene.GetRootGameObjects();
+            for (int rootIndex = 0; rootIndex < roots.Length; rootIndex++)
+            {
+                if (controller == null)
+                {
+                    controller = roots[rootIndex]
+                        .GetComponentInChildren<BoardGameplayController>(true);
+                }
+
+                BoardTileView[] rootTiles =
+                    roots[rootIndex].GetComponentsInChildren<BoardTileView>(true);
+                for (int index = 0; index < rootTiles.Length; index++)
+                {
+                    tiles.Add(rootTiles[index]);
+                }
+            }
+
+            if (controller == null || tiles.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    string.Concat(
+                        "Map tile scaling is missing a board controller or tiles: ",
+                        scenePath));
+            }
+
+            Vector3 targetScale = new Vector3(
+                BoardMapBuilder.TileFootprint,
+                BoardMapBuilder.TileHeight,
+                BoardMapBuilder.TileFootprint);
+            foreach (BoardTileView tile in tiles)
+            {
+                Transform tileTransform = tile.transform;
+                Vector3 currentScale = tileTransform.localScale;
+                float baseFootprint =
+                    BoardMapBuilder.TileFootprint /
+                    BoardMapBuilder.TileScaleMultiplier;
+                float currentFactor = currentScale.x / baseFootprint;
+                if (currentFactor <= 0.0001f)
+                {
+                    throw new InvalidOperationException(
+                        string.Concat("Tile has an invalid scale: ", tile.name));
+                }
+
+                float spacingScale =
+                    BoardMapBuilder.TileScaleMultiplier / currentFactor;
+                Vector3 position = tileTransform.localPosition;
+                float groundY = position.y - currentScale.y * 0.5f;
+                position.x *= spacingScale;
+                position.z *= spacingScale;
+                position.y = groundY + BoardMapBuilder.TileHeight * 0.5f;
+                tileTransform.localPosition = position;
+                tileTransform.localScale = targetScale;
+            }
+
+            SnapTokensToHomes(controller);
+            ValidateSpawnPoints(controller);
+            ValidateTileScale(controller);
+            EditorSceneManager.MarkSceneDirty(scene);
+            if (!EditorSceneManager.SaveScene(scene))
+            {
+                throw new InvalidOperationException(
+                    string.Concat("Could not save scaled scene ", scenePath, "."));
+            }
+
+            Debug.Log(string.Format(
+                "[MapArt] Scaled {0} tiles to {1:F2}x in {2}.",
+                tiles.Count,
+                BoardMapBuilder.TileScaleMultiplier,
+                scenePath));
+            return new SceneTileScaleResult(
+                scene,
+                openedForEdit,
+                tiles.Count,
+                BoardMapBuilder.TileScaleMultiplier);
+        }
+
+        [MenuItem("Tools/Project Art of All/Preview White Map Ground Removal")]
+        public static void PreviewWhiteMapGroundRemoval()
+        {
+            RenderWhiteMapGroundPreview();
+        }
+
+        private static void RenderWhiteMapGroundPreview()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                throw new InvalidOperationException(
+                    "Exit Play Mode before rendering the map preview.");
+            }
+
+            Scene previousActive = SceneManager.GetActiveScene();
+            if (!previousActive.IsValid() ||
+                !previousActive.isLoaded ||
+                previousActive.isDirty ||
+                string.IsNullOrEmpty(previousActive.path))
+            {
+                throw new InvalidOperationException(
+                    "Save the current scene before rendering map previews.");
+            }
+
+            string previousScenePath = previousActive.path;
+            try
+            {
+                RenderMapPreview(Map1Path, Map1PreviewPath);
+                RenderMapPreview(Map2Path, Map2PreviewPath);
+            }
+            finally
+            {
+                Scene restored = EditorSceneManager.OpenScene(
+                    previousScenePath,
+                    OpenSceneMode.Single);
+                SceneManager.SetActiveScene(restored);
+            }
+
+            Debug.Log(string.Format(
+                "[MapArt] Wrote white-ground removal previews: {0}, {1}.",
+                Map1PreviewPath,
+                Map2PreviewPath));
+        }
+
+        private static void RenderMapPreview(string scenePath, string outputPath)
+        {
+            Scene scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+            Camera camera = null;
+            BoardGameplayController controller = null;
+            GameObject[] roots = scene.GetRootGameObjects();
+            for (int rootIndex = 0; rootIndex < roots.Length; rootIndex++)
+            {
+                if (camera == null)
+                {
+                    Camera candidate = roots[rootIndex].GetComponentInChildren<Camera>(true);
+                    if (candidate != null && candidate.CompareTag("MainCamera"))
+                    {
+                        camera = candidate;
+                    }
+                }
+
+                if (controller == null)
+                {
+                    controller = roots[rootIndex]
+                        .GetComponentInChildren<BoardGameplayController>(true);
+                }
+            }
+
+            if (camera == null || controller == null)
+            {
+                throw new InvalidOperationException(
+                    string.Concat(
+                        "Map preview is missing a camera or gameplay controller: ",
+                        scenePath));
+            }
+
+            Canvas[] canvases = Object.FindObjectsOfType<Canvas>(true);
+            for (int index = 0; index < canvases.Length; index++)
+            {
+                if (canvases[index].gameObject.scene == scene)
+                {
+                    canvases[index].gameObject.SetActive(false);
+                }
+            }
+
+            const int width = 1600;
+            const int height = 900;
+            RenderTexture target = new RenderTexture(width, height, 24);
+            Texture2D texture = new Texture2D(
+                width,
+                height,
+                TextureFormat.RGB24,
+                false);
+            RenderTexture previous = RenderTexture.active;
+            try
+            {
+                camera.targetTexture = target;
+                RenderTexture.active = target;
+                camera.Render();
+                texture.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                texture.Apply(false, false);
+                File.WriteAllBytes(outputPath, texture.EncodeToPNG());
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+                camera.targetTexture = null;
+                Object.DestroyImmediate(texture);
+                target.Release();
+                Object.DestroyImmediate(target);
+            }
+        }
+
+        private static void RemoveWhiteMapGroundInternal(bool throwOnFailure)
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                if (throwOnFailure)
+                {
+                    throw new InvalidOperationException(
+                        "Exit Play Mode before removing the map ground.");
+                }
+
+                return;
+            }
+
+            Scene previousActive = SceneManager.GetActiveScene();
+            List<SceneCleanup> scenes = new List<SceneCleanup>();
+            try
+            {
+                scenes.Add(CleanupMapGround(Map1Path));
+                scenes.Add(CleanupMapGround(Map2Path));
+
+                if (previousActive.IsValid() && previousActive.isLoaded)
+                {
+                    SceneManager.SetActiveScene(previousActive);
+                }
+
+                string result = string.Format(
+                    "PASS\r\n{0}: removed {1}, tiles {2}\r\n{3}: removed {4}, tiles {5}",
+                    Map1Path,
+                    scenes[0].RemovedObjects,
+                    scenes[0].TileCount,
+                    Map2Path,
+                    scenes[1].RemovedObjects,
+                    scenes[1].TileCount);
+                File.WriteAllText(GroundCleanupResultPath, result);
+                Debug.Log("[MapArt] " + result.Replace(System.Environment.NewLine, " | "));
+            }
+            catch
+            {
+                if (previousActive.IsValid() && previousActive.isLoaded)
+                {
+                    SceneManager.SetActiveScene(previousActive);
+                }
+
+                throw;
+            }
+            finally
+            {
+                for (int index = 0; index < scenes.Count; index++)
+                {
+                    if (scenes[index].OpenedForCleanup &&
+                        scenes[index].Scene.IsValid() &&
+                        scenes[index].Scene.isLoaded)
+                    {
+                        EditorSceneManager.CloseScene(scenes[index].Scene, true);
+                    }
+                }
+            }
+        }
+
+        private static SceneCleanup CleanupMapGround(string scenePath)
+        {
+            Scene scene = SceneManager.GetSceneByPath(scenePath);
+            bool openedForCleanup = !scene.IsValid() || !scene.isLoaded;
+            if (openedForCleanup)
+            {
+                scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
+            }
+            else if (scene.isDirty)
+            {
+                throw new InvalidOperationException(
+                    string.Concat(
+                        "Save or close the modified scene before cleaning it: ",
+                        scenePath));
+            }
+
+            List<GameObject> groundObjects = new List<GameObject>();
+            GameObject[] roots = scene.GetRootGameObjects();
+            for (int rootIndex = 0; rootIndex < roots.Length; rootIndex++)
+            {
+                Transform[] transforms =
+                    roots[rootIndex].GetComponentsInChildren<Transform>(true);
+                for (int index = 0; index < transforms.Length; index++)
+                {
+                    string objectName = transforms[index].gameObject.name;
+                    if (objectName == "BoardBase" ||
+                        objectName.StartsWith("GridV_", StringComparison.Ordinal) ||
+                        objectName.StartsWith("GridH_", StringComparison.Ordinal))
+                    {
+                        groundObjects.Add(transforms[index].gameObject);
+                    }
+                }
+            }
+
+            int tileCount = 0;
+            for (int rootIndex = 0; rootIndex < roots.Length; rootIndex++)
+            {
+                tileCount += roots[rootIndex]
+                    .GetComponentsInChildren<BoardTileView>(true)
+                    .Length;
+            }
+
+            if (groundObjects.Count == 0)
+            {
+                if (openedForCleanup)
+                {
+                    EditorSceneManager.CloseScene(scene, true);
+                }
+
+                return new SceneCleanup(scene, false, tileCount, 0);
+            }
+
+            for (int index = 0; index < groundObjects.Count; index++)
+            {
+                UnityEngine.Object.DestroyImmediate(groundObjects[index]);
+            }
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            if (!EditorSceneManager.SaveScene(scene))
+            {
+                throw new InvalidOperationException(
+                    string.Concat("Could not save cleaned scene ", scenePath, "."));
+            }
+
+            Debug.Log(string.Format(
+                "[MapArt] Removed {0} white-ground objects from {1}.",
+                groundObjects.Count,
+                scenePath));
+            return new SceneCleanup(
+                scene,
+                openedForCleanup,
+                tileCount,
+                groundObjects.Count);
         }
 
         private static Scene PrepareMap1()
@@ -473,8 +1112,7 @@ namespace ProjectArtOfAll.Editor
         private static void ValidateMapScene(
             string scenePath,
             string expectedMapId,
-            int expectedTiles,
-            int expectedGridLines)
+            int expectedTiles)
         {
             Scene scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
             if (!scene.IsValid())
@@ -489,14 +1127,15 @@ namespace ProjectArtOfAll.Editor
             int tiles = controller == null
                 ? 0
                 : controller.GetComponentsInChildren<BoardTileView>(true).Length;
-            int gridLines = 0;
+            int whiteGroundObjects = 0;
             Transform[] transforms = Object.FindObjectsOfType<Transform>(true);
             for (int index = 0; index < transforms.Length; index++)
             {
-                if (transforms[index].name.StartsWith("GridH_") ||
+                if (transforms[index].name == "BoardBase" ||
+                    transforms[index].name.StartsWith("GridH_") ||
                     transforms[index].name.StartsWith("GridV_"))
                 {
-                    gridLines++;
+                    whiteGroundObjects++;
                 }
             }
 
@@ -504,21 +1143,42 @@ namespace ProjectArtOfAll.Editor
                 bootstrap == null ||
                 bootstrap.MapId != expectedMapId ||
                 tiles != expectedTiles ||
-                gridLines != expectedGridLines)
+                whiteGroundObjects != 0)
             {
                 throw new System.InvalidOperationException(string.Format(
-                    "{0}: controller={1}, map='{2}', tiles={3}/{4}, gridLines={5}/{6}.",
+                    "{0}: controller={1}, map='{2}', tiles={3}/{4}, whiteGround={5}.",
                     scenePath,
                     controller != null,
                     bootstrap == null ? "<missing>" : bootstrap.MapId,
                     tiles,
                     expectedTiles,
-                    gridLines,
-                    expectedGridLines));
+                    whiteGroundObjects));
             }
 
             ValidateSpawnPoints(controller);
-            ValidateTileGridAlignment(controller);
+            ValidateTileScale(controller);
+        }
+
+        private static void ValidateTileScale(BoardGameplayController controller)
+        {
+            BoardTileView[] tiles = controller.GetComponentsInChildren<BoardTileView>(true);
+            Vector3 expectedScale = new Vector3(
+                BoardMapBuilder.TileFootprint,
+                BoardMapBuilder.TileHeight,
+                BoardMapBuilder.TileFootprint);
+            for (int index = 0; index < tiles.Length; index++)
+            {
+                Vector3 scale = tiles[index].transform.localScale;
+                if (Mathf.Abs(scale.x - expectedScale.x) > 0.001f ||
+                    Mathf.Abs(scale.y - expectedScale.y) > 0.001f ||
+                    Mathf.Abs(scale.z - expectedScale.z) > 0.001f)
+                {
+                    throw new InvalidOperationException(string.Format(
+                        "Tile {0} does not use the {1:F3}x map scale.",
+                        tiles[index].name,
+                        BoardMapBuilder.TileScaleMultiplier));
+                }
+            }
         }
 
         private static void ValidateSpawnPoints(BoardGameplayController controller)
@@ -556,46 +1216,64 @@ namespace ProjectArtOfAll.Editor
             }
         }
 
-        private static void ValidateTileGridAlignment(BoardGameplayController controller)
+        private sealed class SceneCleanup
         {
-            float minX = float.MaxValue;
-            float minZ = float.MaxValue;
-            Transform[] transforms = Object.FindObjectsOfType<Transform>(true);
-            for (int index = 0; index < transforms.Length; index++)
+            public SceneCleanup(
+                Scene scene,
+                bool openedForCleanup,
+                int tileCount,
+                int removedObjects)
             {
-                Transform current = transforms[index];
-                if (current.name.StartsWith("GridV_"))
-                {
-                    minX = Mathf.Min(minX, current.position.x);
-                }
-                else if (current.name.StartsWith("GridH_"))
-                {
-                    minZ = Mathf.Min(minZ, current.position.z);
-                }
+                Scene = scene;
+                OpenedForCleanup = openedForCleanup;
+                TileCount = tileCount;
+                RemovedObjects = removedObjects;
             }
 
-            if (minX == float.MaxValue || minZ == float.MaxValue)
+            public Scene Scene { get; }
+            public bool OpenedForCleanup { get; }
+            public int TileCount { get; }
+            public int RemovedObjects { get; }
+        }
+
+        private sealed class SceneTileScaleResult
+        {
+            public SceneTileScaleResult(
+                Scene scene,
+                bool openedForEdit,
+                int tileCount,
+                float appliedScale)
             {
-                throw new System.InvalidOperationException(
-                    "Map base grid lines are missing.");
+                Scene = scene;
+                OpenedForEdit = openedForEdit;
+                TileCount = tileCount;
+                AppliedScale = appliedScale;
             }
 
-            const float centreOffset = BoardMapBuilder.GridCellSize * 0.5f;
-            BoardTileView[] tiles = controller.GetComponentsInChildren<BoardTileView>(true);
-            for (int index = 0; index < tiles.Length; index++)
+            public Scene Scene { get; }
+            public bool OpenedForEdit { get; }
+            public int TileCount { get; }
+            public float AppliedScale { get; }
+        }
+
+        private sealed class SceneCameraFrame
+        {
+            public SceneCameraFrame(
+                Scene scene,
+                bool openedForEdit,
+                float orthographicSize,
+                float cameraHeight)
             {
-                float x = (tiles[index].transform.position.x - (minX + centreOffset)) /
-                          BoardMapBuilder.GridCellSize;
-                float z = (tiles[index].transform.position.z - (minZ + centreOffset)) /
-                          BoardMapBuilder.GridCellSize;
-                if (Mathf.Abs(x - Mathf.Round(x)) > 0.01f ||
-                    Mathf.Abs(z - Mathf.Round(z)) > 0.01f)
-                {
-                    throw new System.InvalidOperationException(string.Format(
-                        "Tile {0} is not centred in a base-grid cell.",
-                        tiles[index].name));
-                }
+                Scene = scene;
+                OpenedForEdit = openedForEdit;
+                OrthographicSize = orthographicSize;
+                CameraHeight = cameraHeight;
             }
+
+            public Scene Scene { get; }
+            public bool OpenedForEdit { get; }
+            public float OrthographicSize { get; }
+            public float CameraHeight { get; }
         }
 
         private static void ValidateBuildSettings()
