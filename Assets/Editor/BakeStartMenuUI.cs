@@ -105,10 +105,30 @@ namespace ProjectArtOfAll.Editor
                 canvas.Find("GameSettingsPanel") == null ||
                 canvas.Find("CombatLab") == null ||
                 canvas.Find("CardCodex") == null ||
-                canvas.Find("CardTooltip") == null)
+                canvas.Find("CardTooltip") == null ||
+                canvas.Find("SceneTransitionMask") == null)
             {
                 throw new System.InvalidOperationException(
                     "StartMenu is missing baked UI roots.");
+            }
+
+            Transform transitionMask = canvas.Find("SceneTransitionMask");
+            Image transitionImage = transitionMask.GetComponent<Image>();
+            RectTransform transitionRect = transitionMask as RectTransform;
+            if (transitionImage == null ||
+                transitionImage.color != Color.black ||
+                !transitionImage.raycastTarget ||
+                transitionRect == null ||
+                !Mathf.Approximately(
+                    transitionRect.sizeDelta.x,
+                    1920f) ||
+                !Mathf.Approximately(
+                    transitionRect.sizeDelta.y,
+                    1080f) ||
+                transitionMask.gameObject.activeSelf)
+            {
+                throw new System.InvalidOperationException(
+                    "StartMenu transition mask is configured incorrectly.");
             }
 
             Image background = canvas.Find("Background").GetComponent<Image>();

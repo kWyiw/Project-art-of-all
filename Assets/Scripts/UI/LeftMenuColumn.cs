@@ -1,3 +1,4 @@
+using System.Collections;
 using ProjectArtOfAll.Flow;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -26,6 +27,7 @@ namespace ProjectArtOfAll.UI
         private const float HoverSlant = 0f;
         private const float HoverRightBlankRatio = 0.28f;
         private const float HoverRightBlankExtra = 24f;
+        private const float StartTransitionDuration = 0.22f;
         private const int MenuTextSize = 38;
         private const int TitleTextSize = 64;
         private const string ProjectTitle = "Project : Art of All";
@@ -49,6 +51,8 @@ namespace ProjectArtOfAll.UI
         [SerializeField] private AudioSource hoverAudioSource;
 
         private AudioClip hoverClip;
+        private RectTransform transitionMask;
+        private bool transitionPlaying;
 
         private void Awake()
         {
@@ -65,6 +69,7 @@ namespace ProjectArtOfAll.UI
                 EnsureMenuColumn();
             }
 
+            EnsureTransitionMask();
             BindMenu();
 
             if (settingsPanel != null)
@@ -191,6 +196,7 @@ namespace ProjectArtOfAll.UI
             BuildMenuOptions();
             modePanel = BuildModePanel();
             modePanel.SetActive(false);
+            BuildTransitionMask();
         }
 
         // ---------------------------------------------------------------- 背景
@@ -574,7 +580,7 @@ namespace ProjectArtOfAll.UI
                 "1 名真人 + 3 名 CPU。正式玩法的形态，卡槽始终是你的 P1。",
                 "推荐",
                 128f,
-                () => GameSession.ChooseMode(GameMode.Normal));
+                () => BeginGameTransition(GameMode.Normal));
 
             BuildModeOption(
                 panel,
@@ -582,7 +588,7 @@ namespace ProjectArtOfAll.UI
                 "四个座位都由你一个人操作，用来验证规则、复现问题、排查 AI。",
                 "测试",
                 268f,
-                () => GameSession.ChooseMode(GameMode.NoCpuTest));
+                () => BeginGameTransition(GameMode.NoCpuTest));
 
             CreatePanelButton(panel, "返回", (panelWidth - 220f) * 0.5f, panelHeight - 76f, 220f, 48f,
                 () => modePanel.SetActive(false));
@@ -681,6 +687,47 @@ namespace ProjectArtOfAll.UI
             }
         }
 
+        private void BeginGameTransition(GameMode mode)
+        {
+            if (transitionPlaying)
+            {
+                return;
+            }
+
+            transitionPlaying = true;
+            StartCoroutine(PlayGameTransition(mode));
+        }
+
+        private IEnumerator PlayGameTransition(GameMode mode)
+        {
+            EnsureTransitionMask();
+            if (transitionMask == null)
+            {
+                GameSession.ChooseMode(mode);
+                yield break;
+            }
+
+            transitionMask.SetAsLastSibling();
+            transitionMask.anchoredPosition = new Vector2(ReferenceWidth, 0f);
+            transitionMask.gameObject.SetActive(true);
+
+            float elapsed = 0f;
+            while (elapsed < StartTransitionDuration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / StartTransitionDuration);
+                float eased = 1f - Mathf.Pow(1f - t, 3f);
+                transitionMask.anchoredPosition = new Vector2(
+                    Mathf.Lerp(ReferenceWidth, 0f, eased),
+                    0f);
+                yield return null;
+            }
+
+            transitionMask.anchoredPosition = Vector2.zero;
+            yield return null;
+            GameSession.ChooseMode(mode);
+        }
+
         public void HideModePanel()
         {
             if (modePanel != null)
@@ -741,6 +788,51 @@ namespace ProjectArtOfAll.UI
             {
                 hoverAudioSource.PlayOneShot(hoverClip, 0.65f);
             }
+        }
+
+        private void BuildTransitionMask()
+        {
+            RectTransform mask = CreateRectTransform(
+                "SceneTransitionMask",
+                canvasRect);
+            mask.anchorMin = new Vector2(0.5f, 0.5f);
+            mask.anchorMax = new Vector2(0.5f, 0.5f);
+            mask.pivot = new Vector2(0.5f, 0.5f);
+            mask.anchoredPosition = new Vector2(ReferenceWidth, 0f);
+            mask.sizeDelta = new Vector2(ReferenceWidth, ReferenceHeight);
+
+            Image image = mask.gameObject.AddComponent<Image>();
+            image.color = Color.black;
+            image.raycastTarget = true;
+
+            transitionMask = mask;
+            mask.gameObject.SetActive(false);
+        }
+
+        private void EnsureTransitionMask()
+        {
+            if (canvasRect == null)
+            {
+                return;
+            }
+
+            Transform existing = canvasRect.Find("SceneTransitionMask");
+            if (existing == null)
+            {
+                BuildTransitionMask();
+                return;
+            }
+
+            transitionMask = existing as RectTransform;
+            Image image = existing.GetComponent<Image>();
+            if (image == null)
+            {
+                image = existing.gameObject.AddComponent<Image>();
+            }
+
+            image.color = Color.black;
+            image.raycastTarget = true;
+            existing.gameObject.SetActive(false);
         }
 
         private StartMenuBgm EnsureStartMenuBgm()
