@@ -106,13 +106,13 @@ public static class NormaHudPreview
         Text economy = corners.GetComponentsInChildren<Text>(true)
             .First(text => text.gameObject.name == "Economy");
         bool cornerOk = economy.text.Contains("目标 碎片")
-            && economy.text.Contains("<color=#F2C14E>12/26</color>");
+            && economy.text.Contains("<color=#F2C14E>12/60</color>");
 
         BoardFieldInfoPanel field = BoardFieldInfoPanel.Create(canvas, font);
         field.Refresh(controller.State, "Norma Probe", player.Id);
         Text norma = field.GetComponentsInChildren<Text>(true)
             .First(text => text.gameObject.name == "Norma");
-        bool fieldOk = norma.text.Contains("升级条件：碎片 12/26")
+        bool fieldOk = norma.text.Contains("升级条件：碎片 12/60")
             && norma.text.Contains("Lv.3 → Lv.4");
 
         UnityEngine.Object.DestroyImmediate(canvasObject);

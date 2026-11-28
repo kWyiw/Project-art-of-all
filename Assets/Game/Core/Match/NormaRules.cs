@@ -6,20 +6,20 @@ namespace ProjectArtOfAll.Core.Match
     {
         private static readonly int[] ShardThresholds =
         {
-            6,
-            14,
-            26,
-            40,
-            54
+            15,
+            30,
+            60,
+            120,
+            240
         };
 
         private static readonly int[] WinThresholds =
         {
             1,
-            2,
-            4,
+            3,
             6,
-            8
+            12,
+            24
         };
 
         public static int GetThreshold(int level, NormaType normaType)

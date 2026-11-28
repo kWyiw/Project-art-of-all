@@ -943,6 +943,7 @@ namespace ProjectArtOfAll.Core.Checks
             MatchController encounter =
                 new MatchController(encounterGraph, 20261129UL);
             MatchPlayerState mover = encounter.State.CurrentPlayer;
+            mover.Shards = NormaRules.GetThreshold(mover.Level, mover.Norma);
             Assert(mover.MeetsCurrentNorma(),
                 "The monster gate probe must begin with an already-satisfied Norma.");
             encounter.Submit(new DebugRollCommand(mover.Id, 1));
@@ -989,8 +990,8 @@ namespace ProjectArtOfAll.Core.Checks
 
             MatchPlayerState trigger = controller.State.CurrentPlayer;
             trigger.Level = 3;
-            trigger.Shards = 30;
             trigger.Norma = NormaType.Shard;
+            trigger.Shards = NormaRules.GetThreshold(trigger.Level, trigger.Norma);
             controller.Submit(new DebugRollCommand(trigger.Id, 1));
             controller.Submit(new MoveCommand(trigger.Id));
             Assert(trigger.Level == 4 &&
@@ -1127,6 +1128,22 @@ namespace ProjectArtOfAll.Core.Checks
 
         private static void CheckHomeProgression()
         {
+            int[] shardTargets = { 15, 30, 60, 120, 240 };
+            int[] winTargets = { 1, 3, 6, 12, 24 };
+            for (int level = 1; level <= 5; level++)
+            {
+                Assert(
+                    NormaRules.GetThreshold(level, NormaType.Shard) ==
+                    shardTargets[level - 1],
+                    "Norma shard threshold table must match the design for level "
+                    + level + ".");
+                Assert(
+                    NormaRules.GetThreshold(level, NormaType.Wins) ==
+                    winTargets[level - 1],
+                    "Norma win threshold table must match the design for level "
+                    + level + ".");
+            }
+
             MapGraph graph = MapGraph.Create(
                 new[]
                 {
@@ -1162,6 +1179,7 @@ namespace ProjectArtOfAll.Core.Checks
             MatchController homeGate =
                 new MatchController(homeGateGraph, 45UL);
             MatchPlayerState homeMover = homeGate.State.CurrentPlayer;
+            homeMover.Shards = NormaRules.GetThreshold(homeMover.Level, homeMover.Norma);
             Assert(homeMover.MeetsCurrentNorma(),
                 "The Home upgrade probe must begin with a satisfied Norma.");
             homeGate.Submit(new DebugRollCommand(homeMover.Id, 1));
