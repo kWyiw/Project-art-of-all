@@ -38,6 +38,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckCardStrictnessFixes();
                 CheckM1MatchDurability();
                 CheckRandomness();
+                CheckMonsterPhases();
                 CheckDebugRollRange();
                 CheckHomeProgression();
                 CheckRewardChoice();
@@ -772,7 +773,7 @@ namespace ProjectArtOfAll.Core.Checks
         /// ① 每局的根种子必须每次都不同、且不为 0；
         /// ② 子流派生是确定性的，不同编号互不相同；
         /// ③ 同一颗种子必然复现同一串骰子，换种子必换骰子序列；
-        /// ④ 怪物牌组按（种子, 地块）生成，同种子同格一致、换格即换牌，且不超容量。
+        /// ④ 怪物模板牌组可解析、能装下，同模板生成稳定；随机抽取由怪物子流负责。
         /// </summary>
         private static void CheckRandomness()
         {
@@ -805,30 +806,156 @@ namespace ProjectArtOfAll.Core.Checks
             MatchController deckA = new MatchController(graph, 11UL);
             MatchController deckB = new MatchController(graph, 12UL);
 
-            // 怪物牌组是固定的：随机化实测把 1 级怪物战胜率从 92% 打到 26%、
-            // 中位圈数从 10 拉到 12，属于数值改动，按约定不擅自调整。
-            // 因此这里断言它「跨种子稳定、按等级逐级加强、永远装得下」。
+            MonsterDefinition earlyMonster = MonsterRoster.For(MonsterPhase.Early)[0];
             Assert(
-                DeckFingerprint(deckA.CreateEnemyDeck(3, 5000)) ==
-                DeckFingerprint(deckB.CreateEnemyDeck(3, 5000)),
-                "Monster decks must stay stable across seeds.");
-            Assert(
-                DeckFingerprint(deckA.CreateEnemyDeck(3, 5000)) !=
-                DeckFingerprint(deckA.CreateEnemyDeck(1, 5000)),
-                "Higher level monsters must field a bigger deck.");
+                DeckFingerprint(deckA.CreateEnemyDeck(earlyMonster, 5000)) ==
+                DeckFingerprint(deckB.CreateEnemyDeck(earlyMonster, 5000)),
+                "The same monster template must produce the same deck across matches.");
 
-            for (int level = 1; level <= 5; level++)
+            MonsterPhase[] phases =
             {
-                int width = deckA
-                    .CreateEnemyDeck(level, 9000)
-                    .Sum(card => card.Definition.SlotSize);
-                Assert(width <= LoadoutRules.GetBattleCapacity(level),
-                    "A generated monster deck must fit the battle row capacity.");
+                MonsterPhase.Early,
+                MonsterPhase.Mid,
+                MonsterPhase.Late
+            };
+            for (int phaseIndex = 0; phaseIndex < phases.Length; phaseIndex++)
+            {
+                IReadOnlyList<MonsterDefinition> roster =
+                    MonsterRoster.For(phases[phaseIndex]);
+                Assert(roster.Count > 0, "Every monster phase needs a roster.");
+                for (int monsterIndex = 0; monsterIndex < roster.Count; monsterIndex++)
+                {
+                    MonsterDefinition monster = roster[monsterIndex];
+                    List<CardInstance> deck = deckA.CreateEnemyDeck(monster, 9000);
+                    Assert(deck.All(card => card.Definition != null),
+                        "Every monster card id must resolve in CardDatabase.");
+                    Assert(deck.Select(card => card.Uid).Distinct().Count() == deck.Count,
+                        "Duplicate monster cards still need unique runtime card ids.");
+                    int width = deck.Sum(card => card.Definition.SlotSize);
+                    Assert(width <= LoadoutRules.GetBattleCapacity(monster.LoadoutLevel),
+                        $"{monster.DisplayName} must fit its battle row capacity.");
+                }
             }
 
             Console.WriteLine(
                 $"[rng] seeds={seeds.Count} rolls={rollsA.Count} " +
-                $"sample={DeckFingerprint(deckA.CreateEnemyDeck(3, 5000))}");
+                $"sample={DeckFingerprint(deckA.CreateEnemyDeck(earlyMonster, 5000))}");
+        }
+
+        private static void CheckMonsterPhases()
+        {
+            MatchController controller =
+                new MatchController(CreateM3Graph(), 20261128UL);
+            Assert(controller.State.MonsterPhase == MonsterPhase.Early,
+                "A fresh match must start in the early monster phase.");
+
+            controller.State.Players[0].Level = 2;
+            Assert(controller.State.MonsterPhase == MonsterPhase.Early,
+                "The mid phase starts only after every player reaches Lv.2.");
+
+            for (int index = 0; index < controller.State.Players.Count; index++)
+            {
+                controller.State.Players[index].Level = 2;
+            }
+
+            Assert(controller.State.MonsterPhase == MonsterPhase.Mid,
+                "All players at Lv.2 must unlock the mid monster phase.");
+
+            controller.State.Players[3].Level = 4;
+            Assert(controller.State.MonsterPhase == MonsterPhase.Late,
+                "Any player reaching Lv.4 must unlock the late monster phase.");
+
+            MatchController precedence =
+                new MatchController(CreateM3Graph(), 20261130UL);
+            precedence.State.Players[0].Level = 4;
+            Assert(precedence.State.MonsterPhase == MonsterPhase.Late,
+                "Lv.4 must win even if the other players have not reached Lv.2.");
+
+            IReadOnlyList<MonsterDefinition> early =
+                MonsterRoster.For(MonsterPhase.Early);
+            Assert(early.Count == 2,
+                "The supplied early roster must contain 杂鱼A and 杂鱼B.");
+            MonsterDefinition earlyA = early.First(monster =>
+                monster.DisplayName == "杂鱼A");
+            MonsterDefinition earlyB = early.First(monster =>
+                monster.DisplayName == "杂鱼B");
+            Assert(earlyA.MaxHealth == 50,
+                "杂鱼A must have 50 HP.");
+            Assert(earlyA.CardIds.SequenceEqual(
+                    new[] { "crowbar", "concrete_block", "concrete_block" }),
+                "杂鱼A must use 撬棍 / 混凝土块 / 混凝土块.");
+            Assert(earlyB.MaxHealth == 200,
+                "杂鱼B must have 200 HP.");
+            Assert(earlyB.CardIds.SequenceEqual(
+                    new[] { "whetstone", "duct_tape", "special_rubber" }),
+                "杂鱼B must use 磨刀石 / 胶带 / 特种橡胶.");
+
+            IReadOnlyList<MonsterDefinition> mid =
+                MonsterRoster.For(MonsterPhase.Mid);
+            Assert(mid.Count == 1 &&
+                   mid[0].DisplayName == "大杂鱼A" &&
+                   mid[0].MaxHealth == 100,
+                "The supplied mid roster must contain 大杂鱼A at 100 HP.");
+            Assert(mid[0].CardIds.SequenceEqual(
+                    new[] { "car_door", "fireman_axe", "nail_gun" }),
+                "大杂鱼A must use 汽车门板 / 消防斧 / 射钉枪.");
+
+            IReadOnlyList<MonsterDefinition> late =
+                MonsterRoster.For(MonsterPhase.Late);
+            Assert(late.Count == 1 &&
+                   late[0].DisplayName == "超级杂鱼A" &&
+                   late[0].MaxHealth == 300,
+                "The supplied late roster must contain 超级杂鱼A at 300 HP.");
+            Assert(late[0].CardIds.SequenceEqual(
+                    new[] { "titan", "placeholder_4", "torch", "compound" }),
+                "超级杂鱼A must use 泰坦 / 占位符4 / 火炬 / 化合物.");
+
+            Pcg32 first = new Pcg32(8801UL, 17UL);
+            Pcg32 second = new Pcg32(8801UL, 17UL);
+            HashSet<string> picked = new HashSet<string>();
+            for (int index = 0; index < 32; index++)
+            {
+                MonsterDefinition a = MonsterRoster.Pick(MonsterPhase.Early, first);
+                MonsterDefinition b = MonsterRoster.Pick(MonsterPhase.Early, second);
+                Assert(a.Id == b.Id,
+                    "Monster selection must be deterministic for the same seed.");
+                picked.Add(a.Id);
+            }
+
+            Assert(picked.Count > 1,
+                "The early phase must actually randomise between its monsters.");
+
+            MapGraph encounterGraph = MapGraph.Create(
+                new[]
+                {
+                    new MapNode(0, TileType.Home, 0, 1),
+                    new MapNode(1, TileType.Monster, -1, 2),
+                    new MapNode(2, TileType.Home, 1, 3),
+                    new MapNode(3, TileType.Monster, -1, 4),
+                    new MapNode(4, TileType.Home, 2, 5),
+                    new MapNode(5, TileType.Monster, -1, 6),
+                    new MapNode(6, TileType.Home, 3, 7),
+                    new MapNode(7, TileType.Monster, -1, 0)
+                },
+                playerCount: 4);
+            MatchController encounter =
+                new MatchController(encounterGraph, 20261129UL);
+            MatchPlayerState mover = encounter.State.CurrentPlayer;
+            encounter.Submit(new DebugRollCommand(mover.Id, 1));
+            encounter.Submit(new MoveCommand(mover.Id));
+            CombatResolvedEvent combat = encounter.Events.History
+                .OfType<CombatResolvedEvent>()
+                .LastOrDefault();
+            Assert(combat != null,
+                "Moving onto a monster tile must publish a combat result.");
+            MonsterDefinition selected = early.First(monster =>
+                monster.DisplayName == combat.Result.Battle.Right.DisplayName);
+            Assert(combat.Result.Battle.Right.MaxHealth == selected.MaxHealth,
+                "The encountered monster must use its template HP.");
+
+            Console.WriteLine(
+                $"[monster] early={early.Count} mid={mid.Count} late={late.Count} "
+                + $"picked={picked.Count}");
         }
 
         private static void CheckDebugRollRange()
@@ -1574,7 +1701,7 @@ namespace ProjectArtOfAll.Core.Checks
 
         /// <summary>
         /// R-ECO-008：开局不发牌，每个席位只拿 10 碎片。原来那几套起始卡牌
-        /// 已经搬去当怪物配置（`MonsterDecks`），不再是玩家开局手牌。
+        /// 已经搬去当怪物配置（`MonsterRoster`），不再是玩家开局手牌。
         /// </summary>
         private static void CheckOpeningGrant()
         {

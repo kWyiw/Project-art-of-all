@@ -13,8 +13,9 @@ namespace ProjectArtOfAll.Core.Combat
             int level,
             IEnumerable<CardInstance> battleCards,
             int? maxHealth = null,
-            CombatBonus? bonus = null)
-            : this(playerId, level, CardSlotRules.Unpack(battleCards), maxHealth, bonus)
+            CombatBonus? bonus = null,
+            string displayName = null)
+            : this(playerId, level, CardSlotRules.Unpack(battleCards), maxHealth, bonus, displayName)
         {
         }
 
@@ -26,7 +27,8 @@ namespace ProjectArtOfAll.Core.Combat
             int level,
             IEnumerable<CardSlot> battleSlots,
             int? maxHealth = null,
-            CombatBonus? bonus = null)
+            CombatBonus? bonus = null,
+            string displayName = null)
         {
             if (playerId < 0)
             {
@@ -86,6 +88,9 @@ namespace ProjectArtOfAll.Core.Combat
 
             PlayerId = playerId;
             Level = level;
+            DisplayName = string.IsNullOrEmpty(displayName)
+                ? "Player " + playerId.ToString()
+                : displayName;
             MaxHealth = maxHealth ?? defaultHealth;
             Bonus = bonus ?? default(CombatBonus);
             BattleSlots = Array.AsReadOnly(
@@ -98,6 +103,7 @@ namespace ProjectArtOfAll.Core.Combat
 
         public int PlayerId { get; }
         public int Level { get; }
+        public string DisplayName { get; }
 
         /// <summary>本场最大生命值。默认按等级取（100/150/200/250/300），模拟模式可以自己填。</summary>
         public int MaxHealth { get; }

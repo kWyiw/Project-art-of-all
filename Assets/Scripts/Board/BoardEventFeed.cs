@@ -238,19 +238,18 @@ namespace ProjectArtOfAll.Board
         private static string CombatText(CombatResolvedEvent combat)
         {
             CombatResult result = combat.Result;
-            string who = "玩家 " + (combat.AttackerId + 1) + " 对 玩家 " + (combat.DefenderId + 1);
+            string defender = combat.DefenderId >= 1000
+                ? result.Battle.Right.DisplayName
+                : "玩家 " + (combat.DefenderId + 1);
+            string who = "玩家 " + (combat.AttackerId + 1) + " 对 " + defender;
             if (result.IsDraw)
             {
                 return who + " 平局（" + result.EndSecond + " 秒）";
             }
 
             return "玩家 " + (result.WinnerPlayerId + 1) + " 获胜（"
-                + Relative(who, result.WinnerPlayerId) + " · " + result.EndSecond + " 秒）";
-        }
-
-        private static string Relative(string label, int winnerId)
-        {
-            return label.Contains("玩家 " + (winnerId + 1)) ? "主动方赢" : "防守方赢";
+                + (result.WinnerPlayerId == combat.AttackerId ? "主动方赢" : "防守方赢")
+                + " · " + result.EndSecond + " 秒）";
         }
 
         private static string SourceSuffix(string source)

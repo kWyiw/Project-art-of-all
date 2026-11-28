@@ -687,7 +687,7 @@ namespace ProjectArtOfAll.Board
                 " · Lv.",
                 attacker.Level.ToString());
             string rightTitle = defenderPlayer == null
-                ? "怪物"
+                ? combat.Result.Battle.Right.DisplayName
                 : string.Concat(
                     "玩家 ",
                     (defenderPlayer.Id + 1).ToString(),
@@ -717,6 +717,9 @@ namespace ProjectArtOfAll.Board
             CombatResult result = combat.Result;
             bool opponentIsPlayer = match.State.Players
                 .Any(other => other.Id == combat.DefenderId);
+            string defenderLabel = opponentIsPlayer
+                ? string.Concat("玩家 ", (combat.DefenderId + 1).ToString())
+                : combat.Result.Battle.Right.DisplayName;
             string title = result.IsDraw
                 ? "战斗平局"
                 : result.WinnerPlayerId == player.Id
@@ -729,9 +732,7 @@ namespace ProjectArtOfAll.Board
                 ReasonLabel(result.Reason),
                 opponentIsPlayer ? " · 玩家对战" : " · 怪物战",
                 " · 防守方 ",
-                opponentIsPlayer
-                    ? string.Concat("玩家 ", (combat.DefenderId + 1).ToString())
-                    : "怪物");
+                defenderLabel);
 
             int shardDelta = player.Shards - shardsBefore;
             int winDelta = player.Wins - winsBefore;
@@ -744,7 +745,8 @@ namespace ProjectArtOfAll.Board
                 "　护盾 ",
                 result.LeftShield.ToString()));
             body.AppendLine(string.Concat(
-                "对手　　生命 ",
+                defenderLabel,
+                "　生命 ",
                 result.RightHealth.ToString(),
                 "　护盾 ",
                 result.RightShield.ToString()));

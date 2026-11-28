@@ -52,6 +52,25 @@ namespace ProjectArtOfAll.Core.Match
 
         public MatchPlayerState CurrentPlayer => Players[CurrentPlayerIndex];
 
+        /// <summary>
+        /// R-MON-001. Late takes precedence: if one player reaches Lv.4 before every
+        /// player reaches Lv.2, later monster encounters still use the late roster.
+        /// </summary>
+        public MonsterPhase MonsterPhase
+        {
+            get
+            {
+                if (Players.Any(player => player.Level >= 4))
+                {
+                    return MonsterPhase.Late;
+                }
+
+                return Players.All(player => player.Level >= 2)
+                    ? MonsterPhase.Mid
+                    : MonsterPhase.Early;
+            }
+        }
+
         /// <summary>地块上还生效的陷阱（铁丝网 / 路障），按放置顺序。</summary>
         public IReadOnlyList<BoardTrap> Traps => traps;
 

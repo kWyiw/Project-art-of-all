@@ -47,12 +47,16 @@ namespace ProjectArtOfAll.Core.Match
         /// <summary>事件选项里抽牌。</summary>
         private readonly Pcg32 eventRandom;
 
+        /// <summary>怪物地块按当前阶段抽模板。</summary>
+        private readonly Pcg32 monsterRandom;
+
         // 同一个 seed 配不同的 sequence 就是 PCG 的独立子流（sequence 决定 increment）。
         private const ulong DiceStream = 0x4D41544348UL;
         private const ulong ShopStream = DiceStream + 1UL;
         private const ulong RewardStream = DiceStream + 2UL;
         private const ulong CombatStream = DiceStream + 3UL;
         private const ulong EventStream = DiceStream + 4UL;
+        private const ulong MonsterStream = DiceStream + 5UL;
         private readonly GameEventBus eventBus = new GameEventBus();
         private readonly ICardCatalog cardCatalog = CardDatabase.Instance;
         private readonly List<MovementCandidate> currentCandidates =
@@ -77,6 +81,7 @@ namespace ProjectArtOfAll.Core.Match
             rewardRandom = new Pcg32(seed, RewardStream);
             combatRandom = new Pcg32(seed, CombatStream);
             eventRandom = new Pcg32(seed, EventStream);
+            monsterRandom = new Pcg32(seed, MonsterStream);
             State = new MatchState(graph, seed);
             State.CurrentPlayerIndex = ((startingPlayerId % 4) + 4) % 4;
             CreatePlayers();
@@ -154,14 +159,15 @@ namespace ProjectArtOfAll.Core.Match
 
         public ulong ComputeStateHash()
         {
-            // 四种子流的状态都参与哈希：只哈希骰子流时，
-            // 商店/奖励/战斗流被意外改成共享会查不出来。
+            // 各子系统随机流的状态都参与哈希：只哈希骰子流时，
+            // 商店/奖励/战斗/怪物流被意外改成共享会查不出来。
             ulong randomState = StableHash.Begin();
             randomState = StableHash.Add(randomState, random.State);
             randomState = StableHash.Add(randomState, shopRandom.State);
             randomState = StableHash.Add(randomState, rewardRandom.State);
             randomState = StableHash.Add(randomState, combatRandom.State);
             randomState = StableHash.Add(randomState, eventRandom.State);
+            randomState = StableHash.Add(randomState, monsterRandom.State);
             ulong hash = State.ComputeHash(randomState);
 
             foreach (CardDefinition definition in currentRewardChoices)
@@ -1118,18 +1124,23 @@ namespace ProjectArtOfAll.Core.Match
             MapNode arrival,
             bool boss)
         {
+            MonsterDefinition monster = MonsterRoster.Pick(
+                State.MonsterPhase,
+                monsterRandom);
             List<CardInstance> enemyCards = CreateEnemyDeck(
-                player.Level,
+                monster,
                 5000 + arrival.Id * 10);
             int enemyId = 1000 + arrival.Id;
-            int enemyLevel = Math.Min(5, boss ? player.Level + 1 : player.Level);
 
             CombatResult result = RunCombat(
                 player,
                 enemyId,
                 player.Level,
-                enemyLevel,
-                enemyCards);
+                monster.LoadoutLevel,
+                enemyCards,
+                rightPlayer: null,
+                rightMaxHealth: monster.MaxHealth,
+                rightDisplayName: monster.DisplayName);
             Publish(new CombatResolvedEvent(player.Id, enemyId, result));
 
             if (result.WinnerPlayerId == player.Id)
@@ -1172,7 +1183,9 @@ namespace ProjectArtOfAll.Core.Match
             int leftLevel,
             int rightLevel,
             IEnumerable<CardInstance> rightCards,
-            MatchPlayerState rightPlayer = null)
+            MatchPlayerState rightPlayer = null,
+            int? rightMaxHealth = null,
+            string rightDisplayName = null)
         {
             PrepareShredders(left);
             PrepareShredders(rightPlayer);
@@ -1182,18 +1195,23 @@ namespace ProjectArtOfAll.Core.Match
                 leftLevel,
                 EffectiveBattleSlots(left),
                 null,
-                ToCombatBonus(left.CombinedBattleModifier()));
+                ToCombatBonus(left.CombinedBattleModifier()),
+                left.Name);
             CombatantSnapshot rightSnapshot = rightPlayer != null
                 ? new CombatantSnapshot(
                     rightPlayerId,
                     rightLevel,
                     EffectiveBattleSlots(rightPlayer),
                     null,
-                    ToCombatBonus(rightPlayer.CombinedBattleModifier()))
+                    ToCombatBonus(rightPlayer.CombinedBattleModifier()),
+                    rightPlayer.Name)
                 : new CombatantSnapshot(
                     rightPlayerId,
                     rightLevel,
-                    rightCards);
+                    rightCards,
+                    rightMaxHealth,
+                    null,
+                    rightDisplayName);
             BattleSnapshot battle = new BattleSnapshot(
                 leftSnapshot,
                 rightSnapshot);
@@ -1408,13 +1426,22 @@ namespace ProjectArtOfAll.Core.Match
             return new List<CardInstance>();
         }
 
-        internal List<CardInstance> CreateEnemyDeck(int level, int uidStart)
+        internal List<CardInstance> CreateEnemyDeck(
+            MonsterDefinition monster,
+            int uidStart)
         {
-            IReadOnlyList<string> recipe = MonsterDecks.ForLevel(level);
-            List<CardInstance> cards = new List<CardInstance>(recipe.Count);
-            for (int index = 0; index < recipe.Count; index++)
+            if (monster == null)
             {
-                cards.Add(new CardInstance(uidStart + index, cardCatalog.Get(recipe[index])));
+                throw new ArgumentNullException(nameof(monster));
+            }
+
+            List<CardInstance> cards =
+                new List<CardInstance>(monster.CardIds.Count);
+            for (int index = 0; index < monster.CardIds.Count; index++)
+            {
+                cards.Add(new CardInstance(
+                    uidStart + index,
+                    cardCatalog.Get(monster.CardIds[index])));
             }
 
             return cards;

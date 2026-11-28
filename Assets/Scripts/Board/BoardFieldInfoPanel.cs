@@ -98,10 +98,10 @@ namespace ProjectArtOfAll.Board
             if (ruleLabel != null)
             {
                 ruleLabel.text =
+                    "怪物阶段：" + MonsterPhaseLabel(state.MonsterPhase) + "\n" +
                     "每 " + MatchController.GlobalGrantInterval + " 轮：全员各得 " +
                     MatchController.GlobalShardGrant + " 碎片\n" +
-                    "踩到奖励/商店/怪物会当场结算\n" +
-                    "某家升到 4 级后所有怪物变首领";
+                    "任意玩家到 4 级：进入后期并触发 Boss 演化";
             }
 
             if (normaLabel != null)
@@ -137,6 +137,19 @@ namespace ProjectArtOfAll.Board
                             "）");
                     }
                 }
+            }
+        }
+
+        private static string MonsterPhaseLabel(MonsterPhase phase)
+        {
+            switch (phase)
+            {
+                case MonsterPhase.Mid:
+                    return "② 中期";
+                case MonsterPhase.Late:
+                    return "③ 后期";
+                default:
+                    return "① 早期";
             }
         }
     }

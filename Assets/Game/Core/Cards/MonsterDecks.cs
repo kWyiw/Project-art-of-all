@@ -3,7 +3,8 @@ using System.Collections.Generic;
 namespace ProjectArtOfAll.Core.Cards
 {
     /// <summary>
-    /// 怪物 / 敌人用的预设卡组。
+    /// Legacy fixed deck presets kept for old simulations. Board encounters use
+    /// <see cref="ProjectArtOfAll.Core.Match.MonsterRoster"/> instead.
     /// </summary>
     /// <remarks>
     /// 开局不再给玩家发现成的卡牌（见 <c>MatchController.StartingShards</c>），
