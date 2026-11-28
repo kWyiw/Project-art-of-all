@@ -50,6 +50,7 @@ namespace ProjectArtOfAll.UI
         private void Awake()
         {
             EnsureEventSystem();
+            EnsureStartMenuBgm();
             EnsureHoverAudio();
             if (canvasRect == null || modePanel == null)
             {
@@ -57,6 +58,7 @@ namespace ProjectArtOfAll.UI
             }
             else
             {
+                EnsureSnowField();
                 EnsureMenuColumn();
             }
 
@@ -179,6 +181,7 @@ namespace ProjectArtOfAll.UI
             canvasRect = canvasObject.GetComponent<RectTransform>();
 
             BuildBackground();
+            BuildSnowField();
             BuildTitle();
             BuildVersion();
             BuildMenuOptions();
@@ -208,6 +211,52 @@ namespace ProjectArtOfAll.UI
             StartMenuParallaxBackground parallax =
                 background.gameObject.AddComponent<StartMenuParallaxBackground>();
             parallax.Configure(canvasRect, 1.08f, 18f, 0.12f);
+        }
+
+        private StartMenuSnowField BuildSnowField()
+        {
+            RectTransform snowRect = CreateRectTransform("SnowField", canvasRect);
+            Stretch(snowRect);
+            if (snowRect.GetComponent<CanvasRenderer>() == null)
+            {
+                snowRect.gameObject.AddComponent<CanvasRenderer>();
+            }
+
+            StartMenuSnowField snow =
+                snowRect.gameObject.AddComponent<StartMenuSnowField>();
+            snow.Configure(0.12f);
+            snow.raycastTarget = false;
+            snowRect.SetSiblingIndex(Mathf.Min(1, canvasRect.childCount - 1));
+            return snow;
+        }
+
+        private void EnsureSnowField()
+        {
+            if (canvasRect == null)
+            {
+                return;
+            }
+
+            Transform existing = canvasRect.Find("SnowField");
+            if (existing == null)
+            {
+                BuildSnowField();
+                return;
+            }
+
+            StartMenuSnowField snow = existing.GetComponent<StartMenuSnowField>();
+            if (existing.GetComponent<CanvasRenderer>() == null)
+            {
+                existing.gameObject.AddComponent<CanvasRenderer>();
+            }
+
+            if (snow == null)
+            {
+                snow = existing.gameObject.AddComponent<StartMenuSnowField>();
+            }
+
+            snow.Configure(0.12f);
+            existing.SetSiblingIndex(Mathf.Min(1, canvasRect.childCount - 1));
         }
 
         private void BuildTitle()
@@ -682,6 +731,28 @@ namespace ProjectArtOfAll.UI
             }
         }
 
+        private StartMenuBgm EnsureStartMenuBgm()
+        {
+            Transform existing = transform.Find("StartMenuBgm");
+            GameObject bgmObject = existing != null ? existing.gameObject : null;
+            if (bgmObject == null)
+            {
+                bgmObject = new GameObject(
+                    "StartMenuBgm",
+                    typeof(AudioSource));
+                bgmObject.transform.SetParent(transform, false);
+            }
+
+            StartMenuBgm bgm = bgmObject.GetComponent<StartMenuBgm>();
+            if (bgm == null)
+            {
+                bgm = bgmObject.AddComponent<StartMenuBgm>();
+            }
+
+            bgm.EnsureConfigured();
+            return bgm;
+        }
+
         private void EnsureHoverAudio()
         {
             if (hoverAudioSource == null)
@@ -888,6 +959,7 @@ namespace ProjectArtOfAll.UI
             settingsPanel = null;
             combatLab = null;
             cardCodex = null;
+            EnsureStartMenuBgm();
             BuildMenu();
             BindMenu();
             ApplyMenuFont();

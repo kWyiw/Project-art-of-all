@@ -65,6 +65,12 @@ public static class StartMenuPreview
             parallax.Configure(canvasRect, 1.08f, 18f, 0.12f);
         }
 
+        Transform snowTransform = canvasRect.Find("SnowField");
+        StartMenuSnowField snow =
+            snowTransform != null
+                ? snowTransform.GetComponent<StartMenuSnowField>()
+                : null;
+
         StartMenuOptionView[] options =
             menu.GetComponentsInChildren<StartMenuOptionView>(true);
         if (options.Length == 0)
@@ -75,8 +81,28 @@ public static class StartMenuPreview
             return;
         }
 
-        Canvas.ForceUpdateCanvases();
-        RenderToFile(camera, target, "_tmp/startmenu-unity-normal.png");
+        if (snow != null)
+        {
+            RenderSnowTime(canvas, camera, target, snow, 0f,
+                "_tmp/startmenu-snow-0s.png");
+            RenderSnowTime(canvas, camera, target, snow, 2f,
+                "_tmp/startmenu-snow-2s.png");
+            RenderSnowTime(canvas, camera, target, snow, 5f,
+                "_tmp/startmenu-snow-5s.png");
+            RenderSnowTime(canvas, camera, target, snow, 0f,
+                "_tmp/startmenu-unity-normal.png");
+            Debug.Log(
+                $"[startmenu-snow] particles={snow.ParticleCount} "
+                + $"layers={snow.FarParticleCount}/{snow.MidParticleCount}/"
+                + $"{snow.NearParticleCount} wrote 0s/2s/5s previews");
+        }
+        else
+        {
+            Canvas.ForceUpdateCanvases();
+            RenderToFile(camera, target, "_tmp/startmenu-unity-normal.png");
+            Debug.LogWarning("[startmenu-snow] SnowField not found.");
+        }
+
         Canvas.ForceUpdateCanvases();
         if (!ValidateHitArea(canvas, camera, options[0]))
         {
@@ -97,6 +123,19 @@ public static class StartMenuPreview
             $"[startmenu-preview] options={options.Length} wrote "
             + "normal, hover-mid and hover previews");
         Cleanup(menuObject, cameraObject, target);
+    }
+
+    private static void RenderSnowTime(
+        Canvas canvas,
+        Camera camera,
+        RenderTexture target,
+        StartMenuSnowField snow,
+        float time,
+        string path)
+    {
+        snow.SetPreviewTime(time);
+        Canvas.ForceUpdateCanvases();
+        RenderToFile(camera, target, path);
     }
 
     private static bool ValidateHitArea(

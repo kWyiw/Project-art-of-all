@@ -98,6 +98,7 @@ namespace ProjectArtOfAll.Editor
             Transform menuColumn = canvas != null ? canvas.Find("MenuColumn") : null;
             if (canvas == null || menuColumn == null ||
                 canvas.Find("Background") == null ||
+                canvas.Find("SnowField") == null ||
                 canvas.Find("Title") == null ||
                 canvas.Find("Version") == null ||
                 canvas.Find("ModePanel") == null ||
@@ -117,6 +118,54 @@ namespace ProjectArtOfAll.Editor
                 throw new System.InvalidOperationException(
                     "StartMenu background image or parallax component is missing.");
             }
+
+            Transform snowTransform = canvas.Find("SnowField");
+            StartMenuSnowField snow =
+                snowTransform != null
+                    ? snowTransform.GetComponent<StartMenuSnowField>()
+                    : null;
+            if (snow == null ||
+                snow.raycastTarget ||
+                snow.ParticleCount != 350 ||
+                snow.FarParticleCount != 200 ||
+                snow.MidParticleCount != 125 ||
+                snow.NearParticleCount != 25 ||
+                snow.mainTexture == null)
+            {
+                throw new System.InvalidOperationException(
+                    "StartMenu snow field is missing or has the wrong particle setup.");
+            }
+
+            if (snowTransform.GetSiblingIndex() != 1)
+            {
+                throw new System.InvalidOperationException(
+                    "StartMenu snow field must sit directly above the background.");
+            }
+
+            Transform bgmTransform = menu.transform.Find("StartMenuBgm");
+            StartMenuBgm bgm =
+                bgmTransform != null
+                    ? bgmTransform.GetComponent<StartMenuBgm>()
+                    : null;
+            if (bgm == null)
+            {
+                throw new System.InvalidOperationException(
+                    "StartMenu background music component is missing.");
+            }
+
+            bgm.EnsureConfigured();
+            if (bgm.Source == null ||
+                bgm.Clip == null ||
+                !bgm.Source.loop ||
+                !Mathf.Approximately(bgm.Source.spatialBlend, 0f) ||
+                Mathf.Abs(bgm.Clip.length - 55f) > 0.1f)
+            {
+                throw new System.InvalidOperationException(
+                    "StartMenu background music is missing or configured incorrectly.");
+            }
+
+            RequireReference(bgm, "source", "StartMenuBgm");
+            RequireReference(bgm, "clip", "StartMenuBgm");
 
             Text title = canvas.Find("Title").GetComponent<Text>();
             if (title == null || title.text != "占位游戏名" ||
@@ -268,6 +317,14 @@ namespace ProjectArtOfAll.Editor
             {
                 throw new System.InvalidOperationException("Invalid StartMenu scene.");
             }
+
+            Debug.Log(
+                $"[StartMenu] SnowField particles={snow.ParticleCount} "
+                + $"layers={snow.FarParticleCount}/{snow.MidParticleCount}/"
+                + $"{snow.NearParticleCount}");
+            Debug.Log(
+                $"[StartMenu] BGM clip={bgm.Clip.name} "
+                + $"seconds={bgm.Clip.length:0.00} loop={bgm.Source.loop}");
         }
 
         private static void RequireReference(
