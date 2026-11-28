@@ -518,7 +518,7 @@ public sealed class CombatSim
 
 **关键技术点**：
 
-1. **地图不随 HUD 缩放**：地图用独立 `Camera`（正交，`LayerMask` 隔离），HUD 用 `Screen Space - Overlay` Canvas。聚焦自己 = 相机平滑跟随 + 边缘小箭头指向其他玩家。
+1. **地图不随 HUD 缩放**：地图用独立 `Camera`（正交，`LayerMask` 隔离），HUD 用 `Screen Space - Overlay` Canvas。`Map1` / `Map2` 共用 `BoardCameraController`：默认平滑跟随当前行动棋子，滚轮按倍率缩放；缩小到最远时按当前地图的实际地块包围盒动态计算正交尺寸，并把焦点渐变到地图中心，保证整张地图进入画面。右键 / 中键拖动后进入临时手动视角，棋子再次移动或切换行动者时恢复跟随。
 2. **卡牌拖拽**：`IBeginDragHandler/IDragHandler/IEndDragHandler` + 一个"卡牌幽灵层"（DragLayer，最高 Sort Order）。落点校验在 `IEndDragHandler` 里做，非法落点播回弹动画。
 3. **布局缓存**：每次拖拽重算所有槽位的目标位置时用 `LayoutGroup` 会有性能抖动，建议**自己算目标位置 + DOTween 移动**，不用 LayoutGroup。
 4. **大量卡牌实例**：池化 `CardView`（20 个足够），不要 Instantiate/Destroy。

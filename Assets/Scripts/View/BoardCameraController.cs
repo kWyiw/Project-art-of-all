@@ -5,34 +5,50 @@ namespace ProjectArtOfAll.View
     [DisallowMultipleComponent]
     public sealed class BoardCameraController : MonoBehaviour
     {
+        private const float InitialOverviewFraction = 0.2f;
+        private const float OverviewFocusBlendStart = 0.78f;
+
         [Header("References")]
         [SerializeField] private Camera boardCamera;
         [SerializeField] private Transform followTarget;
 
         [Header("Follow")]
         [SerializeField, Min(0.001f)] private float movementThreshold = 0.002f;
-        [SerializeField, Min(0f)] private float followLingerSeconds = 0.35f;
         [SerializeField, Min(0.01f)] private float followSmoothTime = 0.12f;
 
-        [Header("Manual View")]
+        [Header("Zoom")]
         [SerializeField, Min(1f)] private float minimumZoom = 6f;
         [SerializeField, Min(1f)] private float maximumZoom = 30f;
         [SerializeField, Min(0.1f)] private float zoomStep = 1.1f;
+        [SerializeField, Min(1f)] private float fullMapPadding = 1.08f;
+
+        [Header("Manual View")]
         [SerializeField, Min(1f)] private float panLimit = 70f;
 
         private Vector3 previousTargetPosition;
         private Vector3 followVelocity;
         private Vector3 previousMousePosition;
+        private Bounds mapBounds;
         private bool hasTargetPosition;
+        private bool hasMapBounds;
         private bool isDragging;
-        private bool explicitMovement;
-        private float lastMovementTime = float.NegativeInfinity;
+        private bool manualView;
+        private bool viewInitialized;
+        private float fullMapOrthographicSize;
 
         private void Awake()
         {
             if (boardCamera == null)
             {
                 boardCamera = GetComponent<Camera>();
+            }
+
+            minimumZoom = Mathf.Max(0.1f, minimumZoom);
+            zoomStep = Mathf.Max(1.01f, zoomStep);
+            fullMapOrthographicSize = Mathf.Max(minimumZoom, maximumZoom);
+            if (boardCamera != null)
+            {
+                boardCamera.orthographicSize = minimumZoom;
             }
 
             CaptureTargetPosition();
@@ -46,32 +62,32 @@ namespace ProjectArtOfAll.View
             }
 
             DetectTargetMovement();
-            bool shouldFollow =
-                explicitMovement ||
-                Time.unscaledTime - lastMovementTime <= followLingerSeconds;
+            RefreshZoomLimits();
+            HandleZoomInput();
+            HandleManualDrag();
 
-            if (shouldFollow && followTarget != null)
+            if (!manualView && followTarget != null)
             {
                 FollowTarget();
             }
-            else
+            else if (manualView)
             {
-                HandleManualView();
+                ClampCameraPosition();
             }
         }
 
         public void SetFollowTarget(Transform target)
         {
             followTarget = target;
+            manualView = target == null;
             CaptureTargetPosition();
         }
 
         public void SetPlayerMoving(bool moving)
         {
-            explicitMovement = moving;
             if (moving)
             {
-                lastMovementTime = Time.unscaledTime;
+                manualView = false;
                 CaptureTargetPosition();
             }
         }
@@ -83,8 +99,41 @@ namespace ProjectArtOfAll.View
                 followTarget = target;
             }
 
-            lastMovementTime = Time.unscaledTime;
+            manualView = followTarget == null;
             CaptureTargetPosition();
+        }
+
+        /// <summary>
+        /// Binds the visible board's world-space bounds. The controller uses them to derive
+        /// the zoom-out limit, so Map1 and Map2 can have different footprints without
+        /// hard-coded orthographic sizes.
+        /// </summary>
+        public void SetMapBounds(Bounds bounds)
+        {
+            mapBounds = bounds;
+            hasMapBounds = bounds.size.sqrMagnitude > 0.000001f;
+            RefreshZoomLimits();
+
+            if (boardCamera == null || !hasMapBounds)
+            {
+                return;
+            }
+
+            if (!viewInitialized)
+            {
+                boardCamera.orthographicSize = Mathf.Lerp(
+                    minimumZoom,
+                    fullMapOrthographicSize,
+                    InitialOverviewFraction);
+                viewInitialized = true;
+            }
+            else
+            {
+                boardCamera.orthographicSize = Mathf.Clamp(
+                    boardCamera.orthographicSize,
+                    minimumZoom,
+                    fullMapOrthographicSize);
+            }
         }
 
         private void DetectTargetMovement()
@@ -106,7 +155,8 @@ namespace ProjectArtOfAll.View
             delta.y = 0f;
             if (delta.sqrMagnitude >= movementThreshold * movementThreshold)
             {
-                lastMovementTime = Time.unscaledTime;
+                // Moving the piece takes back control from a temporary manual pan.
+                manualView = false;
             }
 
             previousTargetPosition = current;
@@ -114,7 +164,12 @@ namespace ProjectArtOfAll.View
 
         private void FollowTarget()
         {
-            Vector3 targetFocus = followTarget.position;
+            Vector3 targetFocus = ResolveFollowFocus();
+            MoveGroundFocus(targetFocus);
+        }
+
+        private void MoveGroundFocus(Vector3 targetFocus)
+        {
             Vector3 groundFocus = GetGroundFocusPoint();
             Vector3 delta = new Vector3(
                 targetFocus.x - groundFocus.x,
@@ -133,21 +188,51 @@ namespace ProjectArtOfAll.View
             ClampCameraPosition();
         }
 
-        private void HandleManualView()
+        private Vector3 ResolveFollowFocus()
         {
-            float scroll = Input.mouseScrollDelta.y;
-            if (Mathf.Abs(scroll) > 0.01f)
+            Vector3 targetFocus = followTarget.position;
+            if (!hasMapBounds || fullMapOrthographicSize <= minimumZoom + 0.001f)
             {
-                boardCamera.orthographicSize = Mathf.Clamp(
-                    boardCamera.orthographicSize - scroll * zoomStep,
-                    minimumZoom,
-                    maximumZoom);
+                return targetFocus;
             }
 
+            float zoomProgress = Mathf.InverseLerp(
+                minimumZoom,
+                fullMapOrthographicSize,
+                boardCamera.orthographicSize);
+            float overviewWeight = Mathf.SmoothStep(
+                0f,
+                1f,
+                Mathf.InverseLerp(OverviewFocusBlendStart, 1f, zoomProgress));
+            targetFocus.x = Mathf.Lerp(targetFocus.x, mapBounds.center.x, overviewWeight);
+            targetFocus.z = Mathf.Lerp(targetFocus.z, mapBounds.center.z, overviewWeight);
+            return targetFocus;
+        }
+
+        private void HandleZoomInput()
+        {
+            float scroll = Input.mouseScrollDelta.y;
+            if (Mathf.Abs(scroll) <= 0.01f)
+            {
+                return;
+            }
+
+            // Wheel up magnifies (smaller orthographic size); wheel down zooms out.
+            float requestedSize = boardCamera.orthographicSize *
+                                  Mathf.Pow(zoomStep, -scroll);
+            boardCamera.orthographicSize = Mathf.Clamp(
+                requestedSize,
+                minimumZoom,
+                fullMapOrthographicSize);
+        }
+
+        private void HandleManualDrag()
+        {
             bool dragHeld = Input.GetMouseButton(2) || Input.GetMouseButton(1);
             if (dragHeld && !isDragging)
             {
                 isDragging = true;
+                manualView = true;
                 previousMousePosition = Input.mousePosition;
                 return;
             }
@@ -155,6 +240,11 @@ namespace ProjectArtOfAll.View
             if (!dragHeld)
             {
                 isDragging = false;
+                return;
+            }
+
+            if (!manualView)
+            {
                 return;
             }
 
@@ -175,6 +265,67 @@ namespace ProjectArtOfAll.View
                                forward * (mouseDelta.y * worldPerPixel);
             boardCamera.transform.position = position;
             ClampCameraPosition();
+        }
+
+        private void RefreshZoomLimits()
+        {
+            if (boardCamera == null)
+            {
+                return;
+            }
+
+            if (!hasMapBounds)
+            {
+                fullMapOrthographicSize = Mathf.Max(minimumZoom, maximumZoom);
+            }
+            else
+            {
+                fullMapOrthographicSize = CalculateFullMapOrthographicSize();
+            }
+
+            boardCamera.orthographicSize = Mathf.Clamp(
+                boardCamera.orthographicSize,
+                minimumZoom,
+                fullMapOrthographicSize);
+        }
+
+        private float CalculateFullMapOrthographicSize()
+        {
+            Transform cameraTransform = boardCamera.transform;
+            Vector3 right = cameraTransform.right;
+            Vector3 up = cameraTransform.up;
+            Vector3 center = mapBounds.center;
+            float maximumRight = 0f;
+            float maximumUp = 0f;
+
+            Vector3 min = mapBounds.min;
+            Vector3 max = mapBounds.max;
+            for (int x = 0; x < 2; x++)
+            {
+                for (int y = 0; y < 2; y++)
+                {
+                    for (int z = 0; z < 2; z++)
+                    {
+                        Vector3 corner = new Vector3(
+                            x == 0 ? min.x : max.x,
+                            y == 0 ? min.y : max.y,
+                            z == 0 ? min.z : max.z);
+                        Vector3 offset = corner - center;
+                        maximumRight = Mathf.Max(
+                            maximumRight,
+                            Mathf.Abs(Vector3.Dot(offset, right)));
+                        maximumUp = Mathf.Max(
+                            maximumUp,
+                            Mathf.Abs(Vector3.Dot(offset, up)));
+                    }
+                }
+            }
+
+            float aspect = Mathf.Max(0.1f, boardCamera.aspect);
+            float fittedHalfHeight = Mathf.Max(maximumUp, maximumRight / aspect);
+            return Mathf.Max(
+                minimumZoom,
+                fittedHalfHeight * Mathf.Max(1f, fullMapPadding));
         }
 
         private void CaptureTargetPosition()

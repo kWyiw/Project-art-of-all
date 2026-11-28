@@ -145,6 +145,7 @@ namespace ProjectArtOfAll.Board
             cameraController = Camera.main != null
                 ? Camera.main.GetComponent<BoardCameraController>()
                 : null;
+            ConfigureCameraMap();
             humanSeat = GameSession.HumanSeat;
             BuildCpuBrains();
             humanPlayerId = humanSeat >= 0
@@ -155,6 +156,43 @@ namespace ProjectArtOfAll.Board
             ActivateCurrentPlayer();
             UpdateHudStatus();
             hud?.ShowOpeningHints();
+        }
+
+        private void ConfigureCameraMap()
+        {
+            if (cameraController == null || tilesByNode.Count == 0)
+            {
+                return;
+            }
+
+            bool hasBounds = false;
+            Bounds bounds = default;
+            foreach (BoardTileView tile in tilesByNode.Values)
+            {
+                if (tile == null)
+                {
+                    continue;
+                }
+
+                Renderer renderer = tile.GetComponent<Renderer>();
+                Bounds tileBounds = renderer != null
+                    ? renderer.bounds
+                    : new Bounds(tile.transform.position, Vector3.one);
+                if (!hasBounds)
+                {
+                    bounds = tileBounds;
+                    hasBounds = true;
+                }
+                else
+                {
+                    bounds.Encapsulate(tileBounds);
+                }
+            }
+
+            if (hasBounds)
+            {
+                cameraController.SetMapBounds(bounds);
+            }
         }
 
         /// <summary>设置：镜头是否跟随当前行动的棋子（GameSettings.CameraFollow）。</summary>
