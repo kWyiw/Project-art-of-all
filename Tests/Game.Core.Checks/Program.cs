@@ -941,6 +941,8 @@ namespace ProjectArtOfAll.Core.Checks
             MatchController encounter =
                 new MatchController(encounterGraph, 20261129UL);
             MatchPlayerState mover = encounter.State.CurrentPlayer;
+            Assert(mover.MeetsCurrentNorma(),
+                "The monster gate probe must begin with an already-satisfied Norma.");
             encounter.Submit(new DebugRollCommand(mover.Id, 1));
             encounter.Submit(new MoveCommand(mover.Id));
             CombatResolvedEvent combat = encounter.Events.History
@@ -952,6 +954,8 @@ namespace ProjectArtOfAll.Core.Checks
                 monster.DisplayName == combat.Result.Battle.Right.DisplayName);
             Assert(combat.Result.Battle.Right.MaxHealth == selected.MaxHealth,
                 "The encountered monster must use its template HP.");
+            Assert(mover.Level == 1,
+                "Satisfying Norma after a monster fight must not upgrade away from Home.");
 
             Console.WriteLine(
                 $"[monster] early={early.Count} mid={mid.Count} late={late.Count} "
@@ -1073,6 +1077,30 @@ namespace ProjectArtOfAll.Core.Checks
             Assert(
                 controller.State.Players.Any(player => player.Level > 1),
                 "Reward income and Home Norma resolution must allow progression.");
+
+            MapGraph homeGateGraph = MapGraph.Create(
+                new[]
+                {
+                    new MapNode(0, TileType.Home, 0, 1),
+                    new MapNode(1, TileType.Home, 1, 2),
+                    new MapNode(2, TileType.Monster, -1, 3),
+                    new MapNode(3, TileType.Home, 2, 4),
+                    new MapNode(4, TileType.Neutral, -1, 5),
+                    new MapNode(5, TileType.Home, 3, 6),
+                    new MapNode(6, TileType.Neutral, -1, 7),
+                    new MapNode(7, TileType.Neutral, -1, 0)
+                },
+                playerCount: 4);
+            MatchController homeGate =
+                new MatchController(homeGateGraph, 45UL);
+            MatchPlayerState homeMover = homeGate.State.CurrentPlayer;
+            Assert(homeMover.MeetsCurrentNorma(),
+                "The Home upgrade probe must begin with a satisfied Norma.");
+            homeGate.Submit(new DebugRollCommand(homeMover.Id, 1));
+            homeGate.Submit(new MoveCommand(homeMover.Id));
+            Assert(homeMover.Level == 2 &&
+                   homeGate.State.Phase == MatchPhase.AwaitNorma,
+                "Stopping on HomeTile with a satisfied Norma must upgrade and request the next Norma.");
         }
 
         /// <summary>

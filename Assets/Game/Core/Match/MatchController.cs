@@ -752,11 +752,9 @@ namespace ProjectArtOfAll.Core.Match
                         player,
                         arrival,
                         boss: State.IsBossNode(arrival.Id));
-                    TryUpgrade(player);
                     break;
                 case TileType.Boss:
                     ResolveMonster(player, arrival, boss: true);
-                    TryUpgrade(player);
                     break;
                 case TileType.Shop:
                     BeginShop(player);
