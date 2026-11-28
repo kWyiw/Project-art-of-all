@@ -2822,6 +2822,76 @@ namespace ProjectArtOfAll.Core.Checks
                 fight.AttackerId == attacker.Id && fight.DefenderId == 3,
                 "The landing fight must be against the player standing on that tile.");
 
+            MatchController rewards = FindRollingController(graph, 3);
+            Assert(rewards != null, "Some seed must roll a 3 for the PvP reward probe.");
+            MatchPlayerState rewardAttacker = rewards.State.CurrentPlayer;
+            MatchPlayerState rewardDefender = rewards.State.Players[3];
+            SeedLoadout(
+                rewardAttacker,
+                12000,
+                "crowbar",
+                "crowbar",
+                "crowbar",
+                "crowbar");
+            rewardAttacker.Wins = 3;
+            rewardDefender.Wins = 3;
+            int attackerShards = rewardAttacker.Shards;
+            int defenderShards = rewardDefender.Shards;
+            rewards.Submit(new MoveCommand(rewardAttacker.Id, 3));
+
+            CombatResolvedEvent rewardFight = rewards.Events.History
+                .OfType<CombatResolvedEvent>()
+                .Last();
+            Assert(
+                rewardFight.Result.WinnerPlayerId == rewardAttacker.Id,
+                "The seeded PvP reward probe must have a deterministic winner.");
+            Assert(
+                rewardAttacker.Shards == attackerShards &&
+                rewardDefender.Shards == defenderShards,
+                "PvP victory must not transfer Shards.");
+            Assert(
+                rewardAttacker.Wins == 4 && rewardDefender.Wins == 2,
+                "PvP victory must add 1 to the winner and subtract 1 from the loser.");
+            WinsChangedEvent[] winChanges = rewards.Events.History
+                .OfType<WinsChangedEvent>()
+                .ToArray();
+            Assert(
+                winChanges.Any(change =>
+                    change.PlayerId == rewardAttacker.Id && change.Delta == 1) &&
+                winChanges.Any(change =>
+                    change.PlayerId == rewardDefender.Id && change.Delta == -1),
+                "PvP must publish +1 and -1 WinsChangedEvents.");
+
+            MatchController winFloor = FindRollingController(graph, 3);
+            MatchPlayerState floorWinner = winFloor.State.CurrentPlayer;
+            MatchPlayerState floorLoser = winFloor.State.Players[3];
+            SeedLoadout(
+                floorWinner,
+                12100,
+                "crowbar",
+                "crowbar",
+                "crowbar",
+                "crowbar");
+            floorWinner.Wins = 0;
+            floorLoser.Wins = 0;
+            winFloor.Submit(new MoveCommand(floorWinner.Id, 3));
+            Assert(
+                winFloor.Events.History
+                    .OfType<CombatResolvedEvent>()
+                    .Last()
+                    .Result
+                    .WinnerPlayerId == floorWinner.Id,
+                "The PvP win-floor probe needs the seeded attacker to win.");
+            Assert(
+                floorWinner.Wins == 1 && floorLoser.Wins == 0,
+                "PvP loss must not reduce Wins below zero.");
+            Assert(
+                !winFloor.Events.History
+                    .OfType<WinsChangedEvent>()
+                    .Any(change =>
+                        change.PlayerId == floorLoser.Id && change.Delta < 0),
+                "A zero-Win loser must not emit a fake -1 WinsChangedEvent.");
+
             // 正好落在别人格子上时也能「避开」：不结算战斗，两人同格（R-MOVE-009）。
             MatchController dodge = FindRollingController(graph, 3);
             Assert(dodge != null, "Some seed must roll a 3 for the avoid probe.");
@@ -2846,7 +2916,8 @@ namespace ProjectArtOfAll.Core.Checks
                     + dodge.State.Phase.ToString() + ".");
 
             Console.WriteLine(
-                "[passthrough] walk-through stays open, landing on 3 fights player 4, avoid sticks");
+                "[pvp] shards=unchanged winner=+1 loser=-1 floor=0; "
+                + "passthrough and avoid sticks");
         }
 
         /// <summary>

@@ -314,6 +314,7 @@ namespace ProjectArtOfAll.Core.Match
                 else if (gameEvent.Result.WinnerPlayerId == gameEvent.DefenderId)
                 {
                     defender.PlayerBattlesWon++;
+                    defender.StealsWon++;
                 }
             }
         }

@@ -1136,11 +1136,8 @@ namespace ProjectArtOfAll.Core.Match
                 ? attacker
                 : defender;
             MatchPlayerState loser = winner == attacker ? defender : attacker;
-            int stolen = Math.Min(15, loser.Shards / 2);
-
-            SetShards(loser, loser.Shards - stolen);
-            AddShards(winner, stolen);
-            AddWins(winner, 2);
+            AddWins(winner, 1);
+            AddWins(loser, -1);
         }
 
         private void ResolveMonster(
@@ -1395,8 +1392,13 @@ namespace ProjectArtOfAll.Core.Match
                 return;
             }
 
+            int oldValue = player.Wins;
             player.Wins = Math.Max(0, player.Wins + amount);
-            Publish(new WinsChangedEvent(player.Id, amount, player.Wins));
+            int delta = player.Wins - oldValue;
+            if (delta != 0)
+            {
+                Publish(new WinsChangedEvent(player.Id, delta, player.Wins));
+            }
         }
 
         /// <summary>

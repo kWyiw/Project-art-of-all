@@ -43,7 +43,7 @@
 - `棋盘层双栏卡槽UI与拖拽交互规格.md`：卡槽与拖拽的交互规格
 - `战斗与卡牌系统规格书.md`：Schema、事件总线、验收步骤
 
-本文只谈**架构与排期**。任何数值（商店价格、抢夺上限、升级曲线、卡槽宽度）都不在这份文档里再写一遍——写两遍就会变成两份互相打架的数字，那正是这类文档失效的最快方式。编码时直接引用规则编号（`R-*` / `BT-*` / `CJ-*` / `UI-*`）。
+本文只谈**架构与排期**。任何数值（商店价格、战利品、升级曲线、卡槽宽度）都不在这份文档里再写一遍——写两遍就会变成两份互相打架的数字，那正是这类文档失效的最快方式。编码时直接引用规则编号（`R-*` / `BT-*` / `CJ-*` / `UI-*`）。
 
 ---
 
@@ -81,7 +81,7 @@
 - **CPU 也有自己的种子**：`CpuBrain` 用 `MatchSeed.Derive(activeSeed, 0x43505500 + 玩家号)`，不再与对局随机纠缠。
 - **怪物按阶段随机抽模板**：`MatchState.MonsterPhase` 按全场等级判定早期 / 中期 / 晚期，`MonsterRoster` 保存模板名、生命、战斗栏与容量等级，`ResolveMonster` 从独立的 `MonsterStream` 等概率抽取。怪物生命直接覆盖战斗快照的默认等级生命；名字也进入战斗快照，回放和结算页显示实际抽中的怪物。
 - **开局不发牌**：`MatchController.CreateStarterDeck()` 返回空表、`CreatePlayers` 给每人 `StartingShards = 10`；原来的固定起始套只留在 `MonsterDecks` 作旧模拟兼容，棋盘怪物已改用阶段化 `MonsterRoster`。回归测试要验栏位、相邻、战斗数值时，用 `SeedLoadout(player, uid, ids...)` 往背包里塞牌，不再依赖开局手牌。
-- **回归**：`Tests/Game.Core.Checks` 的 `CheckRandomness()` / `CheckMonsterPhases()` 断言 512 个根种子互不相同、子流派生确定、同种子复现骰子与怪物抽取、阶段边界正确、每套怪物牌都能解析且装得下，并用真实怪物遭遇验证模板生命进入战斗快照；`Tools/MatchSim --brains` 500 局 `finished 500/500 stalls 0`、`median 10` 圈。
+- **回归**：`Tests/Game.Core.Checks` 的 `CheckRandomness()` / `CheckMonsterPhases()` 断言 512 个根种子互不相同、子流派生确定、同种子复现骰子与怪物抽取、阶段边界正确、每套怪物牌都能解析且装得下，并用真实怪物遭遇验证模板生命进入战斗快照；日常 `Tools/MatchSim --brains` 跑 100 局，发布前平衡审计再扩到 500 局。
 
 ### 关于"用不用 Steamworks / 联机后端"
 
@@ -623,6 +623,7 @@ DiceBazaar/
 - **移动规则（`MapGraph.LegalNextNodes`，R-MAP-002）**：走廊（只有前后两格）只有一个前进方向、不能折返；岔路口**只允许「直行」或「右拐」**，两者都在时由玩家选（R-MOVE-004）；**没有直行时直接右拐，不询问**；连右拐都没有（地图上出现只能左拐的形状）时退回唯一可行方向，避免卡死。方向由 `(row, column)` 网格位移判定：`right = (dc, -dr)`。**开局特例**：每位玩家在自家 Home 上的**第一次移动**不给选择，强制走该格的逆时针邻格（`MapGraph.CounterClockwiseNeighbour`，按棋盘中心的极角取最小正角差）——`MatchController.ForcedFirstStepNodeId()` 只在 `!HasMoved && CurrentNode == HomeNode` 时返回该格，`MovementSolver.FindStopCandidates/FindPaths` 收到它后第一步不再分叉，`MatchController.LegalNextNodes` 对 UI/CPU 也只暴露这一条边，所以不会弹选择框；`CheckFirstMoveFromHome` 已断言「开局第一步只能走逆时针」并验证真实移动事件落点。`Tests/Game.Core.Checks` 的 `CheckSceneMapTeleport` 已按这条口径断言「每个岔口的可选项都必须是直行或右拐」。注意：这是一条**单向交通**规则，环形地图里必须左拐才能进的支路会变成永远走不到的格（经典广场 60/68、甜点回廊 26/36 每个家如此），按用户决定先不动地图。
 - 设置（帧率上限、卡槽缩放、镜头跟随、音量）与局内暂停菜单，`PlayerPrefs` 持久化。
 - **开发者模式**：`GameSettings.DeveloperMode` 持久化在设置面板。开启后棋盘显示 1–12 步数调试按钮、测试信息开关和「图鉴」入口；游戏内图鉴卡位出现「获得」按钮，通过 `GrantCardCommand` 发给当前真人玩家，保留正常容量校验、融合升级与事件流，不推进回合。旧场景的设置面板和棋盘入口均运行时自愈创建。
+- **PvP 只结算胜场**：`MatchController.ResolvePlayerEncounter` 不再转移碎片；胜者 `Wins +1`，败者 `Wins -1` 且下限为 0，平局双方不变。`AddWins` 发布实际变化量，避免 0 胜场时发出虚假的 `-1` 事件。回归探针覆盖 3→4 / 3→2 与 0 下限。
 - **验收**：一个没看过文档的人能自己玩完一整局；且**能只靠拖拽把一张牌从背包换到战斗栏、拖到区外自动回弹、并看到相邻加成从"未生效"变"生效"**（出售是终态，**没有撤销**，见 `棋盘层双栏卡槽UI与拖拽交互规格.md` §4）。
 
 ### M5 · CPU 对手与平衡（4 周）："能一个人玩了"
@@ -630,7 +631,7 @@ DiceBazaar/
 - 决策链：装备规划 → 落点评分（自家 home 升级 / 怪物风险收益 / 奖励 / 商店 / Warp 负面 / 埋伏玩家的 6 次 `CombatSimulation` 采样期望）→ Norma 路线按剩余阈值与收入估算。
 - 四人格按座位确定性分配（激进 / 理财 / 守护 / 狩猎）；难度只缩放同一套权重的噪声，设置页可切（`GameSettings.CpuDifficultyLevel`）。
 - 思考延迟 0.8~1.5 秒随机（`CpuThinkMinSeconds` / `CpuThinkMaxSeconds`），决策本身在 300ms 内。
-- 验收数据（`dotnet run --project Tools/MatchSim -c Release -- --brains --matches 500 --seed 20261101`）：500/500 自然结束、0 卡死，中位 **10 圈**（6~17），平均 40.4 回合，每局装配 3.2 次、商店成交 6.2 次；座位胜率 28.2% / 26.6% / 29.4% / 15.8%，路线 碎片 5.0% / 胜场 95.0%。
+- 验收数据（`dotnet run --project Tools/MatchSim -c Release -- --brains --matches 100 --seed 20261031`）：100/100 自然结束、0 卡死，中位 **23 圈**（14~55），平均 23.9 圈 / 93.7 回合，每局装配 4.6 次、商店成交 19.3 次；座位胜率 42.0% / 21.0% / 18.0% / 19.0%，路线 碎片 41.9% / 胜场 58.1%。
 - 未达成：普通难度对新手 ~50%、困难 ~75% 需要真人数据；碎片路线几乎必输（5%），是数值口径问题，等 BalanceSim 报告与真人试玩后再调。
 - BalanceSim 出第一份平衡报告，按报告调数值（这 4 周里至少 1 周纯调数值）。
 - **验收**：3 个 CPU 在同一局里表现出可区分的行为差异；AI 普通难度对新手胜率 ~50%，困难 ~75%；500 局全部自然结束、中位圈数 8~10。**此时可以开始做 Demo 给朋友玩。**

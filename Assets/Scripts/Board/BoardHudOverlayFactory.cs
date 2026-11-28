@@ -486,7 +486,7 @@ namespace ProjectArtOfAll.Board
             Text stakes = CreateText(
                 panel,
                 "Stakes",
-                "败者失去最多 15 碎片 · 胜者获得这些碎片与 2 胜场",
+                "玩家战斗不改变碎片 · 胜者 +1 胜场 · 败者 -1 胜场（最低 0）",
                 font,
                 17,
                 FontStyle.Normal,
