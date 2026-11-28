@@ -6,8 +6,8 @@ using UnityEngine.UI;
 namespace ProjectArtOfAll.UI
 {
     /// <summary>
-    /// 主页面：标题 + 开始游戏 / 设置 / 退出游戏，以及开始游戏下面的模式选择（正常模式 / 无CPU测试模式）。
-    /// 整个页面在运行时用代码搭出来（场景里只放这一个组件），这样改版式不用碰 .unity 文件。
+    /// 主页面：左上标题 + 数据驱动的左侧菜单列，以及开始游戏下面的模式选择。
+    /// 菜单项由 <see cref="CreateMenuEntries"/> 统一创建，新增选项会自动复用布局、入场和悬停动画。
     /// </summary>
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(-100)]
@@ -15,32 +15,52 @@ namespace ProjectArtOfAll.UI
     {
         private const float ReferenceWidth = 1920f;
         private const float ReferenceHeight = 1080f;
+        private const float MenuLeft = 96f;
+        private const float TitleTop = 96f;
+        private const float MenuTop = 292f;
+        private const float ItemHeight = 80f;
+        private const float ItemPitch = 96f;
+        private const float ItemTextLeft = 28f;
+        private const float HoverInset = 4f;
+        private const float HoverLineWidth = 3f;
+        private const float HoverSlant = 16f;
+        private const float HoverRightBlankRatio = 0.28f;
+        private const float HoverRightBlankExtra = 24f;
+        private const int MenuTextSize = 38;
+        private const int TitleTextSize = 64;
 
-        private static readonly Color BackgroundColor = new Color(0.028f, 0.038f, 0.048f, 1f);
         private static readonly Color PanelColor = new Color(0.055f, 0.075f, 0.088f, 0.96f);
         private static readonly Color Brass = new Color(0.90f, 0.70f, 0.32f, 1f);
         private static readonly Color TextColor = new Color(0.93f, 0.92f, 0.87f, 1f);
         private static readonly Color MutedText = new Color(0.58f, 0.62f, 0.62f, 1f);
+        private static readonly Color VersionColor = new Color(0.58f, 0.58f, 0.58f, 0.92f);
 
         private static Font menuFont;
 
         [SerializeField] private RectTransform canvasRect;
+        [SerializeField] private RectTransform menuColumn;
         [SerializeField] private GameSettingsPanel settingsPanel;
         [SerializeField] private GameObject modePanel;
         [SerializeField] private CombatLabView combatLab;
         [SerializeField] private CardCodexView cardCodex;
+        [SerializeField] private AudioSource hoverAudioSource;
+
+        private AudioClip hoverClip;
 
         private void Awake()
         {
             EnsureEventSystem();
+            EnsureHoverAudio();
             if (canvasRect == null || modePanel == null)
             {
                 BuildMenu();
             }
             else
             {
-                BindMenu();
+                EnsureMenuColumn();
             }
+
+            BindMenu();
 
             if (settingsPanel != null)
             {
@@ -50,17 +70,39 @@ namespace ProjectArtOfAll.UI
             ApplyMenuFont();
         }
 
+        private void Start()
+        {
+            if (menuColumn == null)
+            {
+                return;
+            }
+
+            int introIndex = 0;
+            for (int index = 0; index < menuColumn.childCount; index++)
+            {
+                StartMenuOptionView option =
+                    menuColumn.GetChild(index).GetComponent<StartMenuOptionView>();
+                if (option == null)
+                {
+                    continue;
+                }
+
+                option.PlayIntro(introIndex);
+                introIndex++;
+            }
+        }
+
         private void BindMenu()
         {
-            BindButton("MenuButton_开始游戏", ShowModePanel);
-            BindButton("MenuButton_设置", OpenSettings);
-            BindButton("MenuButton_卡牌图鉴", OpenCodex);
-            BindButton("MenuButton_战斗模拟", OpenCombatLab);
-            BindButton("MenuButton_退出游戏", QuitGame);
+            MenuEntry[] entries = CreateMenuEntries();
+            for (int index = 0; index < entries.Length; index++)
+            {
+                BindButton("MenuButton_" + entries[index].Label, entries[index].Action);
+            }
+
             BindButton("Mode_正常模式", () => GameSession.ChooseMode(GameMode.Normal));
             BindButton("Mode_无CPU测试模式", () => GameSession.ChooseMode(GameMode.NoCpuTest));
             BindButton("Button_返回", HideModePanel);
-            EnsureCodexMenuButton();
         }
 
         private void BindButton(string objectName, System.Action action)
@@ -78,20 +120,42 @@ namespace ProjectArtOfAll.UI
         private Button FindButton(string objectName)
         {
             Button[] buttons = GetComponentsInChildren<Button>(true);
+            Button inactiveMatch = null;
             for (int index = 0; index < buttons.Length; index++)
             {
                 if (buttons[index].gameObject.name == objectName)
                 {
-                    return buttons[index];
+                    if (buttons[index].gameObject.activeInHierarchy)
+                    {
+                        return buttons[index];
+                    }
+
+                    if (inactiveMatch == null)
+                    {
+                        inactiveMatch = buttons[index];
+                    }
                 }
             }
 
-            return null;
+            return inactiveMatch;
+        }
+
+        private MenuEntry[] CreateMenuEntries()
+        {
+            return new[]
+            {
+                new MenuEntry("开始游戏", ShowModePanel),
+                new MenuEntry("卡牌图鉴", OpenCodex),
+                new MenuEntry("设置", OpenSettings),
+                new MenuEntry("战斗模拟", OpenCombatLab),
+                new MenuEntry("退出游戏", QuitGame)
+            };
         }
 
         private void BuildMenu()
         {
             EnsureEventSystem();
+            EnsureHoverAudio();
 
             GameObject canvasObject = new GameObject(
                 "LeftMenuCanvas",
@@ -116,8 +180,8 @@ namespace ProjectArtOfAll.UI
 
             BuildBackground();
             BuildTitle();
-            BuildButtons();
-            BuildFooter();
+            BuildVersion();
+            BuildMenuOptions();
             modePanel = BuildModePanel();
             modePanel.SetActive(false);
         }
@@ -127,128 +191,286 @@ namespace ProjectArtOfAll.UI
         private void BuildBackground()
         {
             RectTransform background = CreateRectTransform("Background", canvasRect);
-            Stretch(background);
+            background.anchorMin = new Vector2(0.5f, 0.5f);
+            background.anchorMax = new Vector2(0.5f, 0.5f);
+            background.pivot = new Vector2(0.5f, 0.5f);
+            background.anchoredPosition = Vector2.zero;
+            background.sizeDelta = new Vector2(ReferenceWidth, ReferenceHeight);
 
             Image image = background.gameObject.AddComponent<Image>();
-            image.color = BackgroundColor;
+            image.sprite = Resources.Load<Sprite>("StartMenu/StartMenuBackground");
+            image.color = image.sprite != null
+                ? Color.white
+                : new Color(0.028f, 0.038f, 0.048f, 1f);
+            image.preserveAspect = false;
             image.raycastTarget = false;
 
-            // 上下两条黄铜细线当作版式骨架。
-            AddBar(canvasRect, "TopRule",
-                new Vector2(0f, 1f), new Vector2(1f, 1f),
-                new Vector2(0f, -96f), new Vector2(0f, -94f),
-                new Color(0.86f, 0.62f, 0.20f, 0.55f));
-
-            AddBar(canvasRect, "BottomRule",
-                new Vector2(0f, 0f), new Vector2(1f, 0f),
-                new Vector2(0f, 84f), new Vector2(0f, 86f),
-                new Color(0.86f, 0.62f, 0.20f, 0.35f));
-
-            // 右侧装饰框：给标题与按钮让出左侧呼吸空间。
-            RectTransform frame = CreateRectTransform("TitleFrame", canvasRect);
-            frame.anchorMin = new Vector2(0f, 0.5f);
-            frame.anchorMax = new Vector2(0f, 0.5f);
-            frame.pivot = new Vector2(0f, 0.5f);
-            frame.anchoredPosition = new Vector2(96f, 210f);
-            frame.sizeDelta = new Vector2(8f, 220f);
-
-            Image frameImage = frame.gameObject.AddComponent<Image>();
-            frameImage.color = new Color(0.86f, 0.62f, 0.20f, 0.85f);
-            frameImage.raycastTarget = false;
+            StartMenuParallaxBackground parallax =
+                background.gameObject.AddComponent<StartMenuParallaxBackground>();
+            parallax.Configure(canvasRect, 1.08f, 18f, 0.12f);
         }
 
         private void BuildTitle()
         {
             Text title = CreateText(
-                canvasRect, "Title", "Project Art of All",
-                new Vector2(140f, -520f), new Vector2(1000f, 96f),
-                64, FontStyle.Bold, TextAnchor.MiddleLeft);
-            title.color = Brass;
+                canvasRect, "Title", "占位游戏名",
+                new Vector2(MenuLeft, -TitleTop), new Vector2(1200f, 82f),
+                TitleTextSize, FontStyle.Bold, TextAnchor.MiddleLeft);
+            title.color = Color.white;
+            AddTextEffect(title, Color.white, Color.white, 4f);
+        }
 
-            Text subtitle = CreateText(
-                canvasRect, "Subtitle", "骰子 · 卡牌 · 大富翁 · 四人派对",
-                new Vector2(144f, -612f), new Vector2(1000f, 40f),
-                24, FontStyle.Normal, TextAnchor.MiddleLeft);
-            subtitle.color = TextColor;
-
-            Text hint = CreateText(
-                canvasRect, "Hint", "阶段 A · 1 名真人 + 3 名 CPU 的完整一局",
-                new Vector2(144f, -658f), new Vector2(1000f, 32f),
+        private void BuildVersion()
+        {
+            Text version = CreateText(
+                canvasRect, "Version", "v0.4",
+                Vector2.zero, new Vector2(200f, 24f),
                 18, FontStyle.Normal, TextAnchor.MiddleLeft);
-            hint.color = MutedText;
+            RectTransform rect = version.rectTransform;
+            rect.anchorMin = new Vector2(0f, 0f);
+            rect.anchorMax = new Vector2(0f, 0f);
+            rect.pivot = new Vector2(0f, 0f);
+            rect.anchoredPosition = new Vector2(MenuLeft, 56f);
+            version.color = VersionColor;
         }
 
-        // ---------------------------------------------------------------- 按钮
+        // ---------------------------------------------------------------- 菜单
 
-        private void BuildButtons()
+        private void EnsureMenuColumn()
         {
-            CreateMenuButton("01", "开始游戏", 400f, ShowModePanel);
-            CreateMenuButton("02", "设置", 492f, OpenSettings);
-            CreateMenuButton("03", "卡牌图鉴", 584f, OpenCodex);
-            CreateMenuButton("04", "战斗模拟", 676f, OpenCombatLab);
-            CreateMenuButton("05", "退出游戏", 768f, QuitGame);
+            MenuEntry[] entries = CreateMenuEntries();
+            if (menuColumn == null && canvasRect != null)
+            {
+                menuColumn = canvasRect.Find("MenuColumn") as RectTransform;
+            }
+
+            if (menuColumn != null && MenuColumnMatches(menuColumn, entries))
+            {
+                return;
+            }
+
+            if (menuColumn != null)
+            {
+                menuColumn.gameObject.SetActive(false);
+                Destroy(menuColumn.gameObject);
+                menuColumn = null;
+            }
+
+            BuildMenuColumn(entries);
         }
 
-        private void CreateMenuButton(string index, string label, float top, System.Action onClick)
+        private static bool MenuColumnMatches(
+            RectTransform column,
+            MenuEntry[] entries)
         {
-            const float width = 420f;
-            const float height = 72f;
+            StartMenuOptionView[] options =
+                column.GetComponentsInChildren<StartMenuOptionView>(true);
+            if (options.Length != entries.Length)
+            {
+                return false;
+            }
 
-            RectTransform buttonRect = CreateRectTransform("MenuButton_" + label, canvasRect);
-            buttonRect.anchorMin = new Vector2(0f, 1f);
-            buttonRect.anchorMax = new Vector2(0f, 1f);
-            buttonRect.pivot = new Vector2(0f, 1f);
-            buttonRect.anchoredPosition = new Vector2(144f, -top);
-            buttonRect.sizeDelta = new Vector2(width, height);
+            for (int index = 0; index < options.Length; index++)
+            {
+                if (options[index].Label != entries[index].Label)
+                {
+                    return false;
+                }
 
-            Image background = buttonRect.gameObject.AddComponent<Image>();
-            background.color = new Color(0.10f, 0.13f, 0.15f, 0.94f);
+                Transform item = options[index].transform;
+                Transform hit = item.Find("HitArea");
+                Transform hover = item.Find("HoverBackground");
+                if (item.GetComponent<Image>() != null ||
+                    hit == null || hover == null)
+                {
+                    return false;
+                }
 
-            Button button = buttonRect.gameObject.AddComponent<Button>();
-            button.targetGraphic = background;
+                TrapezoidGraphic hitGraphic = hit.GetComponent<TrapezoidGraphic>();
+                TrapezoidGraphic hoverGraphic = hover.GetComponent<TrapezoidGraphic>();
+                RectTransform hitRect = hit as RectTransform;
+                RectTransform hoverRect = hover as RectTransform;
+                if (hitGraphic == null || hoverGraphic == null ||
+                    hit.GetComponent<StartMenuOptionHitArea>() == null ||
+                    hitRect == null || hoverRect == null ||
+                    hitGraphic.raycastTarget == false ||
+                    !Mathf.Approximately(
+                        hitRect.anchoredPosition.x,
+                        hoverRect.anchoredPosition.x) ||
+                    !Mathf.Approximately(
+                        hitRect.anchoredPosition.y,
+                        hoverRect.anchoredPosition.y) ||
+                    !Mathf.Approximately(
+                        hitRect.sizeDelta.x,
+                        hoverRect.sizeDelta.x) ||
+                    !Mathf.Approximately(
+                        hitRect.sizeDelta.y,
+                        hoverRect.sizeDelta.y) ||
+                    !Mathf.Approximately(
+                        hitGraphic.RightSlant,
+                        hoverGraphic.RightSlant))
+                {
+                    return false;
+                }
+            }
 
-            ColorBlock colors = button.colors;
-            colors.normalColor = new Color(0.10f, 0.13f, 0.15f, 0.94f);
-            colors.highlightedColor = new Color(0.19f, 0.24f, 0.26f, 1f);
-            colors.pressedColor = new Color(0.73f, 0.56f, 0.28f, 1f);
-            colors.selectedColor = colors.highlightedColor;
-            colors.disabledColor = new Color(0.12f, 0.13f, 0.15f, 0.75f);
-            colors.fadeDuration = 0.08f;
-            button.colors = colors;
-            button.onClick.AddListener(() => onClick?.Invoke());
+            return true;
+        }
 
-            AddBar(buttonRect, "Accent",
-                new Vector2(0f, 0f), new Vector2(0f, 1f),
-                new Vector2(0f, 0f), new Vector2(4f, 0f),
-                new Color(0.86f, 0.62f, 0.20f, 0.95f));
+        private void BuildMenuOptions()
+        {
+            BuildMenuColumn(CreateMenuEntries());
+        }
 
-            Text number = CreateText(
-                buttonRect, "Index", index,
-                new Vector2(24f, -12f), new Vector2(60f, 48f),
-                16, FontStyle.Bold, TextAnchor.MiddleLeft);
-            number.color = new Color(0.62f, 0.50f, 0.28f, 1f);
+        private void BuildMenuColumn(MenuEntry[] entries)
+        {
+            menuColumn = CreateRectTransform("MenuColumn", canvasRect);
+            menuColumn.anchorMin = new Vector2(0f, 1f);
+            menuColumn.anchorMax = new Vector2(0f, 1f);
+            menuColumn.pivot = new Vector2(0f, 1f);
+            menuColumn.anchoredPosition = new Vector2(MenuLeft, -MenuTop);
+            menuColumn.sizeDelta = new Vector2(760f, entries.Length * ItemPitch);
+
+            for (int index = 0; index < entries.Length; index++)
+            {
+                CreateMenuOption(menuColumn, entries[index], index);
+            }
+        }
+
+        private void CreateMenuOption(RectTransform parent, MenuEntry entry, int index)
+        {
+            float effectHeight = ItemHeight - HoverInset * 2f;
+
+            RectTransform item = CreateRectTransform("MenuButton_" + entry.Label, parent);
+            item.anchorMin = new Vector2(0f, 1f);
+            item.anchorMax = new Vector2(0f, 1f);
+            item.pivot = new Vector2(0f, 1f);
+            item.anchoredPosition = new Vector2(0f, -index * ItemPitch);
+            item.sizeDelta = new Vector2(600f, ItemHeight);
+
+            CanvasGroup optionGroup = item.gameObject.AddComponent<CanvasGroup>();
+
+            Button button = item.gameObject.AddComponent<Button>();
+            button.targetGraphic = null;
+            button.transition = Selectable.Transition.None;
+            button.navigation = new Navigation { mode = Navigation.Mode.None };
+
+            RectTransform hoverBackground =
+                CreateRectTransform("HoverBackground", item);
+            hoverBackground.anchorMin = new Vector2(0f, 0.5f);
+            hoverBackground.anchorMax = new Vector2(0f, 0.5f);
+            hoverBackground.pivot = new Vector2(0f, 0.5f);
+            hoverBackground.anchoredPosition = new Vector2(12f, 0f);
+            hoverBackground.sizeDelta = new Vector2(0f, effectHeight);
+
+            TrapezoidGraphic hoverGraphic =
+                hoverBackground.gameObject.AddComponent<TrapezoidGraphic>();
+            if (hoverBackground.GetComponent<CanvasRenderer>() == null)
+            {
+                hoverBackground.gameObject.AddComponent<CanvasRenderer>();
+            }
+
+            hoverGraphic.color = StartMenuOptionView.HoverGray;
+            hoverGraphic.RightSlant = HoverSlant;
+            hoverGraphic.raycastTarget = false;
+            hoverGraphic.SetHorizontalWipe(0f, 0f);
+
+            CanvasGroup hoverBackgroundGroup =
+                hoverBackground.gameObject.AddComponent<CanvasGroup>();
+            hoverBackgroundGroup.alpha = 0f;
+
+            RectTransform goldLine = CreateRectTransform("GoldLine", item);
+            goldLine.anchorMin = new Vector2(0f, 0.5f);
+            goldLine.anchorMax = new Vector2(0f, 0.5f);
+            goldLine.pivot = new Vector2(0.5f, 0f);
+            goldLine.anchoredPosition = new Vector2(0f, -effectHeight * 0.5f);
+            goldLine.sizeDelta = new Vector2(HoverLineWidth, effectHeight);
+
+            StartMenuWipeGraphic goldLineImage =
+                goldLine.gameObject.AddComponent<StartMenuWipeGraphic>();
+            goldLineImage.color = StartMenuOptionView.GoldLine;
+            goldLineImage.raycastTarget = false;
+            goldLineImage.SetWipe(0f, 0f);
+
+            CanvasGroup goldLineGroup = goldLine.gameObject.AddComponent<CanvasGroup>();
+            goldLineGroup.alpha = 0f;
 
             Text labelText = CreateText(
-                buttonRect, "Label", label,
-                new Vector2(84f, -12f), new Vector2(width - 110f, 48f),
-                26, FontStyle.Normal, TextAnchor.MiddleLeft);
-            labelText.color = TextColor;
+                item, "Label", entry.Label,
+                new Vector2(ItemTextLeft, 0f), new Vector2(400f, ItemHeight),
+                MenuTextSize, FontStyle.Normal, TextAnchor.MiddleLeft);
+            labelText.color = Color.white;
+            StartMenuTextEffect effect = AddTextEffect(
+                labelText, Color.white, Color.white, 3f);
+
+            float textWidth = Mathf.Max(1f, labelText.preferredWidth);
+            float backgroundWidth =
+                textWidth + ItemTextLeft +
+                textWidth * HoverRightBlankRatio + HoverRightBlankExtra;
+            hoverBackground.sizeDelta = new Vector2(backgroundWidth, effectHeight);
+
+            float itemWidth = Mathf.Max(600f, backgroundWidth + 60f);
+            item.sizeDelta = new Vector2(itemWidth, ItemHeight);
+            labelText.rectTransform.sizeDelta =
+                new Vector2(itemWidth - ItemTextLeft - 16f, ItemHeight);
+
+            StartMenuOptionView view =
+                item.gameObject.AddComponent<StartMenuOptionView>();
+            view.Configure(
+                entry.Label,
+                index,
+                labelText,
+                effect,
+                hoverBackground,
+                hoverBackgroundGroup,
+                goldLine,
+                goldLineGroup,
+                optionGroup);
+
+            RectTransform hitArea = CreateRectTransform("HitArea", item);
+            hitArea.anchorMin = new Vector2(0f, 0.5f);
+            hitArea.anchorMax = new Vector2(0f, 0.5f);
+            hitArea.pivot = new Vector2(0f, 0.5f);
+            hitArea.anchoredPosition = new Vector2(12f, 0f);
+            hitArea.sizeDelta = new Vector2(backgroundWidth, effectHeight);
+
+            TrapezoidGraphic hitGraphic =
+                hitArea.gameObject.AddComponent<TrapezoidGraphic>();
+            if (hitArea.GetComponent<CanvasRenderer>() == null)
+            {
+                hitArea.gameObject.AddComponent<CanvasRenderer>();
+            }
+
+            hitGraphic.color = Color.clear;
+            hitGraphic.RightSlant = HoverSlant;
+            hitGraphic.raycastTarget = true;
+            hitGraphic.SetHorizontalWipe(0f, 1f);
+
+            StartMenuOptionHitArea hit =
+                hitArea.gameObject.AddComponent<StartMenuOptionHitArea>();
+            hit.Configure(view, button);
         }
 
-        private void BuildFooter()
+        private StartMenuTextEffect AddTextEffect(
+            Text text,
+            Color bottom,
+            Color top,
+            float outlineWidth)
         {
-            Text mode = CreateText(
-                canvasRect, "ModeHint",
-                "01 开始游戏　03 卡牌图鉴　04 战斗模拟（基础牌与升级牌均可测试）",
-                new Vector2(144f, -948f), new Vector2(1200f, 28f),
-                16, FontStyle.Normal, TextAnchor.MiddleLeft);
-            mode.color = MutedText;
-
-            Text version = CreateText(
-                canvasRect, "Version", "v0.4 · 阶段 A 原型",
-                new Vector2(144f, -986f), new Vector2(600f, 26f),
-                14, FontStyle.Normal, TextAnchor.MiddleLeft);
-            version.color = new Color(0.42f, 0.46f, 0.46f, 1f);
+            StartMenuTextEffect effect =
+                text.gameObject.AddComponent<StartMenuTextEffect>();
+            float shadowX = outlineWidth + 2.5f;
+            float shadowY = outlineWidth + 3f;
+            float shadowSoftness = outlineWidth >= 4f ? 3.6f : 2.9f;
+            effect.Configure(
+                bottom,
+                top,
+                StartMenuOptionView.Outline,
+                outlineWidth,
+                StartMenuOptionView.Shadow,
+                new Vector2(shadowX, -shadowY),
+                shadowSoftness);
+            return effect;
         }
 
         // ------------------------------------------------------------ 模式选择
@@ -443,34 +665,6 @@ namespace ProjectArtOfAll.UI
             cardCodex.Show();
         }
 
-        private void EnsureCodexMenuButton()
-        {
-            if (FindButton("MenuButton_卡牌图鉴") != null)
-            {
-                return;
-            }
-
-            RepositionMenuButton("MenuButton_战斗模拟", 676f);
-            RepositionMenuButton("MenuButton_退出游戏", 768f);
-            CreateMenuButton("03", "卡牌图鉴", 584f, OpenCodex);
-            BindButton("MenuButton_卡牌图鉴", OpenCodex);
-        }
-
-        private void RepositionMenuButton(string objectName, float top)
-        {
-            Button button = FindButton(objectName);
-            if (button == null)
-            {
-                return;
-            }
-
-            RectTransform rect = button.transform as RectTransform;
-            if (rect != null)
-            {
-                rect.anchoredPosition = new Vector2(144f, -top);
-            }
-        }
-
         public void QuitGame()
         {
 #if UNITY_EDITOR
@@ -478,6 +672,37 @@ namespace ProjectArtOfAll.UI
 #else
             Application.Quit();
 #endif
+        }
+
+        public void PlayHoverSound()
+        {
+            if (hoverAudioSource != null && hoverClip != null)
+            {
+                hoverAudioSource.PlayOneShot(hoverClip, 0.65f);
+            }
+        }
+
+        private void EnsureHoverAudio()
+        {
+            if (hoverAudioSource == null)
+            {
+                hoverAudioSource = GetComponent<AudioSource>();
+            }
+
+            if (hoverAudioSource == null)
+            {
+                hoverAudioSource = gameObject.AddComponent<AudioSource>();
+            }
+
+            hoverAudioSource.playOnAwake = false;
+            hoverAudioSource.loop = false;
+            hoverAudioSource.spatialBlend = 0f;
+            hoverAudioSource.volume = 1f;
+
+            if (hoverClip == null)
+            {
+                hoverClip = Resources.Load<AudioClip>("SFX/paper_hover");
+            }
         }
 
         // ---------------------------------------------------------------- 工具
@@ -604,9 +829,36 @@ namespace ProjectArtOfAll.UI
             }
         }
 
+        private sealed class MenuEntry
+        {
+            public MenuEntry(string label, System.Action action)
+            {
+                Label = label;
+                Action = action;
+            }
+
+            public string Label { get; }
+            public System.Action Action { get; }
+        }
+
 #if UNITY_EDITOR
         public RectTransform EditorCanvasRect => canvasRect;
         public Font EditorFont => GetMenuFont();
+        public string[] EditorMenuLabels
+        {
+            get
+            {
+                MenuEntry[] entries = CreateMenuEntries();
+                string[] labels = new string[entries.Length];
+                for (int index = 0; index < entries.Length; index++)
+                {
+                    labels[index] = entries[index].Label;
+                }
+
+                return labels;
+            }
+        }
+
         public GameSettingsPanel EditorSettingsPanel
         {
             get => settingsPanel;

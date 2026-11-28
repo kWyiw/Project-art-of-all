@@ -12,7 +12,7 @@ namespace ProjectArtOfAll.Editor
     /// Bakes the complete StartMenu hierarchy into the scene: main buttons, mode
     /// selection, shared settings and the combat lab. Runtime code only binds input.
     /// </summary>
-    internal static class BakeStartMenuUI
+    public static class BakeStartMenuUI
     {
         private const string StartMenuPath = "Assets/Scenes/StartMenu.unity";
 
@@ -61,6 +61,11 @@ namespace ProjectArtOfAll.Editor
             Debug.Log("[StartMenu] Complete UI baked into scene components.");
         }
 
+        public static void RebakeBatch()
+        {
+            RebakeFromMenu();
+        }
+
         [MenuItem("Tools/Project Art of All/Validate Start Menu UI")]
         private static void ValidateFromMenu()
         {
@@ -76,6 +81,11 @@ namespace ProjectArtOfAll.Editor
             Debug.Log("[StartMenu] Validation passed.");
         }
 
+        public static void ValidateBatch()
+        {
+            ValidateFromMenu();
+        }
+
         private static void ValidateScene(Scene scene)
         {
             LeftMenuColumn menu = Object.FindObjectOfType<LeftMenuColumn>();
@@ -85,12 +95,11 @@ namespace ProjectArtOfAll.Editor
             }
 
             Transform canvas = menu.transform.Find("LeftMenuCanvas");
-            if (canvas == null ||
-                canvas.Find("MenuButton_开始游戏") == null ||
-                canvas.Find("MenuButton_设置") == null ||
-                canvas.Find("MenuButton_卡牌图鉴") == null ||
-                canvas.Find("MenuButton_战斗模拟") == null ||
-                canvas.Find("MenuButton_退出游戏") == null ||
+            Transform menuColumn = canvas != null ? canvas.Find("MenuColumn") : null;
+            if (canvas == null || menuColumn == null ||
+                canvas.Find("Background") == null ||
+                canvas.Find("Title") == null ||
+                canvas.Find("Version") == null ||
                 canvas.Find("ModePanel") == null ||
                 canvas.Find("GameSettingsPanel") == null ||
                 canvas.Find("CombatLab") == null ||
@@ -101,19 +110,150 @@ namespace ProjectArtOfAll.Editor
                     "StartMenu is missing baked UI roots.");
             }
 
-            SerializedObject serialized = new SerializedObject(menu);
+            Image background = canvas.Find("Background").GetComponent<Image>();
+            if (background == null || background.sprite == null ||
+                background.GetComponent<StartMenuParallaxBackground>() == null)
+            {
+                throw new System.InvalidOperationException(
+                    "StartMenu background image or parallax component is missing.");
+            }
+
+            Text title = canvas.Find("Title").GetComponent<Text>();
+            if (title == null || title.text != "占位游戏名" ||
+                title.GetComponent<StartMenuTextEffect>() == null)
+            {
+                throw new System.InvalidOperationException(
+                    "StartMenu title is not baked with the expected text effect.");
+            }
+
+            Text version = canvas.Find("Version").GetComponent<Text>();
+            if (version == null || string.IsNullOrWhiteSpace(version.text))
+            {
+                throw new System.InvalidOperationException(
+                    "StartMenu version label is missing.");
+            }
+
+            string[] labels = menu.EditorMenuLabels;
+            StartMenuOptionView[] options =
+                menuColumn.GetComponentsInChildren<StartMenuOptionView>(true);
+            if (options.Length != labels.Length)
+            {
+                throw new System.InvalidOperationException(
+                    string.Concat(
+                        "StartMenu option count mismatch: ",
+                        options.Length,
+                        " baked, ",
+                        labels.Length,
+                        " defined."));
+            }
+
+            for (int index = 0; index < options.Length; index++)
+            {
+                if (options[index].Label != labels[index])
+                {
+                    throw new System.InvalidOperationException(
+                        string.Concat(
+                            "StartMenu option order mismatch at ",
+                            index,
+                            ": ",
+                            options[index].Label,
+                            " != ",
+                            labels[index],
+                            "."));
+                }
+
+                string[] optionFields =
+                {
+                    "label", "textEffect", "hoverBackground",
+                    "hoverBackgroundGroup", "goldLine", "goldLineGroup", "optionGroup"
+                };
+                for (int field = 0; field < optionFields.Length; field++)
+                {
+                    RequireReference(
+                        options[index],
+                        optionFields[field],
+                        "StartMenuOptionView." + options[index].Label);
+                }
+
+                Transform hover = options[index].transform.Find("HoverBackground");
+                Transform line = options[index].transform.Find("GoldLine");
+                Transform hitArea = options[index].transform.Find("HitArea");
+                if (hover == null ||
+                    hover.GetComponent<TrapezoidGraphic>() == null ||
+                    line == null ||
+                    line.GetComponent<StartMenuWipeGraphic>() == null ||
+                    hitArea == null ||
+                    hitArea.GetComponent<TrapezoidGraphic>() == null ||
+                    hitArea.GetComponent<StartMenuOptionHitArea>() == null)
+                {
+                    throw new System.InvalidOperationException(
+                        string.Concat(
+                            "StartMenu option ",
+                            options[index].Label,
+                            " is missing wipe or hit-area graphics."));
+                }
+
+                RectTransform hoverRect = hover as RectTransform;
+                RectTransform hitRect = hitArea as RectTransform;
+                TrapezoidGraphic hoverGraphic = hover.GetComponent<TrapezoidGraphic>();
+                TrapezoidGraphic hitGraphic = hitArea.GetComponent<TrapezoidGraphic>();
+                if (hoverRect == null || hitRect == null ||
+                    !Mathf.Approximately(
+                        hoverRect.anchoredPosition.x,
+                        hitRect.anchoredPosition.x) ||
+                    !Mathf.Approximately(
+                        hoverRect.sizeDelta.x,
+                        hitRect.sizeDelta.x) ||
+                    !Mathf.Approximately(
+                        hoverRect.sizeDelta.y,
+                        hitRect.sizeDelta.y) ||
+                    !Mathf.Approximately(
+                        hoverGraphic.RightSlant,
+                        hitGraphic.RightSlant) ||
+                    !hitGraphic.raycastTarget)
+                {
+                    throw new System.InvalidOperationException(
+                        string.Concat(
+                            "StartMenu option ",
+                            options[index].Label,
+                            " hit area does not match its hover background."));
+                }
+
+                if (options[index].GetComponent<Image>() != null)
+                {
+                    throw new System.InvalidOperationException(
+                        string.Concat(
+                            "StartMenu option ",
+                            options[index].Label,
+                            " still has a full-row Image on its root."));
+                }
+
+                StartMenuOptionHitArea hitComponent =
+                    hitArea.GetComponent<StartMenuOptionHitArea>();
+                RequireReference(
+                    hitComponent,
+                    "option",
+                    "StartMenuOptionHitArea." + options[index].Label);
+                RequireReference(
+                    hitComponent,
+                    "button",
+                    "StartMenuOptionHitArea." + options[index].Label);
+            }
+
             string[] fields =
             {
-                "canvasRect", "settingsPanel", "modePanel", "combatLab", "cardCodex"
+                "canvasRect", "menuColumn", "settingsPanel", "modePanel",
+                "combatLab", "cardCodex", "hoverAudioSource"
             };
             for (int index = 0; index < fields.Length; index++)
             {
-                SerializedProperty property = serialized.FindProperty(fields[index]);
-                if (property == null || property.objectReferenceValue == null)
-                {
-                    throw new System.InvalidOperationException(
-                        string.Concat("Missing StartMenu reference ", fields[index], "."));
-                }
+                RequireReference(menu, fields[index], "LeftMenuColumn");
+            }
+
+            if (Resources.Load<AudioClip>("SFX/paper_hover") == null)
+            {
+                throw new System.InvalidOperationException(
+                    "Missing hover audio Resources/SFX/paper_hover.wav.");
             }
 
             if (Object.FindObjectsOfType<Text>(true).Length == 0 ||
@@ -127,6 +267,20 @@ namespace ProjectArtOfAll.Editor
             if (!scene.IsValid())
             {
                 throw new System.InvalidOperationException("Invalid StartMenu scene.");
+            }
+        }
+
+        private static void RequireReference(
+            Object target,
+            string field,
+            string context)
+        {
+            SerializedObject serialized = new SerializedObject(target);
+            SerializedProperty property = serialized.FindProperty(field);
+            if (property == null || property.objectReferenceValue == null)
+            {
+                throw new System.InvalidOperationException(
+                    string.Concat("Missing ", context, " reference ", field, "."));
             }
         }
     }
