@@ -55,13 +55,21 @@ namespace ProjectArtOfAll.Flow
         public static string SelectedMapSceneName => MapCatalog.Selected.SceneName;
 
         /// <summary>
-        /// 主页面「开始游戏」：先进入准备房间自由走动，模式留到门口再选。
+        /// 主页面「开始游戏」：先准备全新的大厅会话，再由过渡层加载 ready room。
         /// </summary>
-        public static void EnterLobby()
+        public static void PrepareLobby()
         {
             Mode = GameMode.Normal;
             ModeSelected = false;
             LobbyState.Reset();
+        }
+
+        /// <summary>
+        /// 直接加载准备房间；用于无过渡或过渡失败时的兜底。
+        /// </summary>
+        public static void EnterLobby()
+        {
+            PrepareLobby();
             SceneManager.LoadScene(LobbySceneName);
         }
 

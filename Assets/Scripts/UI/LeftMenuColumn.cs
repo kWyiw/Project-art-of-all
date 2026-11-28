@@ -694,7 +694,19 @@ namespace ProjectArtOfAll.UI
 
         private void BeginLobbyTransition()
         {
-            BeginSceneTransition(GameSession.EnterLobby);
+            if (transitionPlaying)
+            {
+                return;
+            }
+
+            transitionPlaying = true;
+            if (!SceneTransitionOverlay.Play(
+                    GameSession.LobbySceneName,
+                    GameSession.PrepareLobby))
+            {
+                transitionPlaying = false;
+                GameSession.EnterLobby();
+            }
         }
 
         private void BeginSceneTransition(System.Action onCovered)
