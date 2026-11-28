@@ -168,11 +168,13 @@ namespace ProjectArtOfAll.Editor
             RequireReference(bgm, "clip", "StartMenuBgm");
 
             Text title = canvas.Find("Title").GetComponent<Text>();
-            if (title == null || title.text != "占位游戏名" ||
+            if (title == null || title.text != menu.EditorTitleText ||
+                title.font == null ||
+                title.font.name != menu.EditorTitleFontName ||
                 title.GetComponent<StartMenuTextEffect>() == null)
             {
                 throw new System.InvalidOperationException(
-                    "StartMenu title is not baked with the expected text effect.");
+                    "StartMenu title is not baked with the expected text, font, and text effect.");
             }
 
             Text version = canvas.Find("Version").GetComponent<Text>();

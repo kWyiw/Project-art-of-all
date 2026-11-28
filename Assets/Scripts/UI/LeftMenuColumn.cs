@@ -28,6 +28,8 @@ namespace ProjectArtOfAll.UI
         private const float HoverRightBlankExtra = 24f;
         private const int MenuTextSize = 38;
         private const int TitleTextSize = 64;
+        private const string ProjectTitle = "Project : Art of All";
+        private const string TitleFontName = "Times New Roman";
 
         private static readonly Color PanelColor = new Color(0.055f, 0.075f, 0.088f, 0.96f);
         private static readonly Color Brass = new Color(0.90f, 0.70f, 0.32f, 1f);
@@ -36,6 +38,7 @@ namespace ProjectArtOfAll.UI
         private static readonly Color VersionColor = new Color(0.58f, 0.58f, 0.58f, 0.92f);
 
         private static Font menuFont;
+        private static Font titleFont;
 
         [SerializeField] private RectTransform canvasRect;
         [SerializeField] private RectTransform menuColumn;
@@ -70,6 +73,7 @@ namespace ProjectArtOfAll.UI
             }
 
             ApplyMenuFont();
+            ApplyTitleFont();
         }
 
         private void Start()
@@ -262,10 +266,11 @@ namespace ProjectArtOfAll.UI
         private void BuildTitle()
         {
             Text title = CreateText(
-                canvasRect, "Title", "占位游戏名",
+                canvasRect, "Title", ProjectTitle,
                 new Vector2(MenuLeft, -TitleTop), new Vector2(1200f, 82f),
                 TitleTextSize, FontStyle.Bold, TextAnchor.MiddleLeft);
             title.color = Color.white;
+            title.font = GetTitleFont();
             AddTextEffect(title, Color.white, Color.white, 4f);
         }
 
@@ -891,12 +896,55 @@ namespace ProjectArtOfAll.UI
             return menuFont;
         }
 
+        private static Font GetTitleFont()
+        {
+            if (titleFont != null)
+            {
+                return titleFont;
+            }
+
+            titleFont = Font.CreateDynamicFontFromOSFont(
+                new[]
+                {
+                    TitleFontName,
+                    "Times",
+                    "Liberation Serif",
+                    "DejaVu Serif"
+                },
+                TitleTextSize);
+
+            if (titleFont == null)
+            {
+                titleFont = GetMenuFont();
+            }
+
+            return titleFont;
+        }
+
         private void ApplyMenuFont()
         {
             Font font = GetMenuFont();
             foreach (Text text in GetComponentsInChildren<Text>(true))
             {
                 text.font = font;
+            }
+        }
+
+        private void ApplyTitleFont()
+        {
+            if (canvasRect == null)
+            {
+                return;
+            }
+
+            Transform titleTransform = canvasRect.Find("Title");
+            Text title = titleTransform != null
+                ? titleTransform.GetComponent<Text>()
+                : null;
+            if (title != null)
+            {
+                title.text = ProjectTitle;
+                title.font = GetTitleFont();
             }
         }
 
@@ -915,6 +963,8 @@ namespace ProjectArtOfAll.UI
 #if UNITY_EDITOR
         public RectTransform EditorCanvasRect => canvasRect;
         public Font EditorFont => GetMenuFont();
+        public string EditorTitleText => ProjectTitle;
+        public string EditorTitleFontName => TitleFontName;
         public string[] EditorMenuLabels
         {
             get
@@ -963,6 +1013,7 @@ namespace ProjectArtOfAll.UI
             BuildMenu();
             BindMenu();
             ApplyMenuFont();
+            ApplyTitleFont();
         }
 #endif
     }
