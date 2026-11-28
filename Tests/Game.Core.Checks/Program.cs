@@ -2446,6 +2446,61 @@ namespace ProjectArtOfAll.Core.Checks
                         gameEvent.CardUid == catalyst.Uid),
                 "催化剂 must charge itself when poison is applied.");
 
+            // 催化剂一次加速 2 张牌时不得重复命中同一张牌。
+            CombatSimulation catalystTargetsSimulation = new CombatSimulation(
+                Duel(
+                    new CardInstance(9230, catalog.Get("catalyst")),
+                    new CardInstance(9231, catalog.Get("crowbar")),
+                    new CardInstance(9232, catalog.Get("fireman_axe"))),
+                44UL);
+            for (int tick = 0; tick < 360 && !catalystTargetsSimulation.IsFinished; tick++)
+            {
+                catalystTargetsSimulation.TickOnce();
+            }
+
+            List<HasteAppliedEvent> catalystTargets =
+                catalystTargetsSimulation.Events.History
+                    .OfType<HasteAppliedEvent>()
+                    .Where(gameEvent => gameEvent.PlayerId == 0)
+                    .Take(2)
+                    .ToList();
+            Assert(
+                catalystTargets.Count == 2 &&
+                catalystTargets[0].CardUid != catalystTargets[1].CardUid,
+                "催化剂 must not select the same own card twice in one haste effect.");
+
+            // 射钉枪+一次缓速 2 张牌时不得重复命中同一张牌。
+            CardInstance nailGunPlus = new CardInstance(9233, catalog.Get("nail_gun+"));
+            CombatSimulation nailGunTargetsSimulation = new CombatSimulation(
+                new BattleSnapshot(
+                    new CombatantSnapshot(
+                        0, 5, new[] { nailGunPlus }, maxHealth: 5000),
+                    new CombatantSnapshot(
+                        1,
+                        5,
+                        new[]
+                        {
+                            new CardInstance(9234, catalog.Get("car_door")),
+                            new CardInstance(9235, catalog.Get("crowbar"))
+                        },
+                        maxHealth: 5000)),
+                45UL);
+            for (int tick = 0; tick < 240 && !nailGunTargetsSimulation.IsFinished; tick++)
+            {
+                nailGunTargetsSimulation.TickOnce();
+            }
+
+            List<SlowAppliedEvent> nailGunTargets =
+                nailGunTargetsSimulation.Events.History
+                    .OfType<SlowAppliedEvent>()
+                    .Where(gameEvent => gameEvent.PlayerId == 1)
+                    .Take(2)
+                    .ToList();
+            Assert(
+                nailGunTargets.Count == 2 &&
+                nailGunTargets[0].CardUid != nailGunTargets[1].CardUid,
+                "射钉枪+ must not slow the same enemy card twice in one effect.");
+
             // 火炬：先结算本次灼烧，再用本次施法获得下一发的 +1 灼烧修正。
             CardInstance torch = new CardInstance(9172, catalog.Get("torch"));
             CombatSimulation torchSimulation = new CombatSimulation(

@@ -185,10 +185,11 @@ namespace ProjectArtOfAll.Core.Combat
             int count = Math.Max(1, (int)effect.Amount.Constant);
             int duration = Math.Max(0, effect.DurationTicks);
 
+            List<CombatCardRuntime> candidates = enemy.ActiveCards().ToList();
             for (int index = 0; index < count; index++)
             {
-                CombatCardRuntime target = PickRandom(
-                    enemy.ActiveCards(),
+                CombatCardRuntime target = PickRandomAndRemove(
+                    candidates,
                     simulation.Rng);
                 if (target == null)
                 {
@@ -231,7 +232,9 @@ namespace ProjectArtOfAll.Core.Combat
 
             for (int index = 0; index < count; index++)
             {
-                CombatCardRuntime target = PickRandom(candidates, simulation.Rng);
+                CombatCardRuntime target = PickRandomAndRemove(
+                    candidates,
+                    simulation.Rng);
                 if (target == null)
                 {
                     return;
@@ -402,8 +405,8 @@ namespace ProjectArtOfAll.Core.Combat
             return Math.Max(0, (int)effect.Amount.Constant);
         }
 
-        private static CombatCardRuntime PickRandom(
-            IReadOnlyList<CombatCardRuntime> candidates,
+        private static CombatCardRuntime PickRandomAndRemove(
+            List<CombatCardRuntime> candidates,
             Pcg32 rng)
         {
             if (candidates.Count == 0)
@@ -411,12 +414,10 @@ namespace ProjectArtOfAll.Core.Combat
                 return null;
             }
 
-            if (candidates.Count == 1)
-            {
-                return candidates[0];
-            }
-
-            return candidates[rng.NextInt(0, candidates.Count)];
+            int index = rng.NextInt(0, candidates.Count);
+            CombatCardRuntime target = candidates[index];
+            candidates.RemoveAt(index);
+            return target;
         }
     }
 }
