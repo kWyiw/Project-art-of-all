@@ -23,6 +23,11 @@ namespace ProjectArtOfAll.Environment
         private void OnEnable()
         {
             RebuildMesh();
+            ReadyRoomRingWalls.EnsureExists(
+                gameObject.scene,
+                innerRadius,
+                outerRadius,
+                transform.position.y);
         }
 
         private void OnValidate()
@@ -47,6 +52,11 @@ namespace ProjectArtOfAll.Environment
             }
 
             RebuildMesh();
+            ReadyRoomRingWalls.EnsureExists(
+                gameObject.scene,
+                innerRadius,
+                outerRadius,
+                transform.position.y);
         }
 #endif
 
