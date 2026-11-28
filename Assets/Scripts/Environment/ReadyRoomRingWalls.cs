@@ -50,6 +50,7 @@ namespace ProjectArtOfAll.Environment
                 ReadyRoomRingWalls wall = walls[index];
                 if (wall != null && wall.gameObject.scene == scene)
                 {
+                    wall.gameObject.hideFlags = HideFlags.None;
                     wall.Configure(ringInnerRadius, ringOuterRadius, ringHeight);
                     wall.Rebuild();
                     return wall;
@@ -58,9 +59,7 @@ namespace ProjectArtOfAll.Environment
 
             GameObject wallObject = new GameObject(WallObjectName);
             wallObject.SetActive(false);
-            wallObject.hideFlags =
-                HideFlags.DontSaveInEditor |
-                HideFlags.DontSaveInBuild;
+            wallObject.hideFlags = HideFlags.None;
             wallObject.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
             SceneManager.MoveGameObjectToScene(wallObject, scene);
 
