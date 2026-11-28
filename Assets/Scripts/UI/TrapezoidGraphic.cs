@@ -153,7 +153,7 @@ namespace ProjectArtOfAll.UI
             vh.AddVert(vertex);
         }
 
-        protected override void OnValidate()
+        private new void OnValidate()
         {
             SetVerticesDirty();
         }

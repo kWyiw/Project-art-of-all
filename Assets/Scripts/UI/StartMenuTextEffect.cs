@@ -217,7 +217,7 @@ namespace ProjectArtOfAll.UI
             vh.AddUIVertexQuad(quad);
         }
 
-        protected override void OnValidate()
+        private new void OnValidate()
         {
             MarkDirty();
         }

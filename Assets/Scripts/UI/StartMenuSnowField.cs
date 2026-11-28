@@ -95,7 +95,15 @@ namespace ProjectArtOfAll.UI
         {
             if (softDot != null)
             {
-                Destroy(softDot);
+                if (Application.isPlaying)
+                {
+                    Destroy(softDot);
+                }
+                else
+                {
+                    DestroyImmediate(softDot);
+                }
+
                 softDot = null;
             }
 
