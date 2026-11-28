@@ -64,6 +64,8 @@ namespace ProjectArtOfAll.Core.Match
         private readonly List<CardDefinition> currentRewardChoices =
             new List<CardDefinition>();
         private int nextCardUid = 1;
+        private int pendingEventOptionIndex = -1;
+        private int pendingEventShardCost;
 
         public MatchController(MapGraph graph, ulong seed, int startingPlayerId = 0)
         {
@@ -138,6 +140,9 @@ namespace ProjectArtOfAll.Core.Match
                     break;
                 case EventChoiceCommand eventChoice:
                     HandleEventChoice(eventChoice);
+                    break;
+                case EventTeleportCommand eventTeleport:
+                    HandleEventTeleport(eventTeleport);
                     break;
                 case SellCardCommand sell:
                     HandleSell(sell);
@@ -407,7 +412,20 @@ namespace ProjectArtOfAll.Core.Match
         private void HandleSell(SellCardCommand command)
         {
             MatchPlayerState actor = ResolveFreeActionPlayer(command.PlayerId);
-            if (!actor.TrySellCard(command.CardUid, out CardInstance card))
+            CardInstance card = actor.FindCard(command.CardUid);
+            if (card == null)
+            {
+                throw new InvalidOperationException(
+                    $"Player {command.PlayerId} does not own card {command.CardUid}.");
+            }
+
+            if (card.Definition.CannotSell)
+            {
+                throw new InvalidOperationException(
+                    $"{card.Definition.DisplayName} cannot be sold.");
+            }
+
+            if (!actor.TrySellCard(command.CardUid, out CardInstance removed))
             {
                 throw new InvalidOperationException(
                     $"Player {command.PlayerId} does not own card {command.CardUid}.");
@@ -415,16 +433,16 @@ namespace ProjectArtOfAll.Core.Match
 
             // R-ECO-005：出售按这张牌的当前价值结算（铜锣烧 / 黄金战车会成长），
             // 回收站在场时废料还能多卖（CJ-10 / BoardCardEconomy）。
-            int refund = BoardCardEconomy.SaleValue(actor, card);
+            int refund = BoardCardEconomy.SaleValue(actor, removed);
             AddShards(actor, refund);
             Publish(
                 new CardSoldEvent(
                     actor.Id,
-                    card.Uid,
-                    card.Definition.Id,
+                    removed.Uid,
+                    removed.Definition.Id,
                     refund));
-            BoardCardEconomy.OnCardSold(actor, card);
-            PlaceTrap(actor, card);
+            BoardCardEconomy.OnCardSold(actor, removed);
+            PlaceTrap(actor, removed);
         }
 
         private void HandleDeveloperGrantCard(GrantCardCommand command)
@@ -824,8 +842,9 @@ namespace ProjectArtOfAll.Core.Match
         {
             currentRewardChoices.Clear();
             CurrentShop = null;
-            MatchEventKind kind = MatchEventCatalog.KindForNode(arrival.Id);
-            CurrentEvent = new MatchEventSession(arrival.Id, MatchEventCatalog.Get(kind));
+            MatchEventDefinition definition =
+                MatchEventCatalog.PickForPhase(State.MonsterPhase, eventRandom);
+            CurrentEvent = new MatchEventSession(arrival.Id, definition);
             State.Phase = MatchPhase.AwaitEvent;
             Publish(new EventOfferedEvent(player.Id, CurrentEvent.Definition.Id, arrival.Id));
         }
@@ -854,9 +873,15 @@ namespace ProjectArtOfAll.Core.Match
             }
 
             MatchEventOption option = CurrentEvent.Options[index];
-            if (option.ShardCost > player.Shards)
+            int shardCost = option.GetShardCost(player.Level);
+            if (shardCost > player.Shards)
             {
                 throw new InvalidOperationException("Not enough Shards.");
+            }
+
+            if (option.WinsCost > player.Wins)
+            {
+                throw new InvalidOperationException("Not enough Wins.");
             }
 
             if (option.CardWidth > 0 &&
@@ -866,13 +891,45 @@ namespace ProjectArtOfAll.Core.Match
                     "The event reward does not fit in the player's Bag.");
             }
 
-            if (option.ShardCost > 0)
+            if (shardCost > 0)
             {
-                AddShards(player, -option.ShardCost);
+                AddShards(player, -shardCost);
+            }
+
+            if (option.Effect == EventEffectType.TeleportTarget)
+            {
+                pendingEventOptionIndex = index;
+                pendingEventShardCost = shardCost;
+                State.Phase = MatchPhase.AwaitEventTarget;
+                Publish(new EventTargetRequestedEvent(
+                    player.Id,
+                    CurrentEvent.NodeId,
+                    CurrentEvent.Definition.Id));
+                return;
             }
 
             ApplyEventOption(player, option);
-            FinishEvent(player, index, option.ShardCost);
+            FinishEvent(player, index, shardCost);
+        }
+
+        private void HandleEventTeleport(EventTeleportCommand command)
+        {
+            ValidateCurrentPlayer(command.PlayerId);
+            if (State.Phase != MatchPhase.AwaitEventTarget || CurrentEvent == null)
+            {
+                throw new InvalidOperationException(
+                    $"EventTeleportCommand is invalid during phase {State.Phase}.");
+            }
+
+            MatchPlayerState player = State.CurrentPlayer;
+            if (!graph.Nodes.Any(node => node.Id == command.TargetNodeId) ||
+                command.TargetNodeId == player.CurrentNode)
+            {
+                throw new ArgumentOutOfRangeException(nameof(command.TargetNodeId));
+            }
+
+            TeleportFromEvent(player, command.TargetNodeId);
+            FinishEvent(player, pendingEventOptionIndex, pendingEventShardCost);
         }
 
         private void ApplyEventOption(MatchPlayerState player, MatchEventOption option)
@@ -885,13 +942,46 @@ namespace ProjectArtOfAll.Core.Match
                 case EventEffectType.GainCard:
                     GrantEventCard(player, option.CardId);
                     break;
+                case EventEffectType.GainSpecificCards:
+                    foreach (string cardId in option.CardIds)
+                    {
+                        GrantEventCard(player, cardId);
+                    }
+
+                    break;
                 case EventEffectType.BattleShield:
                     player.AddBattleModifier(
-                        new BattleModifier(option.Amount, 0, 0, option.Battles));
+                        new BattleModifier(
+                            option.Amount,
+                            0,
+                            0,
+                            option.Battles));
                     break;
                 case EventEffectType.BattlePower:
                     player.AddBattleModifier(
-                        new BattleModifier(0, option.Amount, option.Amount, option.Battles));
+                        new BattleModifier(
+                            0,
+                            option.Amount,
+                            option.Amount,
+                            option.Battles,
+                            healBonus: option.Amount,
+                            poisonBonus: option.StatusAmount,
+                            burnBonus: option.StatusAmount,
+                            regenerationBonus: option.StatusAmount));
+                    break;
+                case EventEffectType.RandomTeleport:
+                    TeleportFromEvent(player, SelectRandomEventTeleport(player));
+                    break;
+                case EventEffectType.KillTime:
+                    GrantEventCard(player, option.CardId);
+                    State.StartKillTime(option.Rounds);
+                    break;
+                case EventEffectType.LoseWinGainShards:
+                    AddWins(player, -option.WinsCost);
+                    AddShards(player, option.Amount);
+                    break;
+                case EventEffectType.LoseShardsByLevel:
+                    // The dynamic shard cost was already paid in HandleEventChoice.
                     break;
                 default:
                     throw new InvalidOperationException(
@@ -905,7 +995,8 @@ namespace ProjectArtOfAll.Core.Match
                 .Where(
                     definition =>
                         definition.SlotSize == option.SlotSize &&
-                        definition.Id != MatchEventCatalog.MysteryDrinkCardId)
+                        !definition.HasTag(CardTag.Event) &&
+                        !MatchEventCatalog.IsEventOnlyCard(definition.Id))
                 .ToList();
             if (pool.Count == 0)
             {
@@ -1008,6 +1099,8 @@ namespace ProjectArtOfAll.Core.Match
         {
             string eventId = CurrentEvent != null ? CurrentEvent.Definition.Id : string.Empty;
             CurrentEvent = null;
+            pendingEventOptionIndex = -1;
+            pendingEventShardCost = 0;
             Publish(new EventResolvedEvent(player.Id, eventId, optionIndex, shardCost));
             EndCurrentTurn();
         }
@@ -1072,7 +1165,9 @@ namespace ProjectArtOfAll.Core.Match
         {
             List<CardDefinition> pool = cardCatalog.All.ToList();
             pool.RemoveAll(
-                definition => MatchEventCatalog.IsEventOnlyCard(definition.Id));
+                definition =>
+                    definition.HasTag(CardTag.Event) ||
+                    MatchEventCatalog.IsEventOnlyCard(definition.Id));
             Shuffle(pool, source);
             return pool.Take(Math.Min(count, pool.Count)).ToArray();
         }
@@ -1127,6 +1222,7 @@ namespace ProjectArtOfAll.Core.Match
 
             if (result.IsDraw)
             {
+                ApplyBioVirusAfterBattle(attacker, defender);
                 return;
             }
 
@@ -1134,8 +1230,18 @@ namespace ProjectArtOfAll.Core.Match
                 ? attacker
                 : defender;
             MatchPlayerState loser = winner == attacker ? defender : attacker;
-            AddWins(winner, 1);
-            AddWins(loser, -1);
+            bool killTime = State.IsKillTimeActive;
+            int winDelta = killTime ? 2 : 1;
+            AddWins(winner, winDelta);
+            AddWins(loser, -winDelta);
+            if (killTime)
+            {
+                int steal = Math.Min(loser.Shards, loser.Level * 5);
+                AddShards(loser, -steal);
+                AddShards(winner, steal);
+            }
+
+            ApplyBioVirusAfterBattle(attacker, defender);
         }
 
         private void ResolveMonster(
@@ -1175,6 +1281,69 @@ namespace ProjectArtOfAll.Core.Match
                 int loss = player.Shards / 2;
                 SetShards(player, player.Shards - loss);
             }
+
+            ApplyBioVirusAfterBattle(player);
+        }
+
+        private void ApplyBioVirusAfterBattle(params MatchPlayerState[] participants)
+        {
+            if (participants == null || participants.Length == 0)
+            {
+                return;
+            }
+
+            HashSet<int> handledOwners = new HashSet<int>();
+            foreach (MatchPlayerState owner in participants)
+            {
+                if (owner == null || !handledOwners.Add(owner.Id))
+                {
+                    continue;
+                }
+
+                bool ownsBiovirus = owner.OwnedCards.Any(card =>
+                    string.Equals(
+                        card.Definition.BaseId,
+                        MatchEventCatalog.BiovirusCardId,
+                        StringComparison.Ordinal));
+                if (!ownsBiovirus)
+                {
+                    continue;
+                }
+
+                foreach (MatchPlayerState target in participants)
+                {
+                    if (target == null)
+                    {
+                        continue;
+                    }
+
+                    CardInstance candidate = target.BagCards.FirstOrDefault(card =>
+                        card.Definition.SlotSize == 1 &&
+                        !string.Equals(
+                            card.Definition.BaseId,
+                            MatchEventCatalog.BiovirusCardId,
+                            StringComparison.Ordinal));
+                    if (candidate == null)
+                    {
+                        continue;
+                    }
+
+                    string fromId = candidate.Definition.Id;
+                    if (!target.TryTransformBagCard(
+                            candidate.Uid,
+                            cardCatalog.Get(MatchEventCatalog.BiovirusCardId)))
+                    {
+                        continue;
+                    }
+
+                    Publish(new CardTransformedEvent(
+                        target.Id,
+                        candidate.Uid,
+                        fromId,
+                        MatchEventCatalog.BiovirusCardId,
+                        "Biovirus"));
+                }
+            }
         }
 
         private CombatResult RunCombat(
@@ -1211,7 +1380,8 @@ namespace ProjectArtOfAll.Core.Match
                 EffectiveBattleSlots(left),
                 null,
                 ToCombatBonus(left.CombinedBattleModifier()),
-                left.Name);
+                left.Name,
+                left.Wins);
             CombatantSnapshot rightSnapshot = rightPlayer != null
                 ? new CombatantSnapshot(
                     rightPlayerId,
@@ -1219,7 +1389,8 @@ namespace ProjectArtOfAll.Core.Match
                     EffectiveBattleSlots(rightPlayer),
                     null,
                     ToCombatBonus(rightPlayer.CombinedBattleModifier()),
-                    rightPlayer.Name)
+                    rightPlayer.Name,
+                    rightPlayer.Wins)
                 : new CombatantSnapshot(
                     rightPlayerId,
                     rightLevel,
@@ -1257,7 +1428,11 @@ namespace ProjectArtOfAll.Core.Match
             return new CombatBonus(
                 modifier.ShieldPercent,
                 modifier.DamageBonus,
-                modifier.BlockBonus);
+                modifier.BlockBonus,
+                modifier.HealBonus,
+                modifier.PoisonBonus,
+                modifier.BurnBonus,
+                modifier.RegenerationBonus);
         }
 
         private ulong NextCombatSeed()
@@ -1283,6 +1458,35 @@ namespace ProjectArtOfAll.Core.Match
             return candidates.Length == 0
                 ? sourceNodeId
                 : candidates[random.NextInt(candidates.Length)];
+        }
+
+        private int SelectRandomEventTeleport(MatchPlayerState player)
+        {
+            int[] candidates = graph.Nodes
+                .Select(node => node.Id)
+                .Where(nodeId => nodeId != player.CurrentNode)
+                .OrderBy(nodeId => nodeId)
+                .ToArray();
+            return candidates.Length == 0
+                ? player.CurrentNode
+                : candidates[eventRandom.NextInt(candidates.Length)];
+        }
+
+        private void TeleportFromEvent(MatchPlayerState player, int targetNodeId)
+        {
+            int fromNodeId = player.CurrentNode;
+            if (targetNodeId == fromNodeId)
+            {
+                return;
+            }
+
+            Publish(new PlayerTeleportedEvent(
+                player.Id,
+                fromNodeId,
+                targetNodeId,
+                isEventTeleport: true));
+            player.CurrentNode = targetNodeId;
+            player.LastArrivalNode = -1;
         }
 
         private void TryUpgrade(MatchPlayerState player)

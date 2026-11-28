@@ -478,7 +478,10 @@ namespace ProjectArtOfAll.Core.Match
             for (int index = 0; index < observation.EventOptions.Count; index++)
             {
                 MatchEventOption option = observation.EventOptions[index];
-                if (option.ShardCost > observation.Shards || option.CardWidth > bagRoom)
+                int shardCost = option.GetShardCost(observation.Level);
+                if (shardCost > observation.Shards ||
+                    option.WinsCost > observation.Wins ||
+                    option.CardWidth > bagRoom)
                 {
                     continue;
                 }
@@ -499,12 +502,30 @@ namespace ProjectArtOfAll.Core.Match
                     case EventEffectType.BattlePower:
                         value = option.Amount * 4.0 * option.Battles * Personality.Aggression;
                         break;
+                    case EventEffectType.RandomTeleport:
+                        value = 2.0;
+                        break;
+                    case EventEffectType.TeleportTarget:
+                        value = 3.0;
+                        break;
+                    case EventEffectType.KillTime:
+                        value = 18.0 * Personality.Aggression;
+                        break;
+                    case EventEffectType.LoseWinGainShards:
+                        value = option.Amount * 0.8;
+                        break;
+                    case EventEffectType.GainSpecificCards:
+                        value = 20.0 * Personality.Growth;
+                        break;
+                    case EventEffectType.LoseShardsByLevel:
+                        value = 0.0;
+                        break;
                     default:
                         value = 0.0;
                         break;
                 }
 
-                double score = value - (option.ShardCost * 1.2);
+                double score = value - (shardCost * 1.2);
                 if (score > bestScore)
                 {
                     bestScore = score;

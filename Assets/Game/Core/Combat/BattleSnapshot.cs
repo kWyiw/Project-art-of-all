@@ -14,8 +14,16 @@ namespace ProjectArtOfAll.Core.Combat
             IEnumerable<CardInstance> battleCards,
             int? maxHealth = null,
             CombatBonus? bonus = null,
-            string displayName = null)
-            : this(playerId, level, CardSlotRules.Unpack(battleCards), maxHealth, bonus, displayName)
+            string displayName = null,
+            int wins = 0)
+            : this(
+                playerId,
+                level,
+                CardSlotRules.Unpack(battleCards),
+                maxHealth,
+                bonus,
+                displayName,
+                wins)
         {
         }
 
@@ -28,7 +36,8 @@ namespace ProjectArtOfAll.Core.Combat
             IEnumerable<CardSlot> battleSlots,
             int? maxHealth = null,
             CombatBonus? bonus = null,
-            string displayName = null)
+            string displayName = null,
+            int wins = 0)
         {
             if (playerId < 0)
             {
@@ -93,6 +102,7 @@ namespace ProjectArtOfAll.Core.Combat
                 : displayName;
             MaxHealth = maxHealth ?? defaultHealth;
             Bonus = bonus ?? default(CombatBonus);
+            Wins = Math.Max(0, wins);
             BattleSlots = Array.AsReadOnly(
                 slots.OrderBy(slot => slot.Column).ToArray());
             BattleCards = Array.AsReadOnly(
@@ -112,6 +122,9 @@ namespace ProjectArtOfAll.Core.Combat
         /// 事件给的临时战斗增益（R-EVT-003）。战斗开始时结算护盾，之后每次伤害/格挡各加一次。
         /// </summary>
         public CombatBonus Bonus { get; }
+
+        /// <summary> accrued wins used by event cards such as 凶器. </summary>
+        public int Wins { get; }
 
         /// <summary>战斗栏的占位（按列排序，中间可能有空列）。</summary>
         public IReadOnlyList<CardSlot> BattleSlots { get; }
@@ -143,11 +156,22 @@ namespace ProjectArtOfAll.Core.Combat
     /// </summary>
     public readonly struct CombatBonus
     {
-        public CombatBonus(int shieldPercent, int damageBonus, int blockBonus)
+        public CombatBonus(
+            int shieldPercent,
+            int damageBonus,
+            int blockBonus,
+            int healBonus = 0,
+            int poisonBonus = 0,
+            int burnBonus = 0,
+            int regenerationBonus = 0)
         {
             ShieldPercent = shieldPercent < 0 ? 0 : shieldPercent;
             DamageBonus = damageBonus < 0 ? 0 : damageBonus;
             BlockBonus = blockBonus < 0 ? 0 : blockBonus;
+            HealBonus = healBonus < 0 ? 0 : healBonus;
+            PoisonBonus = poisonBonus < 0 ? 0 : poisonBonus;
+            BurnBonus = burnBonus < 0 ? 0 : burnBonus;
+            RegenerationBonus = regenerationBonus < 0 ? 0 : regenerationBonus;
         }
 
         public int ShieldPercent { get; }
@@ -156,7 +180,22 @@ namespace ProjectArtOfAll.Core.Combat
 
         public int BlockBonus { get; }
 
-        public bool IsNone => ShieldPercent == 0 && DamageBonus == 0 && BlockBonus == 0;
+        public int HealBonus { get; }
+
+        public int PoisonBonus { get; }
+
+        public int BurnBonus { get; }
+
+        public int RegenerationBonus { get; }
+
+        public bool IsNone =>
+            ShieldPercent == 0 &&
+            DamageBonus == 0 &&
+            BlockBonus == 0 &&
+            HealBonus == 0 &&
+            PoisonBonus == 0 &&
+            BurnBonus == 0 &&
+            RegenerationBonus == 0;
 
         public int ShieldFor(int maximumHealth)
         {

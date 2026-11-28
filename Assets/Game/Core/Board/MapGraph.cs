@@ -96,7 +96,8 @@ namespace ProjectArtOfAll.Core.Board
                 ? GetNode(previousNodeId)
                 : null;
             if (!node.HasGridPosition ||
-                (previous != null && !previous.HasGridPosition))
+                previous == null ||
+                !previous.HasGridPosition)
             {
                 return WithoutPrevious(node, previousNodeId);
             }

@@ -364,6 +364,12 @@ namespace ProjectArtOfAll.Core.Match
                 case MatchPhase.AwaitEvent:
                     controller.Submit(new EventChoiceCommand(playerId, -1));
                     break;
+                case MatchPhase.AwaitEventTarget:
+                    int targetNodeId = controller.State.Map.Nodes
+                        .Select(node => node.Id)
+                        .First(nodeId => nodeId != controller.State.CurrentPlayer.CurrentNode);
+                    controller.Submit(new EventTeleportCommand(playerId, targetNodeId));
+                    break;
             }
         }
 

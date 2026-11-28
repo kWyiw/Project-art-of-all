@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using ProjectArtOfAll.Core.Cards;
@@ -9,12 +10,17 @@ namespace ProjectArtOfAll.Core.Combat
         public CombatantRuntime(CombatantSnapshot snapshot)
         {
             Snapshot = snapshot;
-            MaximumHealth = snapshot.MaxHealth;
+            BaseMaximumHealth = snapshot.MaxHealth;
+            MaximumHealth = BaseMaximumHealth;
             Health = MaximumHealth;
             // 事件给的增益（R-EVT-003）：开战先按最大生命值百分比给盾，之后每张牌伤害/格挡各加点。
             Shield = snapshot.Bonus.ShieldFor(MaximumHealth);
             DamageBonus = snapshot.Bonus.DamageBonus;
             BlockBonus = snapshot.Bonus.BlockBonus;
+            HealBonus = snapshot.Bonus.HealBonus;
+            PoisonBonus = snapshot.Bonus.PoisonBonus;
+            BurnBonus = snapshot.Bonus.BurnBonus;
+            RegenerationBonus = snapshot.Bonus.RegenerationBonus;
             Cards = snapshot.BattleSlots
                 .Select(slot => new CombatCardRuntime(slot.Card, slot.Column))
                 .ToList();
@@ -22,7 +28,9 @@ namespace ProjectArtOfAll.Core.Combat
 
         public CombatantSnapshot Snapshot { get; }
         public int PlayerId => Snapshot.PlayerId;
-        public int MaximumHealth { get; }
+        public int Wins => Snapshot.Wins;
+        public int BaseMaximumHealth { get; }
+        public int MaximumHealth { get; private set; }
         public int Health { get; set; }
         public int Shield { get; set; }
         public int Poison { get; set; }
@@ -35,12 +43,30 @@ namespace ProjectArtOfAll.Core.Combat
         /// <summary>事件增益：本场战斗所有格挡 +N。</summary>
         public int BlockBonus { get; }
 
+        /// <summary>事件「神秘饮料」：本场治疗数值 +N。</summary>
+        public int HealBonus { get; }
+
+        /// <summary>事件「神秘饮料」：本场中毒数值 +N。</summary>
+        public int PoisonBonus { get; }
+
+        /// <summary>事件「神秘饮料」：本场灼烧数值 +N。</summary>
+        public int BurnBonus { get; }
+
+        /// <summary>事件「神秘饮料」：本场再生数值 +N。</summary>
+        public int RegenerationBonus { get; }
+
         /// <summary>特种橡胶: every shield this side gains is +N.</summary>
         public int ShieldBonus { get; set; }
 
         public List<CombatCardRuntime> Cards { get; }
 
         public bool IsKnockedOut => Health <= 0;
+
+        internal void RefreshMaximumHealth(int bonus)
+        {
+            MaximumHealth = Math.Max(1, BaseMaximumHealth + Math.Max(0, bonus));
+            Health = Math.Min(Health, MaximumHealth);
+        }
 
         public IReadOnlyList<CombatCardRuntime> ActiveCards()
         {

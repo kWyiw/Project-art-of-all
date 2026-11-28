@@ -262,6 +262,25 @@ namespace ProjectArtOfAll.Core.Cards
                     "主动：为相邻的食物牌充能2秒。",
                     "被动：每当你使用食物牌时，造成1d2中毒。",
                 },
+                ["mystery_drink"] = new[]
+                {
+                    "在商店出售额外获得6g。",
+                },
+                ["murder_weapon"] = new[]
+                {
+                    "主动：造成3d20/4d20伤害。",
+                    "被动：此牌获得等于你胜场数的伤害修正。",
+                },
+                ["biovirus"] = new[]
+                {
+                    "主动：对自己和对手造成1d4中毒。",
+                    "被动：每次战斗后强制将自己和对手背包中一张1c牌永久转化为生化病毒。无法出售。",
+                },
+                ["mother"] = new[]
+                {
+                    "被动：战斗中你的最大生命值提升你自己中毒层数的20倍。你每次给予中毒时会获得等量再生。",
+                    "无法出售。",
+                },
             };
 
         private static readonly Dictionary<string, string[]> UpgradedLines =
@@ -480,6 +499,11 @@ namespace ProjectArtOfAll.Core.Cards
                 {
                     "主动：造成2d100伤害。",
                     "被动：触发剧毒、灼烧、加速、缓速时，充能此牌2秒并使此牌+6伤害修正。",
+                },
+                ["murder_weapon"] = new[]
+                {
+                    "主动：造成4d20伤害。",
+                    "被动：此牌获得等于你胜场数的伤害修正。",
                 },
             };
 

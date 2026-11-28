@@ -67,6 +67,8 @@ namespace ProjectArtOfAll.Core.Match
         /// <summary>背包栏位的占位（牌可以放在任意合法空位，中间允许留空）。</summary>
         public IReadOnlyList<CardSlot> BagSlots => cards.BagSlots;
 
+        public IReadOnlyList<CardInstance> BagCards => cards.BagCards;
+
         /// <summary>战斗栏位的占位（相邻光环按这里的列号判断相邻）。</summary>
         public IReadOnlyList<CardSlot> BattleSlots => cards.BattleSlots;
 
@@ -87,6 +89,11 @@ namespace ProjectArtOfAll.Core.Match
             return BoardCardEconomy.EffectiveValue(this, card);
         }
 
+        public int SaleValue(CardInstance card)
+        {
+            return BoardCardEconomy.SaleValue(this, card);
+        }
+
         public bool MeetsCurrentNorma()
         {
             return Level >= 6 ||
@@ -105,14 +112,30 @@ namespace ProjectArtOfAll.Core.Match
             int shieldPercent = 0;
             int damageBonus = 0;
             int blockBonus = 0;
+            int healBonus = 0;
+            int poisonBonus = 0;
+            int burnBonus = 0;
+            int regenerationBonus = 0;
             foreach (BattleModifier modifier in battleModifiers)
             {
                 shieldPercent += modifier.ShieldPercent;
                 damageBonus += modifier.DamageBonus;
                 blockBonus += modifier.BlockBonus;
+                healBonus += modifier.HealBonus;
+                poisonBonus += modifier.PoisonBonus;
+                burnBonus += modifier.BurnBonus;
+                regenerationBonus += modifier.RegenerationBonus;
             }
 
-            return new BattleModifier(shieldPercent, damageBonus, blockBonus, 1);
+            return new BattleModifier(
+                shieldPercent,
+                damageBonus,
+                blockBonus,
+                1,
+                healBonus,
+                poisonBonus,
+                burnBonus,
+                regenerationBonus);
         }
 
         internal void AddBattleModifier(BattleModifier modifier)
@@ -159,6 +182,10 @@ namespace ProjectArtOfAll.Core.Match
                 hash = StableHash.Add(hash, modifier.ShieldPercent);
                 hash = StableHash.Add(hash, modifier.DamageBonus);
                 hash = StableHash.Add(hash, modifier.BlockBonus);
+                hash = StableHash.Add(hash, modifier.HealBonus);
+                hash = StableHash.Add(hash, modifier.PoisonBonus);
+                hash = StableHash.Add(hash, modifier.BurnBonus);
+                hash = StableHash.Add(hash, modifier.RegenerationBonus);
                 hash = StableHash.Add(hash, modifier.BattlesRemaining);
             }
 
@@ -212,6 +239,11 @@ namespace ProjectArtOfAll.Core.Match
         internal bool TrySellCard(int cardUid, out CardInstance removed)
         {
             return cards.TryRemove(cardUid, out removed);
+        }
+
+        internal bool TryTransformBagCard(int cardUid, CardDefinition definition)
+        {
+            return cards.TryTransformBagCard(cardUid, definition);
         }
 
         /// <summary>把一张牌从手里直接拿掉（不结算碎片）：粉碎机吃掉背包里的废料用。</summary>

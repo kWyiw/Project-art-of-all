@@ -72,7 +72,18 @@ namespace ProjectArtOfAll.Core.Match
         /// <summary>出售时的实际成交价：牌面价值 + 回收站加成。</summary>
         public static int SaleValue(MatchPlayerState player, CardInstance card)
         {
-            return card == null ? 0 : card.Value + RecyclerBonus(player, card);
+            if (card == null)
+            {
+                return 0;
+            }
+
+            int eventSaleBonus = string.Equals(
+                    card.Definition.BaseId,
+                    "mystery_drink",
+                    StringComparison.Ordinal)
+                ? 6
+                : 0;
+            return card.Value + RecyclerBonus(player, card) + eventSaleBonus;
         }
 
         public static int EffectiveValue(MatchPlayerState player, CardInstance card)

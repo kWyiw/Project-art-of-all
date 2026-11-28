@@ -53,6 +53,29 @@ namespace ProjectArtOfAll.Core.Combat
             return GetAuraValue(side, target, AuraStat.MaxRoll) > 0;
         }
 
+        /// <summary>母体：每层中毒提供的最大生命加成。</summary>
+        public int GetMaxHealthBonus(CombatantRuntime side)
+        {
+            if (side == null || side.Poison <= 0)
+            {
+                return 0;
+            }
+
+            int total = 0;
+            foreach (CombatCardRuntime source in side.ActiveCards())
+            {
+                foreach (AuraDefinition aura in source.Definition.Auras)
+                {
+                    if (aura.Stat == AuraStat.MaxHealthPerPoison)
+                    {
+                        total += aura.Amount * side.Poison;
+                    }
+                }
+            }
+
+            return Math.Max(0, total);
+        }
+
         private static int GetAuraValue(
             CombatantRuntime side,
             CombatCardRuntime target,
@@ -106,6 +129,9 @@ namespace ProjectArtOfAll.Core.Combat
                             break;
                         case AuraScaling.PerOwnerRegeneration:
                             total += aura.Amount * Math.Max(0, side.Regeneration);
+                            break;
+                        case AuraScaling.PerOwnerWins:
+                            total += aura.Amount * Math.Max(0, side.Wins);
                             break;
                         default:
                             total += aura.Amount;

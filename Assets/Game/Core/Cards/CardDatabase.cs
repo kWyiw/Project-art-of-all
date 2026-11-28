@@ -12,8 +12,8 @@ namespace ProjectArtOfAll.Core.Cards
     }
 
     /// <summary>
-    /// The full card catalog, imported from 卡牌设计稿\第一套卡牌.txt and 第二套卡牌.txt
-    /// plus the event-only 神秘饮料. Every card is pure data.
+    /// The full card catalog, imported from 卡牌设计稿\第一套卡牌.txt, 第二套卡牌.txt
+    /// and 事件设计稿\第一批事件.txt. Every card is pure data.
     ///
     /// 卡面写「1d4/1d6」的地方是同一张牌的两级：基础版用斜杠前的数值，升级版用斜杠后的
     /// 数值，升级版 id 是基础版 id 加一个 "+"、名字加一个 "+"（CJ-5.11 融合升级）。
@@ -783,20 +783,74 @@ namespace ProjectArtOfAll.Core.Cards
                             CardTag.Food)
                     }));
 
-            // 事件「神秘饮料」打包带走的那瓶：战斗栏里开局回 8 点生命，也可以直接卖掉（R-EVT-002）。
-            // 没有设计升级版，所以同名第二瓶不会融合。
+            // ── 六、事件限定牌 ───────────────────────────────────────────────
+            // 神秘饮料：1c 食物/事件牌，商店出售时额外获得 6g。
+            // CardDefinition 要求每张牌至少有一个效果；CardSold 是一个永不进入战斗的棋盘标记。
             all.Add(
                 Card(
-                    "mystery_drink", "神秘饮料", 2, 0, CardTag.Food, 8, battle,
+                    "mystery_drink", "神秘饮料", 1, 0,
+                    CardTag.Food | CardTag.Event, 1, both,
                     passives: new[]
                     {
                         new PassiveDefinition(
-                            PassiveTrigger.BattleStart,
+                            PassiveTrigger.CardSold,
                             new CardEffect(
-                                EffectOp.Heal,
-                                EffectAmount.Flat(8),
+                                EffectOp.ModifyValue,
+                                EffectAmount.Flat(0),
                                 EffectTarget.Self))
                     }));
+
+            Add(
+                all,
+                Card(
+                    "murder_weapon", "凶器", 1, 9,
+                    CardTag.Weapon | CardTag.Event, 1, both,
+                    effects: new[] { Damage(3, 20) },
+                    auras: new[]
+                    {
+                        new AuraDefinition(
+                            AuraTarget.Self,
+                            AuraStat.DamageDiceModifier,
+                            1,
+                            scaling: AuraScaling.PerOwnerWins)
+                    }),
+                new Upgrade(effects: new[] { Damage(4, 20) }));
+
+            all.Add(
+                Card(
+                    "biovirus", "生化病毒", 1, 3,
+                    CardTag.Disease | CardTag.Event, 1, both,
+                    effects: new[]
+                    {
+                        Status(EffectOp.ApplyPoison, 1, 4),
+                        new CardEffect(
+                            EffectOp.ApplyPoison,
+                            EffectAmount.Dice(1, 4),
+                            EffectTarget.Self)
+                    },
+                    cannotSell: true));
+
+            all.Add(
+                Card(
+                    "mother", "母体", 2, 0,
+                    CardTag.Companion | CardTag.Disease | CardTag.Event, 2, both,
+                    auras: new[]
+                    {
+                        new AuraDefinition(
+                            AuraTarget.Self,
+                            AuraStat.MaxHealthPerPoison,
+                            20)
+                    },
+                    passives: new[]
+                    {
+                        new PassiveDefinition(
+                            PassiveTrigger.PoisonApplied,
+                            new CardEffect(
+                                EffectOp.ApplyRegeneration,
+                                EffectAmount.FromTriggerAmount(),
+                                EffectTarget.Self))
+                    },
+                    cannotSell: true));
 
             return all;
         }
@@ -849,7 +903,8 @@ namespace ProjectArtOfAll.Core.Cards
                 upgrade.Auras ?? baseCard.Auras,
                 upgrade.Passives ?? baseCard.Passives,
                 baseId: baseCard.Id,
-                isUpgraded: true);
+                isUpgraded: true,
+                cannotSell: baseCard.CannotSell);
             baseCard.LinkUpgrade(upgraded);
             all.Add(upgraded);
         }
@@ -864,7 +919,8 @@ namespace ProjectArtOfAll.Core.Cards
             CardScope scope,
             CardEffect[] effects = null,
             AuraDefinition[] auras = null,
-            PassiveDefinition[] passives = null)
+            PassiveDefinition[] passives = null,
+            bool cannotSell = false)
         {
             return new CardDefinition(
                 id,
@@ -876,7 +932,8 @@ namespace ProjectArtOfAll.Core.Cards
                 scope,
                 effects ?? Array.Empty<CardEffect>(),
                 auras,
-                passives);
+                passives,
+                cannotSell: cannotSell);
         }
 
         private static CardEffect Damage(int count, int faces)

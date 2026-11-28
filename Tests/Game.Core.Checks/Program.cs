@@ -56,6 +56,7 @@ namespace ProjectArtOfAll.Core.Checks
                 CheckEarlyHomeStop();
                 CheckPassThroughOpponent();
                 CheckMatchEvent();
+                CheckEventCardMechanics();
                 CheckBoardTraps();
                 CheckCombatBonus();
                 CheckStraightOnlyAndPrediction();
@@ -435,20 +436,25 @@ namespace ProjectArtOfAll.Core.Checks
         private static void CheckCardDatabase()
         {
             CardDatabase catalog = CardDatabase.Instance;
-            // 51 张基础牌 + 其中 43 张各自的「+」升级版。
-            Assert(catalog.All.Count == 51,
-                "The catalog must expose all fifty-one base cards.");
+            // 54 张基础牌 + 其中 44 张各自的「+」升级版。
+            Assert(catalog.All.Count == 54,
+                "The catalog must expose all fifty-four base cards.");
             Assert(catalog.All.All(card => !card.IsUpgraded),
                 "The shop / reward pool must never list upgraded cards.");
-            Assert(catalog.AllDefinitions.Count == 94,
+            Assert(catalog.AllDefinitions.Count == 98,
                 "Every upgradable base card must ship its upgraded twin.");
 
             // 商店 / 奖励的随机池直接取 catalog.All，只滤掉事件专属牌；任何新牌掉队都会在这里炸。
             foreach (CardDefinition card in catalog.All)
             {
                 bool excluded = MatchEventCatalog.IsEventOnlyCard(card.Id);
-                Assert(!excluded || card.Id == MatchEventCatalog.MysteryDrinkCardId,
-                    $"Only the event card may stay out of the shop / reward pool (got {card.Id}).");
+                Assert(
+                    !excluded ||
+                    card.Id == MatchEventCatalog.MysteryDrinkCardId ||
+                    card.Id == MatchEventCatalog.MurderWeaponCardId ||
+                    card.Id == MatchEventCatalog.BiovirusCardId ||
+                    card.Id == MatchEventCatalog.MotherCardId,
+                    $"Only event-limited cards may stay out of the shop / reward pool (got {card.Id}).");
             }
             Assert(catalog.Get("crowbar").CooldownTicks == 180,
                 "Crowbar must use a 180-tick cooldown.");
@@ -478,7 +484,7 @@ namespace ProjectArtOfAll.Core.Checks
             Assert(catalog.Get("snow_purifier").Upgraded == null,
                 "雪水净化器 must have no upgrade (its value is the 淡水 it produces).");
             Assert(catalog.Get("mystery_drink").Upgraded == null,
-                "神秘饮料 must have no upgrade (it is a sellable bottle).");
+                "神秘饮料 must have no upgrade (it is a sellable event card).");
             Assert(catalog.Get("recycler+") != null && catalog.Get("recycler+").IsUpgraded,
                 "回收站 must ship 回收站+ (its sell bonus doubles).");
             Assert(catalog.Get("rusted_blade+") != null,
@@ -487,6 +493,19 @@ namespace ProjectArtOfAll.Core.Checks
                 "六六大顺 must carry the Mascot tag.");
             Assert(catalog.Get("food_poisoning").HasTag(CardTag.Disease),
                 "食物中毒 must carry the Disease tag.");
+            Assert(
+                catalog.Get(MatchEventCatalog.MysteryDrinkCardId).HasTag(CardTag.Event) &&
+                catalog.Get(MatchEventCatalog.MysteryDrinkCardId).Value == 1,
+                "神秘饮料 must be a 1-value event card.");
+            Assert(
+                catalog.Get(MatchEventCatalog.MurderWeaponCardId).HasTag(CardTag.Event) &&
+                catalog.Get(MatchEventCatalog.MurderWeaponCardId).Auras.Any(
+                    aura => aura.Scaling == AuraScaling.PerOwnerWins),
+                "凶器 must be an event weapon with win scaling.");
+            Assert(
+                catalog.Get(MatchEventCatalog.BiovirusCardId).CannotSell &&
+                catalog.Get(MatchEventCatalog.MotherCardId).CannotSell,
+                "Biovirus and 母体 must not be sellable.");
             Assert(catalog.Get("placeholder_2").Upgraded != null,
                 "占位符2 must upgrade from right-side to adjacent lifesteal.");
             Assert(CardText.Description(catalog.Get("titan")).Contains("2d100"),
@@ -521,8 +540,8 @@ namespace ProjectArtOfAll.Core.Checks
             }
 
             Assert(
-                catalog.Get("mystery_drink").Scope == CardScope.BattleOnly,
-                "Mystery drink's battle-start heal must require the battle row.");
+                catalog.Get("mystery_drink").Scope == CardScope.BagAndBattle,
+                "Mystery drink is an event card that can be sold from either row.");
             foreach (string id in new[]
                      {
                          "recycler", "snow_purifier", "dorayaki", "golden_chariot",
@@ -539,18 +558,18 @@ namespace ProjectArtOfAll.Core.Checks
             IReadOnlyList<CardDefinition> all = CardCatalogMetadata.All;
             Assert(
                 all.Count == CardDatabase.Instance.AllDefinitions.Count &&
-                all.Count == 94,
+                all.Count == 98,
                 "The codex catalog must include all base and upgraded definitions.");
             Assert(
                 all.Count(card =>
                     CardCatalogMetadata.AcquisitionOf(card) ==
-                    CardUnlockKind.FusionUpgrade) == 43,
-                "The codex must classify all 43 upgraded cards as fusion upgrades.");
+                    CardUnlockKind.FusionUpgrade) == 44,
+                "The codex must classify all 44 upgraded cards as fusion upgrades.");
             Assert(
                 all.Count(card =>
                     CardCatalogMetadata.AcquisitionOf(card) ==
-                    CardUnlockKind.EventLimited) == 1,
-                "Only the mystery drink is event-limited.");
+                    CardUnlockKind.EventLimited) == 4,
+                "The codex must classify all four event cards as event-limited.");
             Assert(
                 all.Count(card =>
                     CardCatalogMetadata.AcquisitionOf(card) ==
@@ -560,9 +579,12 @@ namespace ProjectArtOfAll.Core.Checks
             IReadOnlyList<CardDefinition> eventCards = CardCatalogMetadata.Filter(
                 acquisition: CardUnlockKind.EventLimited);
             Assert(
-                eventCards.Count == 1 &&
-                eventCards[0].Id == MatchEventCatalog.MysteryDrinkCardId,
-                "Event-limited filter must return 神秘饮料.");
+                eventCards.Count == 4 &&
+                eventCards.Any(card => card.Id == MatchEventCatalog.MysteryDrinkCardId) &&
+                eventCards.Any(card => card.Id == MatchEventCatalog.MurderWeaponCardId) &&
+                eventCards.Any(card => card.Id == MatchEventCatalog.BiovirusCardId) &&
+                eventCards.Any(card => card.Id == MatchEventCatalog.MotherCardId),
+                "Event-limited filter must return all event cards.");
             Assert(
                 CardCatalogMetadata.Filter(slotSize: 3).All(card => card.SlotSize == 3),
                 "Size filter must only return matching slot costs.");
@@ -577,7 +599,7 @@ namespace ProjectArtOfAll.Core.Checks
                 "The catalog must expose upgraded cards individually.");
 
             Console.WriteLine(
-                $"[codex] definitions={all.Count} normal=50 event=1 upgrades=43");
+                $"[codex] definitions={all.Count} normal=50 event=4 upgrades=44");
         }
 
         private static void CheckCardKeywords()
@@ -3187,7 +3209,7 @@ namespace ProjectArtOfAll.Core.Checks
         }
 
         /// <summary>
-        /// 事件格（R-EVT-001..003）：停上去开一次三选一，付不起的选项被拒绝，「走开」什么都不拿就结束回合。
+        /// 事件格（R-EVT-001..005）：按阶段抽取事件，校验动态费用、传送目标和「走开」。
         /// </summary>
         /// <summary>
         /// R-TRAP-001：铁丝网 / 路障出售后在地块上留陷阱。路障强制停车并消耗次数，
@@ -3313,109 +3335,370 @@ namespace ProjectArtOfAll.Core.Checks
 
         private static void CheckMatchEvent()
         {
-            // 8 格环：0..3 四个家、4 空地、5 事件格（奇数号 → 神秘饮料）、6..7 空地。
-            // 玩家 0 掷 5 从家出发，正好停在事件格上。
+            // 8 格环：0..3 四个家、4 空地、5 事件格、6..7 空地。
             MapNode[] nodes = new MapNode[8];
             for (int index = 0; index < nodes.Length; index++)
             {
                 bool isHome = index < 4;
-                bool isEvent = index == 5;
                 nodes[index] = new MapNode(
                     index,
-                    isHome ? TileType.Home : isEvent ? TileType.Event : TileType.Neutral,
+                    isHome ? TileType.Home : index == 5 ? TileType.Event : TileType.Neutral,
                     isHome ? index : -1,
                     (index + 1) % nodes.Length);
             }
 
             MapGraph graph = MapGraph.Create(nodes, playerCount: 4);
 
-            // 1) 选「打包带走」：免费获得神秘饮料。
-            MatchController take = FindRollingController(graph, 5);
-            Assert(take != null, "Some seed must roll a 5 for the event probe.");
+            for (ulong seed = 1; seed <= 64; seed++)
+            {
+                MatchEventDefinition early = MatchEventCatalog.PickForPhase(
+                    MonsterPhase.Early,
+                    new Pcg32(seed, 11UL));
+                Assert(
+                    early.Kind == MatchEventKind.Expedition ||
+                    early.Kind == MatchEventKind.MysteryDrink ||
+                    early.Kind == MatchEventKind.UnknownTrail,
+                    "Early events must come from the stage-one pool.");
+            }
 
-            MatchPlayerState taker = take.State.CurrentPlayer;
+            MatchController LandEvent(
+                MatchEventKind kind,
+                bool allPlayersLevelTwo = false,
+                bool latePhase = false)
+            {
+                for (ulong seed = 1; seed <= 2000; seed++)
+                {
+                    MatchController controller = new MatchController(graph, seed);
+                    if (allPlayersLevelTwo)
+                    {
+                        foreach (MatchPlayerState seat in controller.State.Players)
+                        {
+                            seat.Level = 2;
+                        }
+                    }
+
+                    if (latePhase)
+                    {
+                        controller.State.Players[0].Level = 4;
+                    }
+
+                    MatchPlayerState player = controller.State.CurrentPlayer;
+                    controller.Submit(new DebugRollCommand(player.Id, 5));
+                    controller.Submit(new MoveCommand(player.Id, null));
+                    if (controller.CurrentEvent?.Definition.Kind == kind)
+                    {
+                        return controller;
+                    }
+                }
+
+                return null;
+            }
+
+            MatchController mystery = LandEvent(MatchEventKind.MysteryDrink);
+            Assert(mystery != null, "The stage-one pool must contain mystery drink.");
+            MatchPlayerState taker = mystery.State.CurrentPlayer;
             int shardsBefore = taker.Shards;
-            take.Submit(new MoveCommand(taker.Id, null));
-            Assert(
-                take.State.Phase == MatchPhase.AwaitEvent,
-                "Landing on an event tile must open the event, phase was "
-                    + take.State.Phase.ToString() + ".");
-            Assert(take.CurrentEvent != null, "An open event must expose its session.");
-            Assert(
-                take.CurrentEvent.Definition.Kind == MatchEventKind.MysteryDrink,
-                "An odd event node id must resolve to the mystery drink.");
-            Assert(
-                take.CurrentEvent.Options.Count == 3,
+            Assert(mystery.CurrentEvent.Options.Count == 3,
                 "The mystery drink must offer three choices.");
+            mystery.Submit(new EventChoiceCommand(taker.Id, 2));
+            CardInstance drink = taker.OwnedCards.FirstOrDefault(
+                card => card.Definition.Id == MatchEventCatalog.MysteryDrinkCardId);
+            Assert(drink != null, "Taking the mystery drink must put it in the bag.");
+            Assert(taker.Shards == shardsBefore, "The free drink option must cost no shards.");
             Assert(
-                take.Events.History.OfType<EventOfferedEvent>().Any(
-                    offered => offered.PlayerId == taker.Id && offered.NodeId == 5),
-                "Opening an event must publish EventOfferedEvent.");
+                BoardCardEconomy.SaleValue(taker, drink) == 7,
+                "The mystery drink must sell for 1 + 6 shards.");
+            Assert(
+                mystery.Events.History.OfType<CardAddedEvent>().Any(
+                    added => added.PlayerId == taker.Id &&
+                             added.CardId == MatchEventCatalog.MysteryDrinkCardId &&
+                             added.Source == "Event"),
+                "A granted event card must be reported.");
 
-            take.Submit(new EventChoiceCommand(taker.Id, 1));
+            MatchController power = LandEvent(MatchEventKind.MysteryDrink);
+            MatchPlayerState powered = power.State.CurrentPlayer;
+            power.Submit(new EventChoiceCommand(powered.Id, 1));
             Assert(
-                taker.OwnedCards.Any(
-                    card => card.Definition.Id == MatchEventCatalog.MysteryDrinkCardId),
-                "Taking the mystery drink must put it in the bag.");
-            Assert(
-                take.Events.History.OfType<CardAddedEvent>().Any(
-                    added => added.PlayerId == taker.Id
-                        && added.CardId == MatchEventCatalog.MysteryDrinkCardId
-                        && added.Source == "Event"),
-                "A granted card must be reported as an event reward.");
-            Assert(taker.Shards == shardsBefore, "The free option must not cost shards.");
-            Assert(
-                take.State.Phase == MatchPhase.AwaitRoll,
-                "Resolving an event must hand the turn to the next seat.");
-            Assert(take.CurrentEvent == null, "A resolved event must be cleared.");
+                powered.BattleModifiers.Any(modifier =>
+                    modifier.DamageBonus == 2 &&
+                    modifier.BlockBonus == 2 &&
+                    modifier.HealBonus == 2 &&
+                    modifier.PoisonBonus == 1 &&
+                    modifier.BurnBonus == 1 &&
+                    modifier.RegenerationBonus == 1),
+                "Mystery drink's mixed battle modifier must be recorded.");
 
-            // 2) 走开：什么都不拿，回合照常结束。
-            MatchController leave = FindRollingController(graph, 5);
-            Assert(leave != null, "Some seed must roll a 5 for the walk-away probe.");
-
-            MatchPlayerState leaver = leave.State.CurrentPlayer;
-            int leaveShards = leaver.Shards;
-            leave.Submit(new MoveCommand(leaver.Id, null));
-            leave.Submit(new EventChoiceCommand(leaver.Id, -1));
+            MatchController randomTrail = LandEvent(MatchEventKind.UnknownTrail);
+            Assert(randomTrail != null, "The stage-one pool must contain unknown trail.");
+            MatchPlayerState trailWalker = randomTrail.State.CurrentPlayer;
+            int trailStart = trailWalker.CurrentNode;
+            randomTrail.Submit(new EventChoiceCommand(trailWalker.Id, 0));
             Assert(
-                !leave.Events.History.OfType<CardAddedEvent>().Any(
-                    added => added.PlayerId == leaver.Id),
-                "Walking away must not grant anything.");
-            Assert(leaver.Shards == leaveShards, "Walking away must not cost shards.");
-            Assert(leave.State.Phase == MatchPhase.AwaitRoll, "Walking away must end the turn.");
-            Assert(leave.CurrentEvent == null, "Walking away must clear the event.");
+                randomTrail.Events.History.OfType<PlayerTeleportedEvent>()
+                    .Any(teleport =>
+                        teleport.PlayerId == trailWalker.Id &&
+                        teleport.IsEventTeleport &&
+                        teleport.FromNodeId == trailStart),
+                "Unknown trail's random option must teleport through an event teleport.");
 
-            // 3) 付不起的选项被拒绝，事件仍然开着。
-            MatchController broke = FindRollingController(graph, 5);
-            Assert(broke != null, "Some seed must roll a 5 for the refusal probe.");
-
-            MatchPlayerState poor = broke.State.CurrentPlayer;
-            // 开局现在有 10 碎片，最便宜的选项也付得起；这里把钱包清零，
-            // 专门去撞「付不起」这条分支（内核里是 internal set，测试程序集可见）。
-            poor.Shards = 0;
-            broke.Submit(new MoveCommand(poor.Id, null));
-            MatchEventOption paid = broke.CurrentEvent.Options[0];
+            MatchController targetTrail = LandEvent(MatchEventKind.UnknownTrail);
+            MatchPlayerState targetWalker = targetTrail.State.CurrentPlayer;
+            int beforeTarget = targetWalker.CurrentNode;
+            targetTrail.Submit(new EventChoiceCommand(targetWalker.Id, 1));
             Assert(
-                paid.ShardCost > poor.Shards,
-                "The probe expects the first mystery-drink option to be unaffordable.");
+                targetTrail.State.Phase == MatchPhase.AwaitEventTarget,
+                "The guided option must wait for a target tile.");
+            int selectedTarget = beforeTarget == 0 ? 1 : 0;
+            targetTrail.Submit(new EventTeleportCommand(targetWalker.Id, selectedTarget));
+            Assert(
+                targetWalker.CurrentNode == selectedTarget &&
+                targetTrail.State.Phase == MatchPhase.AwaitRoll,
+                "The guided option must teleport to the selected tile.");
+
+            MatchController raid = LandEvent(MatchEventKind.Raid, allPlayersLevelTwo: true);
+            Assert(raid != null, "The stage-two pool must contain raid.");
+            MatchPlayerState raider = raid.State.CurrentPlayer;
+            int raidRound = raid.State.RoundNumber;
+            raid.Submit(new EventChoiceCommand(raider.Id, 0));
+            Assert(
+                raider.OwnedCards.Any(
+                    card => card.Definition.Id == MatchEventCatalog.MurderWeaponCardId),
+                "Raid's paid option must grant 凶器.");
+            Assert(
+                raid.State.KillTimeStartRound == raidRound + 1 &&
+                raid.State.KillTimeEndRound == raidRound + 3,
+                "Raid must open exactly the next three rounds.");
+
+            MatchController raidTrade = LandEvent(MatchEventKind.Raid, allPlayersLevelTwo: true);
+            MatchPlayerState trader = raidTrade.State.CurrentPlayer;
+            trader.Wins = 1;
+            int traderShards = trader.Shards;
+            raidTrade.Submit(new EventChoiceCommand(trader.Id, 1));
+            Assert(
+                trader.Wins == 0 && trader.Shards == traderShards + 5,
+                "Raid's second option must trade one win for five shards.");
+
+            MatchController biovirus = LandEvent(MatchEventKind.Biovirus, latePhase: true);
+            Assert(biovirus != null, "The stage-three pool must contain biovirus.");
+            MatchPlayerState infected = biovirus.State.CurrentPlayer;
+            biovirus.Submit(new EventChoiceCommand(infected.Id, 0));
+            Assert(
+                infected.OwnedCards.Any(
+                    card => card.Definition.Id == MatchEventCatalog.BiovirusCardId) &&
+                infected.OwnedCards.Any(
+                    card => card.Definition.Id == MatchEventCatalog.MotherCardId),
+                "Biovirus must grant both 生化病毒 and 母体.");
+            Assert(
+                infected.OwnedCards
+                    .Where(card => card.Definition.Id == MatchEventCatalog.BiovirusCardId ||
+                                   card.Definition.Id == MatchEventCatalog.MotherCardId)
+                    .All(card => card.Definition.CannotSell),
+                "Biovirus and 母体 must be unsellable.");
+
+            MatchController biovirusPay = LandEvent(MatchEventKind.Biovirus, latePhase: true);
+            MatchPlayerState payer = biovirusPay.State.CurrentPlayer;
+            payer.Shards = 50;
+            biovirusPay.Submit(new EventChoiceCommand(payer.Id, 1));
+            Assert(payer.Shards == 10,
+                "Paying the biovirus event must cost level ×10 shards.");
+
+            // 杀戮时间的 PvP 例外：胜场变化翻倍，并掠夺败者等级 ×5 碎片。
+            MatchController killTimeDuel = new MatchController(graph, 72UL);
+            MatchPlayerState killer = killTimeDuel.State.CurrentPlayer;
+            MatchPlayerState victim = killTimeDuel.State.Players[1];
+            killer.Level = 5;
+            victim.Level = 1;
+            SeedLoadout(
+                killer,
+                9950,
+                "placeholder_3",
+                "fireman_axe");
+            victim.CurrentNode = 1;
+            killer.Wins = 1;
+            victim.Wins = 1;
+            killer.Shards = 0;
+            victim.Shards = 20;
+            killTimeDuel.State.StartKillTime(3);
+            killTimeDuel.State.RoundNumber = killTimeDuel.State.KillTimeStartRound;
+            killTimeDuel.Submit(new DebugRollCommand(killer.Id, 1));
+            killTimeDuel.Submit(new MoveCommand(killer.Id, 1));
+            CombatResolvedEvent killTimeCombat = killTimeDuel.Events.History
+                .OfType<CombatResolvedEvent>()
+                .Last();
+            Assert(
+                killTimeCombat.Result.WinnerPlayerId == killer.Id,
+                "The kill-time duel fixture must produce an attacker win.");
+            Assert(
+                killer.Wins == 3 && victim.Wins == 0,
+                "Kill time must double both sides' win changes.");
+            Assert(
+                killer.Shards == 5 && victim.Shards == 15,
+                "Kill time must steal the loser's level ×5 shards.");
+
+            // 生化病毒的战斗后转化：只转背包里的 1c 牌。
+            MapGraph monsterGraph = MapGraph.Create(
+                new[]
+                {
+                    new MapNode(0, TileType.Home, 0, 1),
+                    new MapNode(1, TileType.Monster, -1, 2),
+                    new MapNode(2, TileType.Home, 1, 3),
+                    new MapNode(3, TileType.Home, 2, 4),
+                    new MapNode(4, TileType.Home, 3, 0)
+                },
+                playerCount: 4);
+            MatchController infection = new MatchController(monsterGraph, 71UL);
+            MatchPlayerState infectedOwner = infection.State.CurrentPlayer;
+            CardInstance virus = new CardInstance(
+                9900,
+                CardDatabase.Instance.Get(MatchEventCatalog.BiovirusCardId));
+            CardInstance oneCost = new CardInstance(
+                9901,
+                CardDatabase.Instance.Get("crowbar"));
+            Assert(infectedOwner.TryAddCard(virus, equipIfPossible: false),
+                "The biovirus transform fixture must fit.");
+            Assert(infectedOwner.TryAddCard(oneCost, equipIfPossible: false),
+                "The one-cost transform fixture must fit.");
+            infection.Submit(new DebugRollCommand(infectedOwner.Id, 1));
+            infection.Submit(new MoveCommand(infectedOwner.Id, null));
+            Assert(
+                infection.Events.History.OfType<CardTransformedEvent>().Any(
+                    transformed =>
+                        transformed.PlayerId == infectedOwner.Id &&
+                        transformed.ToCardId == MatchEventCatalog.BiovirusCardId),
+                "A battle with biovirus must transform one bag 1c card.");
+
             bool refused = false;
             try
             {
-                broke.Submit(new EventChoiceCommand(poor.Id, 0));
+                infection.Submit(new SellCardCommand(
+                    infectedOwner.Id,
+                    virus.Uid));
             }
             catch (InvalidOperationException)
             {
                 refused = true;
             }
 
-            Assert(refused, "An unaffordable event option must be refused.");
-            Assert(
-                broke.State.Phase == MatchPhase.AwaitEvent,
-                "A refused option must leave the event open.");
-            broke.Submit(new EventChoiceCommand(poor.Id, -1));
+            Assert(refused, "A biovirus card must be refused by the sell command.");
 
             Console.WriteLine(
-                "[event] mystery drink granted, walk-away and unaffordable options verified");
+                "[event] stage pools, mystery, trails, raid, biovirus and transforms verified");
+        }
+
+        private static void CheckEventCardMechanics()
+        {
+            CardDatabase catalog = CardDatabase.Instance;
+            CardDefinition weapon = catalog.Get(MatchEventCatalog.MurderWeaponCardId);
+            CardDefinition mother = catalog.Get(MatchEventCatalog.MotherCardId);
+            CardDefinition biovirus = catalog.Get(MatchEventCatalog.BiovirusCardId);
+
+            Assert(
+                weapon.HasTag(CardTag.Event) &&
+                weapon.HasTag(CardTag.Weapon) &&
+                weapon.Auras.Any(aura => aura.Scaling == AuraScaling.PerOwnerWins),
+                "凶器 must be an event weapon that scales with wins.");
+            Assert(
+                mother.HasTag(CardTag.Event) &&
+                mother.Auras.Any(aura => aura.Stat == AuraStat.MaxHealthPerPoison) &&
+                mother.CannotSell,
+                "母体 must expose its poison-to-health aura and be unsellable.");
+            Assert(
+                biovirus.HasTag(CardTag.Event) &&
+                biovirus.HasTag(CardTag.Disease) &&
+                biovirus.ActiveEffects.Count == 2 &&
+                biovirus.CannotSell,
+                "生化病毒 must poison both sides and be unsellable.");
+
+            CardInstance weaponInstance = new CardInstance(9400, weapon);
+            CombatSimulation weaponSimulation = new CombatSimulation(
+                new BattleSnapshot(
+                    new CombatantSnapshot(
+                        0, 5, new[] { weaponInstance }, maxHealth: 5000, wins: 5),
+                    new CombatantSnapshot(
+                        1, 5,
+                        new[] { new CardInstance(9401, catalog.Get("car_door")) },
+                        maxHealth: 5000)),
+                80UL);
+            CombatCardRuntime weaponRuntime = weaponSimulation.Left.Cards[0];
+            AuraResolver aura = new AuraResolver();
+            Assert(
+                aura.GetDamageDiceModifier(weaponSimulation.Left, weaponRuntime) == 5,
+                "凶器 must gain one damage modifier per accrued win.");
+            for (int tick = 0; tick < 600 && !weaponSimulation.IsFinished; tick++)
+            {
+                weaponSimulation.TickOnce();
+            }
+
+            DamageDealtEvent weaponHit = weaponSimulation.Events.History
+                .OfType<DamageDealtEvent>()
+                .First(gameEvent => gameEvent.SourcePlayerId == 0);
+            Assert(
+                weaponHit.Amount >= 18,
+                "凶器 must resolve three d20 dice plus the win modifier.");
+
+            CardInstance motherInstance = new CardInstance(9410, mother);
+            CardInstance poisonSource = new CardInstance(
+                9411,
+                catalog.Get(MatchEventCatalog.BiovirusCardId));
+            CombatSimulation motherSimulation = new CombatSimulation(
+                new BattleSnapshot(
+                    new CombatantSnapshot(
+                        0,
+                        1,
+                        new[] { motherInstance, poisonSource },
+                        maxHealth: 100),
+                    new CombatantSnapshot(
+                        1,
+                        1,
+                        new[] { new CardInstance(9412, catalog.Get("car_door")) },
+                        maxHealth: 100)),
+                81UL);
+            for (int tick = 0; tick < 300 && !motherSimulation.IsFinished; tick++)
+            {
+                motherSimulation.TickOnce();
+            }
+
+            Assert(
+                motherSimulation.Left.Poison > 0 &&
+                motherSimulation.Left.MaximumHealth ==
+                    motherSimulation.Left.BaseMaximumHealth +
+                    motherSimulation.Left.Poison * 20,
+                "母体 must add 20 maximum health per poison layer.");
+            Assert(
+                motherSimulation.Left.Regeneration > 0,
+                "母体 must gain regeneration equal to poison it applies.");
+
+            CombatSimulation biovirusSimulation = new CombatSimulation(
+                new BattleSnapshot(
+                    new CombatantSnapshot(
+                        0,
+                        3,
+                        new[] { new CardInstance(9420, biovirus) },
+                        maxHealth: 5000),
+                    new CombatantSnapshot(
+                        1,
+                        3,
+                        new[] { new CardInstance(9421, catalog.Get("car_door")) },
+                        maxHealth: 5000)),
+                82UL);
+            for (int tick = 0; tick < 240 && !biovirusSimulation.IsFinished; tick++)
+            {
+                biovirusSimulation.TickOnce();
+            }
+
+            Assert(
+                biovirusSimulation.Events.History.OfType<StatusAppliedEvent>()
+                    .Any(gameEvent =>
+                        gameEvent.Status == StatusKind.Poison &&
+                        gameEvent.PlayerId == 0) &&
+                biovirusSimulation.Events.History.OfType<StatusAppliedEvent>()
+                    .Any(gameEvent =>
+                        gameEvent.Status == StatusKind.Poison &&
+                        gameEvent.PlayerId == 1),
+                "生化病毒 must poison both the owner and the enemy.");
+
+            Console.WriteLine(
+                "[event-cards] weapon, mother and biovirus mechanics verified");
         }
 
         /// <summary>
@@ -3657,6 +3940,17 @@ namespace ProjectArtOfAll.Core.Checks
 
                     if (!(gameEvent is PlayerTeleportedEvent teleport))
                     {
+                        continue;
+                    }
+
+                    if (teleport.IsEventTeleport)
+                    {
+                        Assert(
+                            types[teleport.FromNodeId] == TileType.Event,
+                            "An event teleport must start on the event tile.");
+                        teleports++;
+                        lastCell.Remove(teleport.PlayerId);
+                        previousCell.Remove(teleport.PlayerId);
                         continue;
                     }
 

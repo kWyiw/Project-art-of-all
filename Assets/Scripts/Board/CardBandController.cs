@@ -795,10 +795,18 @@ namespace ProjectArtOfAll.Board
                 rect.position = world;
             }
 
-            bool overSell = ContainsPadded(sellZone, eventData, 18f);
+            bool sellable = dragging == null || !dragging.Definition.CannotSell;
+            bool overSell = sellable && ContainsPadded(sellZone, eventData, 18f);
             sellImage.color = overSell ? SellHotColor : SellColor;
-            sellLabel.text = overSell && dragging != null
-                ? string.Concat("+", dragging.Value.ToString(), " 碎片")
+            sellLabel.text = !sellable && ContainsPadded(sellZone, eventData, 18f)
+                ? "不可出售"
+                : overSell && dragging != null
+                ? string.Concat(
+                    "+",
+                    (lastPlayer != null
+                        ? lastPlayer.SaleValue(dragging)
+                        : dragging.Value).ToString(),
+                    " 碎片")
                 : "出售";
         }
 
@@ -817,6 +825,12 @@ namespace ProjectArtOfAll.Board
             dragging = null;
             if (card == null)
             {
+                return;
+            }
+
+            if (card.Definition.CannotSell)
+            {
+                gameplay.RefreshCardBand();
                 return;
             }
 
@@ -868,7 +882,7 @@ namespace ProjectArtOfAll.Board
                 handler.Card.Definition,
                 screenPosition,
                 currentValue: lastPlayer != null
-                    ? lastPlayer.EffectiveCardValue(handler.Card)
+                    ? lastPlayer.SaleValue(handler.Card)
                     : handler.Card.Value);
         }
 

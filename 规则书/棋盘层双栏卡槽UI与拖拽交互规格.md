@@ -368,7 +368,7 @@ CanPlace(card, zone, index):
 | 生效状态 | 棋盘层经济被动：背包或战斗栏均可；战斗内效果：只看是否在战斗栏 |
 
 **UI-6.3.2** 效果行用 `{0}` 占位符渲染数值，例如 `"中毒 {value}"` + `value=16`。**新增一张牌不需要改 UI 代码**——这条是防止"卡越做越多、tooltip 写死的地方越来越多"的唯一办法。
-**UI-6.3.3** 当前两套卡牌（51 张基础 + 43 张升级版）的效果行**不走 `CardDefinition` 拼装，而是直接读设计稿原文**（`CardDesignText`），因为设计稿里的措辞就是玩家该看到的版本，拼装会改写措辞。设计稿中以「（」开头的整行是写给实现者的解释，`CardDesignText.Lines` 不输出它们（`RawLines` 保留原文）。`CardText.Description` = 设计稿原文 + `BoardNote`（棋盘层被动，如「出售时给最左侧的食物 +1 永久修正」）；只有设计稿里没有的自定义牌（`mystery_drink`）才回退到 `CardText.GeneratedDescription` 的自动拼装。数据驱动那条规则仍然成立：自动拼装路径依旧是「新增一张牌不改 UI 代码」。
+**UI-6.3.3** 当前两套卡牌与事件设计稿（54 张基础 + 44 张升级版）的效果行**不走 `CardDefinition` 拼装，而是直接读设计稿原文**（`CardDesignText`），因为设计稿里的措辞就是玩家该看到的版本，拼装会改写措辞。设计稿中以「（」开头的整行是写给实现者的解释，`CardDesignText.Lines` 不输出它们（`RawLines` 保留原文）。`CardText.Description` = 设计稿原文 + `BoardNote`（棋盘层被动，如「出售时给最左侧的食物 +1 永久修正」）；只有设计稿里没有的自定义牌（`mystery_drink`）才回退到 `CardText.GeneratedDescription` 的自动拼装。数据驱动那条规则仍然成立：自动拼装路径依旧是「新增一张牌不改 UI 代码」。
 
 ### 6.4 状态标（战斗中）
 
@@ -526,8 +526,8 @@ public interface ICardDropTarget {
 ## 第 10 章 卡牌图鉴与战斗模拟卡牌库
 
 **UI-10.1　图鉴必须展示完整卡牌定义。**
-图鉴使用 `CardDatabase.AllDefinitions`，当前共 **94 张**：51 张基础牌 + 43 张融合升级牌。
-不得只展示商店随机池的 51 张基础牌。
+图鉴使用 `CardDatabase.AllDefinitions`，当前共 **98 张**：54 张基础牌 + 44 张融合升级牌。
+不得只展示商店随机池的 54 张基础牌。
 
 **UI-10.2　图鉴必须支持三组独立筛选。**
 
@@ -552,7 +552,7 @@ public interface ICardDropTarget {
 列表必须可滚动，按尺寸、主类型、基础牌/升级牌稳定排序。
 
 **UI-10.5　战斗模拟卡牌库。**
-战斗模拟也必须提供 `CardDatabase.AllDefinitions` 的 94 张牌，并放在可滚动列表中；
+战斗模拟也必须提供 `CardDatabase.AllDefinitions` 的 98 张牌，并放在可滚动列表中；
 旧场景里的卡牌库节点与当前卡表不一致时必须自愈重建。
 
 **UI-10.6　开发者模式图鉴。** 设置里开启「开发者模式」后，棋盘左侧出现「图鉴」入口，

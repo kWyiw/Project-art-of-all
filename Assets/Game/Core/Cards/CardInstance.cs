@@ -84,6 +84,16 @@ namespace ProjectArtOfAll.Core.Cards
             return true;
         }
 
+        /// <summary>生化病毒：保留 UID 与栏位，替换牌定义并清空旧的永久成长。</summary>
+        internal void TransformTo(CardDefinition definition)
+        {
+            Definition = definition ?? throw new ArgumentNullException(nameof(definition));
+            valueBonus = 0;
+            permanentDiceModifier = 0;
+            permanentDiceCountBonus = 0;
+            permanentHealingModifier = 0;
+        }
+
         internal CardInstance CloneForRuntime(int dynamicValueBonus)
         {
             CardInstance clone = new CardInstance(Uid, Definition);

@@ -56,7 +56,8 @@ namespace ProjectArtOfAll.Core.Cards
         Constant = 0,
         Dice = 1,
         ValueScaledDice = 2,
-        CardValue = 3
+        CardValue = 3,
+        TriggerAmount = 4
     }
 
     /// <summary>
@@ -118,6 +119,12 @@ namespace ProjectArtOfAll.Core.Cards
         public static EffectAmount FromCardValue()
         {
             return new EffectAmount(AmountKind.CardValue, 0, 0, 0);
+        }
+
+        /// <summary>Uses the amount carried by the event that triggered this passive.</summary>
+        public static EffectAmount FromTriggerAmount()
+        {
+            return new EffectAmount(AmountKind.TriggerAmount, 0, 0, 0);
         }
 
         public int DiceCountFor(int value)

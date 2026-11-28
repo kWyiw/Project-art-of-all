@@ -12,7 +12,11 @@ namespace ProjectArtOfAll.Core.Match
             int shieldPercent,
             int damageBonus,
             int blockBonus,
-            int battlesRemaining)
+            int battlesRemaining,
+            int healBonus = 0,
+            int poisonBonus = 0,
+            int burnBonus = 0,
+            int regenerationBonus = 0)
         {
             if (shieldPercent < 0)
             {
@@ -29,6 +33,14 @@ namespace ProjectArtOfAll.Core.Match
                 throw new ArgumentOutOfRangeException(nameof(blockBonus));
             }
 
+            if (healBonus < 0 || poisonBonus < 0 ||
+                burnBonus < 0 || regenerationBonus < 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(healBonus),
+                    "Battle modifiers cannot be negative.");
+            }
+
             if (battlesRemaining < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(battlesRemaining));
@@ -38,6 +50,10 @@ namespace ProjectArtOfAll.Core.Match
             DamageBonus = damageBonus;
             BlockBonus = blockBonus;
             BattlesRemaining = battlesRemaining;
+            HealBonus = healBonus;
+            PoisonBonus = poisonBonus;
+            BurnBonus = burnBonus;
+            RegenerationBonus = regenerationBonus;
         }
 
         /// <summary>战斗开始时额外获得的最大生命值百分比护盾。</summary>
@@ -48,6 +64,14 @@ namespace ProjectArtOfAll.Core.Match
 
         /// <summary>本场战斗所有格挡 +N。</summary>
         public int BlockBonus { get; }
+
+        public int HealBonus { get; }
+
+        public int PoisonBonus { get; }
+
+        public int BurnBonus { get; }
+
+        public int RegenerationBonus { get; }
 
         /// <summary>还剩几场战斗。</summary>
         public int BattlesRemaining { get; }
@@ -60,7 +84,11 @@ namespace ProjectArtOfAll.Core.Match
                 ShieldPercent,
                 DamageBonus,
                 BlockBonus,
-                battlesRemaining);
+                battlesRemaining,
+                HealBonus,
+                PoisonBonus,
+                BurnBonus,
+                RegenerationBonus);
         }
 
         /// <summary>消耗一场战斗。</summary>

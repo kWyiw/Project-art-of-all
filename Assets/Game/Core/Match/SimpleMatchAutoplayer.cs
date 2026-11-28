@@ -70,6 +70,12 @@ namespace ProjectArtOfAll.Core.Match
                     case MatchPhase.AwaitEvent:
                         ChooseEvent(controller, player);
                         break;
+                    case MatchPhase.AwaitEventTarget:
+                        int targetNodeId = controller.State.Map.Nodes
+                            .Select(node => node.Id)
+                            .First(nodeId => nodeId != player.CurrentNode);
+                        controller.Submit(new EventTeleportCommand(player.Id, targetNodeId));
+                        break;
                 }
 
                 if (controller.State.TurnNumber != turnBeforeAction ||
@@ -250,15 +256,17 @@ namespace ProjectArtOfAll.Core.Match
             for (int index = 0; index < session.Options.Count; index++)
             {
                 MatchEventOption option = session.Options[index];
-                if (option.ShardCost > player.Shards ||
+                int shardCost = option.GetShardCost(player.Level);
+                if (shardCost > player.Shards ||
+                    option.WinsCost > player.Wins ||
                     player.BagCardWidth + option.CardWidth > LoadoutRules.BagCapacity)
                 {
                     continue;
                 }
 
-                if (option.ShardCost < bestPrice)
+                if (shardCost < bestPrice)
                 {
-                    bestPrice = option.ShardCost;
+                    bestPrice = shardCost;
                     bestIndex = index;
                 }
             }

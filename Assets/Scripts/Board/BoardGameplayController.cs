@@ -11,6 +11,7 @@ using ProjectArtOfAll.Core.Match;
 using ProjectArtOfAll.Flow;
 using ProjectArtOfAll.View;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace ProjectArtOfAll.Board
 {
@@ -97,6 +98,7 @@ namespace ProjectArtOfAll.Board
         private bool awaitingRewardChoice;
         private bool awaitingShop;
         private bool awaitingEvent;
+        private bool awaitingEventTarget;
         private bool awaitingEncounterAcceptance;
         private MonsterPhase lastMonsterPhase = (MonsterPhase)(-1);
 
@@ -686,6 +688,7 @@ namespace ProjectArtOfAll.Board
             if (combat != null)
             {
                 yield return PlayCombat(combat, movingPlayer);
+                hud?.RefreshCardBand(HumanPlayer);
             }
 
             ResolveDeferredCorePhase();
@@ -889,7 +892,8 @@ namespace ProjectArtOfAll.Board
 
         private void ResolveDeferredCorePhase()
         {
-            if (awaitingNormaChoice || awaitingRewardChoice || awaitingShop || awaitingEvent)
+            if (awaitingNormaChoice || awaitingRewardChoice || awaitingShop ||
+                awaitingEvent || awaitingEventTarget)
             {
                 return;
             }
@@ -967,6 +971,20 @@ namespace ProjectArtOfAll.Board
 
                         int eventIndex = FindFirstAffordableEventOption(player);
                         match.Submit(new EventChoiceCommand(player.Id, eventIndex));
+                        continue;
+                    case MatchPhase.AwaitEventTarget:
+                        if (IsHumanSeat(player))
+                        {
+                            awaitingEventTarget = true;
+                            hud?.SetDiceInteractable(false);
+                            hud?.SetMatchStatus("未知小径：点击目标地块传送");
+                            return;
+                        }
+
+                        int targetNode = graph.Nodes
+                            .Select(node => node.Id)
+                            .FirstOrDefault(nodeId => nodeId != player.CurrentNode);
+                        match.Submit(new EventTeleportCommand(player.Id, targetNode));
                         continue;
                     default:
                         return;
@@ -1061,7 +1079,8 @@ namespace ProjectArtOfAll.Board
                 }
 
                 MatchEventOption option = session.Options[index];
-                if (option.ShardCost > player.Shards ||
+                if (option.GetShardCost(player.Level) > player.Shards ||
+                    option.WinsCost > player.Wins ||
                     !LoadoutRules.FitsInBag(player.BagCardWidth, option.CardWidth))
                 {
                     return;
@@ -1082,6 +1101,14 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
+            if (match.State.Phase == MatchPhase.AwaitEventTarget)
+            {
+                awaitingEventTarget = true;
+                hud?.SetDiceInteractable(false);
+                hud?.SetMatchStatus("未知小径：点击目标地块传送");
+                return;
+            }
+
             string message = index < 0
                 ? string.Concat("玩家 ", (player.Id + 1).ToString(), " 离开了「", eventTitle, "」")
                 : string.Concat(
@@ -1093,6 +1120,7 @@ namespace ProjectArtOfAll.Board
                     session.Options[index].Label,
                     "」");
             FinishDeferredPhase(message);
+            hud?.RefreshCardBand(HumanPlayer);
         }
 
         /// <summary>CPU 与兜底：挑最便宜的可行选项；都不行就「走开」。</summary>
@@ -1109,15 +1137,17 @@ namespace ProjectArtOfAll.Board
             for (int index = 0; index < options.Count; index++)
             {
                 MatchEventOption option = options[index];
-                if (option.ShardCost > player.Shards ||
+                int shardCost = option.GetShardCost(player.Level);
+                if (shardCost > player.Shards ||
+                    option.WinsCost > player.Wins ||
                     !LoadoutRules.FitsInBag(player.BagCardWidth, option.CardWidth))
                 {
                     continue;
                 }
 
-                if (option.ShardCost < bestPrice)
+                if (shardCost < bestPrice)
                 {
-                    bestPrice = option.ShardCost;
+                    bestPrice = shardCost;
                     bestIndex = index;
                 }
             }
@@ -1251,6 +1281,7 @@ namespace ProjectArtOfAll.Board
             awaitingNormaChoice = false;
             awaitingShop = false;
             awaitingEvent = false;
+            awaitingEventTarget = false;
             hud?.HideNormaChoice();
             hud?.HideShop();
             hud?.HideEvent();
@@ -1521,6 +1552,12 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
+            if (awaitingEventTarget)
+            {
+                UpdateEventTargetInput();
+                return;
+            }
+
             if (isMoving || awaitingFork || awaitingRewardChoice ||
                 awaitingShop || awaitingEncounterAcceptance)
             {
@@ -1541,6 +1578,55 @@ namespace ProjectArtOfAll.Board
             cpuActAfter = Time.unscaledTime +
                 UnityEngine.Random.Range(CpuThinkMinSeconds, CpuThinkMaxSeconds);
             AdvanceCpuTurn(actor);
+        }
+
+        private void UpdateEventTargetInput()
+        {
+            if (!Input.GetMouseButtonDown(0) ||
+                EventSystem.current != null &&
+                EventSystem.current.IsPointerOverGameObject() ||
+                Camera.main == null)
+            {
+                return;
+            }
+
+            Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+            if (!Physics.Raycast(ray, out RaycastHit hit))
+            {
+                return;
+            }
+
+            BoardTileView tile = hit.collider.GetComponent<BoardTileView>();
+            if (tile == null)
+            {
+                return;
+            }
+
+            int targetNodeId = UnityMapGraphFactory.NodeId(tile.Row, tile.Column);
+            MatchPlayerState player = match.State.CurrentPlayer;
+            if (targetNodeId == player.CurrentNode)
+            {
+                hud?.SetMatchStatus("请选择另一个地块作为传送目标。");
+                return;
+            }
+
+            try
+            {
+                match.Submit(new EventTeleportCommand(player.Id, targetNodeId));
+            }
+            catch (InvalidOperationException exception)
+            {
+                hud?.SetMatchStatus(string.Concat("传送失败：", exception.Message));
+                return;
+            }
+
+            awaitingEventTarget = false;
+            FinishDeferredPhase(string.Concat(
+                "玩家 ",
+                (player.Id + 1).ToString(),
+                " 传送到 ",
+                NodeLabel(targetNodeId)));
+            hud?.RefreshCardBand(HumanPlayer);
         }
 
         /// <summary>

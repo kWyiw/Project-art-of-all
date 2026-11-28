@@ -44,7 +44,8 @@ namespace ProjectArtOfAll.Core.Combat
             CombatantRuntime enemy,
             CombatCardRuntime card,
             CardEffect effect,
-            bool fromPassive)
+            bool fromPassive,
+            int triggerAmount = 0)
         {
             switch (effect.Operation)
             {
@@ -92,7 +93,9 @@ namespace ProjectArtOfAll.Core.Combat
                     break;
             }
 
-            int amount = Roll(simulation, owner, card, effect) + ValueBonus(owner, card);
+            int amount = effect.Amount.Kind == AmountKind.TriggerAmount
+                ? Math.Max(0, triggerAmount)
+                : Roll(simulation, owner, card, effect) + ValueBonus(owner, card);
             CombatantRuntime target = effect.Target == EffectTarget.Enemy ? enemy : owner;
 
             switch (effect.Operation)
@@ -115,7 +118,8 @@ namespace ProjectArtOfAll.Core.Combat
                         owner,
                         card,
                         PassiveTrigger.DamageDealt,
-                        card.Definition.Tags);
+                        card.Definition.Tags,
+                        triggerAmount: dealtDamage);
                     break;
 
                 case EffectOp.GainShield:
@@ -127,41 +131,46 @@ namespace ProjectArtOfAll.Core.Combat
                     break;
 
                 case EffectOp.ApplyPoison:
-                    target.Poison += amount;
+                    int poisonAmount = amount + owner.PoisonBonus;
+                    simulation.ApplyPoison(target, poisonAmount);
                     simulation.Publish(new StatusAppliedEvent(
                         target.PlayerId,
                         StatusKind.Poison,
-                        amount));
+                        poisonAmount));
                     simulation.TriggerPassives(
                         owner,
                         card,
                         PassiveTrigger.PoisonApplied,
-                        CardTag.None);
+                        CardTag.None,
+                        triggerAmount: poisonAmount);
                     break;
 
                 case EffectOp.ApplyBurn:
-                    target.Burn += amount;
+                    int burnAmount = amount + owner.BurnBonus;
+                    target.Burn += burnAmount;
                     simulation.Publish(new StatusAppliedEvent(
                         target.PlayerId,
                         StatusKind.Burn,
-                        amount));
+                        burnAmount));
                     simulation.TriggerPassives(
                         owner,
                         card,
                         PassiveTrigger.BurnApplied,
-                        CardTag.None);
+                        CardTag.None,
+                        triggerAmount: burnAmount);
                     break;
 
                 case EffectOp.ApplyRegeneration:
-                    target.Regeneration += amount;
+                    int regenerationAmount = amount + owner.RegenerationBonus;
+                    target.Regeneration += regenerationAmount;
                     simulation.Publish(new StatusAppliedEvent(
                         target.PlayerId,
                         StatusKind.Regeneration,
-                        amount));
+                        regenerationAmount));
                     break;
 
                 case EffectOp.Heal:
-                    simulation.ApplyHealing(target, amount);
+                    simulation.ApplyHealing(target, amount + owner.HealBonus);
                     break;
 
                 case EffectOp.MultiCast:

@@ -277,6 +277,19 @@ namespace ProjectArtOfAll.Core.Match
             return true;
         }
 
+        /// <summary>只允许把背包里的牌永久转化为事件牌。</summary>
+        public bool TryTransformBagCard(int cardUid, CardDefinition definition)
+        {
+            CardSlot? slot = Find(bagSlots, cardUid);
+            if (!slot.HasValue || slot.Value.Card == null)
+            {
+                return false;
+            }
+
+            slot.Value.Card.TransformTo(definition);
+            return true;
+        }
+
         public CardInstance FindByUid(int cardUid)
         {
             CardSlot? bag = Find(bagSlots, cardUid);

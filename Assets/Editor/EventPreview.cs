@@ -40,6 +40,21 @@ public static class EventPreview
             MatchEventCatalog.Get(MatchEventKind.MysteryDrink),
             shards: 2,
             ownedWidth: 8);
+        Render(
+            "_tmp/event_preview_unknown_trail.png",
+            MatchEventCatalog.Get(MatchEventKind.UnknownTrail),
+            shards: 12,
+            ownedWidth: 4);
+        Render(
+            "_tmp/event_preview_raid.png",
+            MatchEventCatalog.Get(MatchEventKind.Raid),
+            shards: 12,
+            ownedWidth: 4);
+        Render(
+            "_tmp/event_preview_biovirus.png",
+            MatchEventCatalog.Get(MatchEventKind.Biovirus),
+            shards: 80,
+            ownedWidth: 4);
     }
 
     private static void Render(
@@ -119,17 +134,18 @@ public static class EventPreview
             }
 
             MatchEventOption option = definition.Options[index];
-            bool affordable = shards >= option.ShardCost;
+            int shardCost = option.GetShardCost(3);
+            bool affordable = shards >= shardCost;
             bool fits = ownedWidth + option.CardWidth <= LoadoutRules.BagCapacity;
 
             view.Names[index].text = option.Label;
             view.Metas[index].text = option.Description;
             view.Details[index].text = BoardHudController.DescribeEventOption(option);
             view.Costs[index].text = affordable
-                ? (option.ShardCost == 0
+                ? (shardCost == 0
                     ? "免费"
-                    : string.Concat("-", option.ShardCost.ToString(), " 碎片"))
-                : string.Concat("差 ", (option.ShardCost - shards).ToString(), " 碎片");
+                    : string.Concat("-", shardCost.ToString(), " 碎片"))
+                : string.Concat("差 ", (shardCost - shards).ToString(), " 碎片");
             view.Costs[index].color = affordable
                 ? new Color(0.92f, 0.69f, 0.27f, 1f)
                 : new Color(0.86f, 0.44f, 0.40f, 1f);

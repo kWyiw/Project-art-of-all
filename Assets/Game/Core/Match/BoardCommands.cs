@@ -171,4 +171,17 @@ namespace ProjectArtOfAll.Core.Match
 
         public int OptionIndex { get; }
     }
+
+    /// <summary>未知小径的指定地块选择。</summary>
+    public sealed class EventTeleportCommand : IMatchCommand
+    {
+        public EventTeleportCommand(int playerId, int targetNodeId)
+        {
+            PlayerId = playerId;
+            TargetNodeId = targetNodeId;
+        }
+
+        public int PlayerId { get; }
+        public int TargetNodeId { get; }
+    }
 }

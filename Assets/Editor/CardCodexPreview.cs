@@ -9,7 +9,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 /// <summary>
-/// Offline codex verification: checks all 94 definitions are rendered, exercises
+/// Offline codex verification: checks all 98 definitions are rendered, exercises
 /// event/type filters, and writes a 1920x1080 preview PNG.
 /// </summary>
 public static class CardCodexPreview
@@ -67,7 +67,7 @@ public static class CardCodexPreview
         InvokeButton(view.gameObject, "Close");
         bool closed = !view.IsOpen;
 
-        if (all != 94 || eventCount != 1 || size3Count <= 0 || diseaseCount != 1 || !closed)
+        if (all != 98 || eventCount != 4 || size3Count <= 0 || diseaseCount != 3 || !closed)
         {
             Debug.LogError(
                 $"[codex-baked] all={all} event={eventCount} size3={size3Count} "
@@ -121,7 +121,7 @@ public static class CardCodexPreview
         view.Show();
 
         int allCount = CountTiles(view.gameObject);
-        if (allCount != 94)
+        if (allCount != 98)
         {
             Fail(view, cameraObject, target, "[codex-preview] all rows=" + allCount);
             return;
@@ -134,7 +134,7 @@ public static class CardCodexPreview
         int diseaseCount = CountTiles(view.gameObject);
         InvokeButton(view.gameObject, "TypeAll");
 
-        if (eventCount != 1 || diseaseCount < 1 || CountTiles(view.gameObject) != 94)
+        if (eventCount != 4 || diseaseCount != 3 || CountTiles(view.gameObject) != 98)
         {
             Fail(
                 view,

@@ -27,7 +27,8 @@ namespace ProjectArtOfAll.Core.Cards
             CardTag.Craft,
             CardTag.Resource,
             CardTag.Mascot,
-            CardTag.Disease
+            CardTag.Disease,
+            CardTag.Event
         };
 
         public static IReadOnlyList<CardDefinition> All =>
@@ -47,7 +48,8 @@ namespace ProjectArtOfAll.Core.Cards
                 return CardUnlockKind.FusionUpgrade;
             }
 
-            return MatchEventCatalog.IsEventOnlyCard(card.Id)
+            return card.HasTag(CardTag.Event) ||
+                   MatchEventCatalog.IsEventOnlyCard(card.Id)
                 ? CardUnlockKind.EventLimited
                 : CardUnlockKind.Normal;
         }

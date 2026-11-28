@@ -20,7 +20,8 @@ namespace ProjectArtOfAll.Core.Cards
             CardTag.Craft,
             CardTag.Resource,
             CardTag.Mascot,
-            CardTag.Disease
+            CardTag.Disease,
+            CardTag.Event
         };
 
         public static string TagName(CardTag tag)
@@ -49,6 +50,8 @@ namespace ProjectArtOfAll.Core.Cards
                     return "吉祥物";
                 case CardTag.Disease:
                     return "疾病";
+                case CardTag.Event:
+                    return "事件";
                 default:
                     return "无";
             }
@@ -111,6 +114,8 @@ namespace ProjectArtOfAll.Core.Cards
                     return string.Concat("Xd", amount.Faces.ToString());
                 case AmountKind.CardValue:
                     return "X";
+                case AmountKind.TriggerAmount:
+                    return "触发值";
                 default:
                     return amount.Constant.ToString();
             }
@@ -240,6 +245,9 @@ namespace ProjectArtOfAll.Core.Cards
                     break;
                 case AuraStat.DamageDiceModifier:
                     stat = "伤害骰值";
+                    break;
+                case AuraStat.MaxHealthPerPoison:
+                    stat = "每层中毒最大生命";
                     break;
                 default:
                     stat = "骰值";
@@ -383,6 +391,12 @@ namespace ProjectArtOfAll.Core.Cards
                     return card.IsUpgraded
                         ? "棋盘层：出售时在当前地块留下陷阱，经过者强制停下（触发 4 次后失效）。"
                         : "棋盘层：出售时在当前地块留下陷阱，经过者强制停下（触发 3 次后失效）。";
+                case "mystery_drink":
+                    return "事件牌：在商店出售额外获得 6 碎片。";
+                case "biovirus":
+                    return "棋盘层：每次战斗后，将双方背包中一张 1c 牌转化为生化病毒；无法出售。";
+                case "mother":
+                    return "棋盘层：此牌无法出售。";
                 default:
                     return string.Empty;
             }

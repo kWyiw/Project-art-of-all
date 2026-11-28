@@ -352,7 +352,7 @@ namespace ProjectArtOfAll.UI
         {
             List<CardDefinition> cards = CardCatalogMetadata.Filter().ToList();
 
-            // 行数由完整卡表决定：94 张牌两列排下去要 47 行，必须放在滚动区内。
+            // 行数由完整卡表决定：98 张牌两列排下去要 49 行，必须放在滚动区内。
             const float rowHeight = 46f;
             const float columnWidth = 248f;
             int rows = Mathf.Max(1, (cards.Count + 1) / 2);
@@ -362,7 +362,7 @@ namespace ProjectArtOfAll.UI
 
             AddText(panel, "Header", "卡牌库", 20f, 14f, 300f, 32f,
                 24, FontStyle.Bold, TextAnchor.MiddleLeft, Brass);
-            AddText(panel, "Sub", "基础牌与融合升级牌共 94 张；拖进战斗栏或用「左」「右」快速加入",
+            AddText(panel, "Sub", "基础牌与融合升级牌共 98 张；拖进战斗栏或用「左」「右」快速加入",
                 20f, 46f, 520f, 24f, 13, FontStyle.Normal, TextAnchor.MiddleLeft, MutedText);
 
             RectTransform viewport = CreateRect("Viewport", panel);

@@ -23,6 +23,8 @@ namespace ProjectArtOfAll.Core.Match
             TurnNumber = 1;
             Phase = MatchPhase.AwaitRoll;
             WinnerPlayerId = -1;
+            KillTimeStartRound = -1;
+            KillTimeEndRound = -1;
 
             foreach (MapNode node in graph.Nodes)
             {
@@ -42,6 +44,12 @@ namespace ProjectArtOfAll.Core.Match
         public MatchPhase Phase { get; internal set; }
         public int WinnerPlayerId { get; internal set; }
         public int LastRoll { get; internal set; }
+        public int KillTimeStartRound { get; internal set; }
+        public int KillTimeEndRound { get; internal set; }
+        public bool IsKillTimeActive =>
+            KillTimeStartRound > 0 &&
+            RoundNumber >= KillTimeStartRound &&
+            RoundNumber <= KillTimeEndRound;
         public MatchPlayerState CurrentPlayer => Players[CurrentPlayerIndex];
 
         /// <summary>
@@ -164,6 +172,17 @@ namespace ProjectArtOfAll.Core.Match
             return type == TileType.Monster || type == TileType.Boss;
         }
 
+        internal void StartKillTime(int rounds)
+        {
+            if (rounds <= 0)
+            {
+                return;
+            }
+
+            KillTimeStartRound = RoundNumber + 1;
+            KillTimeEndRound = KillTimeStartRound + rounds - 1;
+        }
+
         public ulong ComputeHash(ulong randomState)
         {
             ulong hash = StableHash.Begin();
@@ -176,6 +195,8 @@ namespace ProjectArtOfAll.Core.Match
             hash = StableHash.Add(hash, WinnerPlayerId);
             hash = StableHash.Add(hash, LastRoll);
             hash = StableHash.Add(hash, (long)MonsterPhase);
+            hash = StableHash.Add(hash, KillTimeStartRound);
+            hash = StableHash.Add(hash, KillTimeEndRound);
 
             foreach (int nodeId in monsterPools.Keys.OrderBy(id => id))
             {

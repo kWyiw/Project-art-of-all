@@ -144,6 +144,12 @@ namespace ProjectArtOfAll.Core.Combat
                     ignoresShield));
         }
 
+        internal void ApplyPoison(CombatantRuntime target, int amount)
+        {
+            target.Poison += Math.Max(0, amount);
+            target.RefreshMaximumHealth(auraResolver.GetMaxHealthBonus(target));
+        }
+
         internal void GainShield(
             CombatantRuntime owner,
             CombatantRuntime target,
@@ -186,7 +192,8 @@ namespace ProjectArtOfAll.Core.Combat
             CombatCardRuntime sourceCard,
             PassiveTrigger trigger,
             CardTag castTag,
-            CombatCardRuntime targetCard = null)
+            CombatCardRuntime targetCard = null,
+            int triggerAmount = 0)
         {
             if (passiveDepth >= MaxPassiveDepth)
             {
@@ -252,7 +259,8 @@ namespace ProjectArtOfAll.Core.Combat
                             enemyOf(owner),
                             card,
                             passive.Effect,
-                            fromPassive: true);
+                            fromPassive: true,
+                            triggerAmount: triggerAmount);
                     }
                 }
             }

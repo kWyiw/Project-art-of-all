@@ -1706,17 +1706,23 @@ namespace ProjectArtOfAll.Board
                 }
 
                 MatchEventOption option = definition.Options[index];
-                bool affordable = player.Shards >= option.ShardCost;
+                int shardCost = option.GetShardCost(player.Level);
+                bool affordable = player.Shards >= shardCost &&
+                                  player.Wins >= option.WinsCost;
                 bool fits = LoadoutRules.FitsInBag(player.BagCardWidth, option.CardWidth);
 
                 eventView.Names[index].text = option.Label;
                 eventView.Metas[index].text = option.Description;
                 eventView.Details[index].text = DescribeEventOption(option);
                 eventView.Costs[index].text = affordable
-                    ? (option.ShardCost == 0
+                    ? (option.WinsCost > 0
+                        ? string.Concat("失去 ", option.WinsCost.ToString(), " 胜场")
+                        : shardCost == 0
                         ? "免费"
-                        : string.Concat("-", option.ShardCost.ToString(), " 碎片"))
-                    : string.Concat("差 ", (option.ShardCost - player.Shards).ToString(), " 碎片");
+                        : string.Concat("-", shardCost.ToString(), " 碎片"))
+                    : player.Shards < shardCost
+                        ? string.Concat("差 ", (shardCost - player.Shards).ToString(), " 碎片")
+                        : string.Concat("需要 ", option.WinsCost.ToString(), " 胜场");
                 eventView.Costs[index].color = affordable
                     ? new Color(0.92f, 0.69f, 0.27f, 1f)
                     : new Color(0.86f, 0.44f, 0.40f, 1f);
@@ -1776,7 +1782,7 @@ namespace ProjectArtOfAll.Board
                         option.SlotSize.ToString(),
                         "c 牌（不重复）");
                 case EventEffectType.GainCard:
-                    return "获得「神秘饮料」：2c 牌，战斗开始回复 8 生命，也可卖出换 8 碎片";
+                    return "获得一张事件限定牌";
                 case EventEffectType.BattleShield:
                     return string.Concat(
                         "下一场战斗开局获得",
@@ -1791,7 +1797,31 @@ namespace ProjectArtOfAll.Board
                         " 场战斗：伤害 +",
                         option.Amount.ToString(),
                         "、格挡 +",
-                        option.Amount.ToString());
+                        option.Amount.ToString(),
+                        "、恢复 +",
+                        option.Amount.ToString(),
+                        "，状态数值 +",
+                        option.StatusAmount.ToString());
+                case EventEffectType.RandomTeleport:
+                    return "随机传送到另一个地块";
+                case EventEffectType.TeleportTarget:
+                    return "传送到指定地块";
+                case EventEffectType.KillTime:
+                    return string.Concat(
+                        "获得「凶器」，开启 ",
+                        option.Rounds.ToString(),
+                        " 回合杀戮时间");
+                case EventEffectType.LoseWinGainShards:
+                    return string.Concat(
+                        "失去 ",
+                        option.WinsCost.ToString(),
+                        " 胜场，获得 ",
+                        option.Amount.ToString(),
+                        " 碎片");
+                case EventEffectType.GainSpecificCards:
+                    return "获得生化病毒与母体";
+                case EventEffectType.LoseShardsByLevel:
+                    return "失去当前等级 ×10 碎片";
                 default:
                     return string.Empty;
             }

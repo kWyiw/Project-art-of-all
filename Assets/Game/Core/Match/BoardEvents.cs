@@ -89,16 +89,22 @@ namespace ProjectArtOfAll.Core.Match
     /// </summary>
     public sealed class PlayerTeleportedEvent : GameEvent
     {
-        public PlayerTeleportedEvent(int playerId, int fromNodeId, int toNodeId)
+        public PlayerTeleportedEvent(
+            int playerId,
+            int fromNodeId,
+            int toNodeId,
+            bool isEventTeleport = false)
         {
             PlayerId = playerId;
             FromNodeId = fromNodeId;
             ToNodeId = toNodeId;
+            IsEventTeleport = isEventTeleport;
         }
 
         public int PlayerId { get; }
         public int FromNodeId { get; }
         public int ToNodeId { get; }
+        public bool IsEventTeleport { get; }
     }
 
     public sealed class ShardsChangedEvent : GameEvent
@@ -192,6 +198,30 @@ namespace ProjectArtOfAll.Core.Match
         public int CardUid { get; }
         public string BaseId { get; }
         public string UpgradedId { get; }
+        public string Source { get; }
+    }
+
+    /// <summary>事件牌将一张已有的 1c 牌永久转化为另一张牌。</summary>
+    public sealed class CardTransformedEvent : GameEvent
+    {
+        public CardTransformedEvent(
+            int playerId,
+            int cardUid,
+            string fromCardId,
+            string toCardId,
+            string source)
+        {
+            PlayerId = playerId;
+            CardUid = cardUid;
+            FromCardId = fromCardId;
+            ToCardId = toCardId;
+            Source = source;
+        }
+
+        public int PlayerId { get; }
+        public int CardUid { get; }
+        public string FromCardId { get; }
+        public string ToCardId { get; }
         public string Source { get; }
     }
 
@@ -306,6 +336,21 @@ namespace ProjectArtOfAll.Core.Match
         public int PlayerId { get; }
         public string EventId { get; }
         public int NodeId { get; }
+    }
+
+    /// <summary>未知小径：事件选项已付款，等待选择指定传送地块。</summary>
+    public sealed class EventTargetRequestedEvent : GameEvent
+    {
+        public EventTargetRequestedEvent(int playerId, int nodeId, string eventId)
+        {
+            PlayerId = playerId;
+            NodeId = nodeId;
+            EventId = eventId;
+        }
+
+        public int PlayerId { get; }
+        public int NodeId { get; }
+        public string EventId { get; }
     }
 
     /// <summary>事件选项结算完成；<see cref="OptionIndex"/> 为 -1 表示直接走开。</summary>

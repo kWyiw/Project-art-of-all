@@ -186,6 +186,8 @@ namespace ProjectArtOfAll.Board
                 case PlayerTeleportedEvent teleport:
                     return "传送：R" + (teleport.FromNodeId + 1).ToString("D2") + " → R"
                         + (teleport.ToNodeId + 1).ToString("D2");
+                case EventTargetRequestedEvent target:
+                    return "未知小径：请选择传送目标";
                 case ShardsChangedEvent shards:
                     return "玩家 " + (shards.PlayerId + 1) + " 碎片 " + Signed(shards.Delta)
                         + "（" + shards.NewValue + "）";
@@ -201,6 +203,10 @@ namespace ProjectArtOfAll.Board
                     return "玩家 " + (upgraded.PlayerId + 1) + " 的【"
                         + CardName(upgraded.UpgradedId) + "】升级完成"
                         + SourceSuffix(upgraded.Source);
+                case CardTransformedEvent transformed:
+                    return "玩家 " + (transformed.PlayerId + 1) + " 的【"
+                        + CardName(transformed.FromCardId) + "】被转化为【"
+                        + CardName(transformed.ToCardId) + "】";
                 case CardConsumedEvent consumed:
                     return "玩家 " + (consumed.PlayerId + 1) + " 的粉碎机吃掉了【"
                         + CardName(consumed.CardId) + "】";

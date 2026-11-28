@@ -18,7 +18,8 @@ namespace ProjectArtOfAll.Core.Cards
         Craft = 1 << 7,
         Resource = 1 << 8,
         Mascot = 1 << 9,
-        Disease = 1 << 10
+        Disease = 1 << 10,
+        Event = 1 << 11
     }
 
     public enum CardScope
@@ -60,7 +61,10 @@ namespace ProjectArtOfAll.Core.Cards
         Lifesteal = 6,
 
         /// <summary>Only modifies dice that produce attack damage.</summary>
-        DamageDiceModifier = 7
+        DamageDiceModifier = 7,
+
+        /// <summary>母体: maximum health increases per poison layer.</summary>
+        MaxHealthPerPoison = 8
     }
 
     public enum AuraScaling
@@ -69,7 +73,8 @@ namespace ProjectArtOfAll.Core.Cards
         PerAdjacentMatchingTag = 1,
         PerOtherMatchingTag = 2,
         SelfAndAdjacentValue = 3,
-        PerOwnerRegeneration = 4
+        PerOwnerRegeneration = 4,
+        PerOwnerWins = 5
     }
 
     public sealed class AuraDefinition
@@ -124,7 +129,8 @@ namespace ProjectArtOfAll.Core.Cards
             IEnumerable<AuraDefinition> auras = null,
             IEnumerable<PassiveDefinition> passives = null,
             string baseId = null,
-            bool isUpgraded = false)
+            bool isUpgraded = false,
+            bool cannotSell = false)
         {
             if (string.IsNullOrWhiteSpace(id))
             {
@@ -186,6 +192,7 @@ namespace ProjectArtOfAll.Core.Cards
             BaseId = isUpgraded
                 ? (string.IsNullOrEmpty(baseId) ? id : baseId)
                 : id;
+            CannotSell = cannotSell;
             if (isUpgraded && BaseId == id)
             {
                 throw new ArgumentException(
@@ -210,6 +217,9 @@ namespace ProjectArtOfAll.Core.Cards
 
         /// <summary>这张定义是不是某个基础牌的升级版。</summary>
         public bool IsUpgraded { get; }
+
+        /// <summary>事件牌可以由设计稿禁止出售；核心命令与 UI 都必须拒绝出售。</summary>
+        public bool CannotSell { get; }
 
         /// <summary>
         /// 基础牌对应的升级版；已经升级的牌、以及没有设计升级版的牌都是 null。
