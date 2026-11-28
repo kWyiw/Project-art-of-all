@@ -93,6 +93,7 @@ namespace ProjectArtOfAll.Board
         private int pendingForkSelection = -1;
         private bool isMoving;
         private bool awaitingFork;
+        private bool awaitingNormaChoice;
         private bool awaitingRewardChoice;
         private bool awaitingShop;
         private bool awaitingEvent;
@@ -820,7 +821,7 @@ namespace ProjectArtOfAll.Board
 
         private void ResolveDeferredCorePhase()
         {
-            if (awaitingRewardChoice || awaitingShop || awaitingEvent)
+            if (awaitingNormaChoice || awaitingRewardChoice || awaitingShop || awaitingEvent)
             {
                 return;
             }
@@ -831,6 +832,18 @@ namespace ProjectArtOfAll.Board
                 switch (match.State.Phase)
                 {
                     case MatchPhase.AwaitNorma:
+                        if (hud != null && IsHumanSeat(player))
+                        {
+                            awaitingNormaChoice = true;
+                            hud.SetDiceInteractable(false);
+                            if (hud.ShowNormaChoice(player, OnNormaChosen))
+                            {
+                                return;
+                            }
+
+                            awaitingNormaChoice = false;
+                        }
+
                         match.Submit(new SetNormaCommand(player.Id, NormaType.Shard));
                         continue;
                     case MatchPhase.AwaitReward:
@@ -891,6 +904,38 @@ namespace ProjectArtOfAll.Board
                         return;
                 }
             }
+        }
+
+        private void OnNormaChosen(NormaType norma)
+        {
+            if (!awaitingNormaChoice ||
+                match == null ||
+                match.State.Phase != MatchPhase.AwaitNorma)
+            {
+                return;
+            }
+
+            MatchPlayerState player = match.State.CurrentPlayer;
+            awaitingNormaChoice = false;
+            hud?.HideNormaChoice();
+            try
+            {
+                match.Submit(new SetNormaCommand(player.Id, norma));
+            }
+            catch (InvalidOperationException exception)
+            {
+                hud?.SetMatchStatus(string.Concat("Norma 选择失败：", exception.Message));
+                return;
+            }
+
+            FinishDeferredPhase(string.Concat(
+                "玩家 ",
+                (player.Id + 1).ToString(),
+                " 选择",
+                norma == NormaType.Shard ? "碎片" : "胜场",
+                " Norma（目标 ",
+                NormaRules.GetThreshold(player.Level, norma).ToString(),
+                "）"));
         }
 
         private void OnRewardChosen(int index)
@@ -1135,8 +1180,10 @@ namespace ProjectArtOfAll.Board
 
         private void FinishDeferredPhase(string message)
         {
+            awaitingNormaChoice = false;
             awaitingShop = false;
             awaitingEvent = false;
+            hud?.HideNormaChoice();
             hud?.HideShop();
             hud?.HideEvent();
             ResolveDeferredCorePhase();

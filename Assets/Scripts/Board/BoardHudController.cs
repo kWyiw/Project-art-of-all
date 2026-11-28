@@ -47,6 +47,7 @@ namespace ProjectArtOfAll.Board
         [Header("Baked Overlays")]
         [SerializeField] private BoardHudCardDrawerView cardView;
         [SerializeField] private BoardHomeStopView homeStopView;
+        [SerializeField] private BoardNormaChoiceView normaChoiceView;
         [SerializeField] private BoardHudRewardChoiceView rewardView;
         [SerializeField] private BoardHudShopView shopView;
         [SerializeField] private BoardHudEventView eventView;
@@ -81,6 +82,7 @@ namespace ProjectArtOfAll.Board
         private Button[] diceRangeButtons;
         private CardBandController cardBand;
         private Action<bool> homeStopHandler;
+        private Action<NormaType> normaChoiceHandler;
         private Action<int> shopBuyHandler;
         private Action shopRerollHandler;
         private Action shopLeaveHandler;
@@ -117,6 +119,7 @@ namespace ProjectArtOfAll.Board
             HideForkChoices();
             HideEncounter();
             HideHomeStopPrompt();
+            HideNormaChoice();
             GameSettings.Changed -= OnGameSettingsChanged;
             GameSettings.Changed += OnGameSettingsChanged;
             if (boardGameplay == null)
@@ -751,6 +754,91 @@ namespace ProjectArtOfAll.Board
             handler?.Invoke(stop);
         }
 
+        /// <summary>
+        /// R-HOME-003 / R-NORMA-003：升级完成后先选下一级 Norma，选定前不能推进回合。
+        /// 返回 false 时调用方退回内核默认路线，避免 HUD 缺件导致对局卡死。
+        /// </summary>
+        public bool ShowNormaChoice(
+            MatchPlayerState player,
+            Action<NormaType> onChosen)
+        {
+            if (player == null || player.Level >= 6)
+            {
+                return false;
+            }
+
+            EnsureNormaChoiceView();
+            BindOverlayViews();
+            if (normaChoiceView == null ||
+                normaChoiceView.Overlay == null ||
+                normaChoiceView.ShardButton == null ||
+                normaChoiceView.WinsButton == null)
+            {
+                return false;
+            }
+
+            int shardTarget = NormaRules.GetThreshold(player.Level, NormaType.Shard);
+            int winsTarget = NormaRules.GetThreshold(player.Level, NormaType.Wins);
+
+            normaChoiceHandler = onChosen;
+            normaChoiceView.Title.text = string.Concat(
+                "升级成功 · P",
+                (player.Id + 1).ToString(),
+                " 升到 Lv.",
+                player.Level.ToString());
+            normaChoiceView.Body.text = string.Concat(
+                "下一级从 Lv.",
+                player.Level.ToString(),
+                " 升到 Lv.",
+                (player.Level + 1).ToString(),
+                "。\n只能选择一条路线，选定后到下次升级前不能更改。\n",
+                "碎片 Norma：持有 ",
+                shardTarget.ToString(),
+                " 碎片（当前 ",
+                player.Shards.ToString(),
+                "）\n胜场 Norma：累计 ",
+                winsTarget.ToString(),
+                " 胜场（当前 ",
+                player.Wins.ToString(),
+                "）");
+            normaChoiceView.ShardLabel.text = string.Concat(
+                "碎片 Norma\n目标：持有 ",
+                shardTarget.ToString(),
+                " 碎片");
+            normaChoiceView.WinsLabel.text = string.Concat(
+                "胜场 Norma\n目标：累计 ",
+                winsTarget.ToString(),
+                " 胜场");
+
+            normaChoiceView.ShardButton.onClick.RemoveAllListeners();
+            normaChoiceView.ShardButton.onClick.AddListener(
+                () => ResolveNormaChoice(NormaType.Shard));
+            normaChoiceView.WinsButton.onClick.RemoveAllListeners();
+            normaChoiceView.WinsButton.onClick.AddListener(
+                () => ResolveNormaChoice(NormaType.Wins));
+
+            normaChoiceView.Overlay.SetActive(true);
+            FitModalAboveCardBand(normaChoiceView.Overlay);
+            normaChoiceView.Overlay.transform.SetAsLastSibling();
+            return true;
+        }
+
+        public void HideNormaChoice()
+        {
+            normaChoiceHandler = null;
+            if (normaChoiceView != null && normaChoiceView.Overlay != null)
+            {
+                normaChoiceView.Overlay.SetActive(false);
+            }
+        }
+
+        private void ResolveNormaChoice(NormaType norma)
+        {
+            Action<NormaType> handler = normaChoiceHandler;
+            HideNormaChoice();
+            handler?.Invoke(norma);
+        }
+
         public void HideForkChoices()
         {
             forkArrowsVisible = false;
@@ -946,6 +1034,11 @@ namespace ProjectArtOfAll.Board
                 yield return homeStopView.Overlay;
             }
 
+            if (normaChoiceView != null && IsOverlayActive(normaChoiceView.Overlay))
+            {
+                yield return normaChoiceView.Overlay;
+            }
+
             if (rewardView != null && IsOverlayActive(rewardView.Overlay))
             {
                 yield return rewardView.Overlay;
@@ -1039,9 +1132,11 @@ namespace ProjectArtOfAll.Board
 
         private void BindOverlayViews()
         {
+            EnsureNormaChoiceView();
             if (encounterOverlay == null ||
                 cardView == null ||
                 homeStopView == null ||
+                normaChoiceView == null ||
                 rewardView == null ||
                 shopView == null ||
                 eventView == null ||
@@ -1127,6 +1222,44 @@ namespace ProjectArtOfAll.Board
             testUiButton.onClick.RemoveAllListeners();
             testUiButton.onClick.AddListener(ToggleTestUi);
             CardTooltipHost.Register(cardTooltip);
+        }
+
+        private void EnsureNormaChoiceView()
+        {
+            if (normaChoiceView != null &&
+                normaChoiceView.Overlay != null &&
+                normaChoiceView.Title != null &&
+                normaChoiceView.Body != null &&
+                normaChoiceView.ShardButton != null &&
+                normaChoiceView.ShardLabel != null &&
+                normaChoiceView.WinsButton != null &&
+                normaChoiceView.WinsLabel != null)
+            {
+                return;
+            }
+
+            Transform parent = transform.Find("BakedOverlays");
+            if (parent == null)
+            {
+                parent = transform;
+            }
+
+            if (normaChoiceView != null && normaChoiceView.Overlay != null)
+            {
+                normaChoiceView.Overlay.SetActive(false);
+                if (Application.isPlaying)
+                {
+                    Destroy(normaChoiceView.Overlay);
+                }
+                else
+                {
+                    DestroyImmediate(normaChoiceView.Overlay);
+                }
+            }
+
+            normaChoiceView = BoardHudOverlayFactory.CreateNormaChoiceView(
+                parent,
+                HudFont ?? BoardHudOverlayFactory.CreateFont());
         }
 
         /// <summary>把 <see cref="GameSettings"/> 里的表现项落到实际对象上（启动、改动、自动降档后都走这里）。</summary>

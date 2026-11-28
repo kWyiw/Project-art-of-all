@@ -114,11 +114,28 @@ namespace ProjectArtOfAll.Board
                 }
                 else
                 {
-                    int shardTarget = NormaRules.GetThreshold(human.Level, NormaType.Shard);
-                    int winTarget = NormaRules.GetThreshold(human.Level, NormaType.Wins);
-                    normaLabel.text =
-                        "你的目标：碎片 " + human.Shards + "/" + shardTarget +
-                        " 或 胜场 " + human.Wins + "/" + winTarget;
+                    if (human.Level >= 6)
+                    {
+                        normaLabel.text = "升级条件：已满级";
+                    }
+                    else
+                    {
+                        int target = NormaRules.GetThreshold(human.Level, human.Norma);
+                        int current = human.Norma == NormaType.Shard
+                            ? human.Shards
+                            : human.Wins;
+                        normaLabel.text = string.Concat(
+                            "升级条件：",
+                            human.Norma == NormaType.Shard ? "碎片 " : "胜场 ",
+                            current.ToString(),
+                            "/",
+                            target.ToString(),
+                            "（Lv.",
+                            human.Level.ToString(),
+                            " → Lv.",
+                            (human.Level + 1).ToString(),
+                            "）");
+                    }
                 }
             }
         }

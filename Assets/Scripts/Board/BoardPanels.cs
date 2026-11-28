@@ -147,8 +147,7 @@ namespace ProjectArtOfAll.Board
                 slot.Title.color = active ? Brass : TextColor;
 
                 slot.Economy.text = string.Concat(
-                    "碎片 ", player.Shards.ToString(),
-                    "  ·  胜场 ", player.Wins.ToString());
+                    BuildNormaProgress(player));
 
                 int capacity = player.Level >= 6 ? 10 : LoadoutRules.GetBattleCapacity(player.Level);
                 slot.Loadout.text = string.Concat(
@@ -156,6 +155,32 @@ namespace ProjectArtOfAll.Board
                     "  ·  背包 ", player.BagCardWidth.ToString(), "/",
                     LoadoutRules.BagCapacity.ToString(), "c");
             }
+        }
+
+        private static string BuildNormaProgress(MatchPlayerState player)
+        {
+            const string Highlight = "#F2C14E";
+            if (player.Level >= 6)
+            {
+                return string.Concat(
+                    "满级  ·  碎片 ", player.Shards.ToString(),
+                    "  ·  胜场 ", player.Wins.ToString());
+            }
+
+            if (player.Norma == NormaType.Shard)
+            {
+                return string.Concat(
+                    "目标 碎片 <color=", Highlight, ">",
+                    player.Shards.ToString(), "/",
+                    NormaRules.GetThreshold(player.Level, NormaType.Shard).ToString(),
+                    "</color>  ·  胜场 ", player.Wins.ToString());
+            }
+
+            return string.Concat(
+                "目标 胜场 <color=", Highlight, ">",
+                player.Wins.ToString(), "/",
+                NormaRules.GetThreshold(player.Level, NormaType.Wins).ToString(),
+                "</color>  ·  碎片 ", player.Shards.ToString());
         }
 
         internal void BindClick(int playerId, System.Action<int> handler)
@@ -312,10 +337,25 @@ namespace ProjectArtOfAll.Board
 
             gameObject.SetActive(true);
             title.text = string.Concat("P", (player.Id + 1).ToString(), "  ", player.Name);
-            subtitle.text = string.Concat(
-                "Lv.", player.Level.ToString(),
-                "    碎片 ", player.Shards.ToString(),
-                "    胜场 ", player.Wins.ToString());
+            if (player.Level >= 6)
+            {
+                subtitle.text = string.Concat(
+                    "Lv.6 已满级    碎片 ", player.Shards.ToString(),
+                    "    胜场 ", player.Wins.ToString());
+            }
+            else
+            {
+                int target = NormaRules.GetThreshold(player.Level, player.Norma);
+                int current = player.Norma == NormaType.Shard
+                    ? player.Shards
+                    : player.Wins;
+                subtitle.text = string.Concat(
+                    "Lv.", player.Level.ToString(),
+                    "    目标", player.Norma == NormaType.Shard ? "碎片 " : "胜场 ",
+                    current.ToString(), "/", target.ToString(),
+                    "    碎片 ", player.Shards.ToString(),
+                    "    胜场 ", player.Wins.ToString());
+            }
 
             int capacity = player.Level >= 6 ? 10 : LoadoutRules.GetBattleCapacity(player.Level);
             battleHeader.text = string.Concat(

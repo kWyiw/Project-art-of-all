@@ -107,6 +107,8 @@ namespace ProjectArtOfAll.Editor
                 BoardHudOverlayFactory.CreateCardDrawerView(bakedRect, font);
             BoardHomeStopView homeStop =
                 BoardHudOverlayFactory.CreateHomeStopView(bakedRect, font);
+            BoardNormaChoiceView normaChoice =
+                BoardHudOverlayFactory.CreateNormaChoiceView(bakedRect, font);
             BoardHudRewardChoiceView reward =
                 BoardHudOverlayFactory.CreateRewardChoiceView(bakedRect, font);
             BoardHudShopView shop =
@@ -184,6 +186,15 @@ namespace ProjectArtOfAll.Editor
             SetRelative(serialized, "homeStopView", "stopLabel", homeStop.StopLabel);
             SetRelative(serialized, "homeStopView", "continueButton", homeStop.ContinueButton);
             SetRelative(serialized, "homeStopView", "continueLabel", homeStop.ContinueLabel);
+
+            SetRelative(serialized, "normaChoiceView", "overlay", normaChoice.Overlay);
+            SetRelative(serialized, "normaChoiceView", "panel", normaChoice.Panel);
+            SetRelative(serialized, "normaChoiceView", "title", normaChoice.Title);
+            SetRelative(serialized, "normaChoiceView", "body", normaChoice.Body);
+            SetRelative(serialized, "normaChoiceView", "shardButton", normaChoice.ShardButton);
+            SetRelative(serialized, "normaChoiceView", "shardLabel", normaChoice.ShardLabel);
+            SetRelative(serialized, "normaChoiceView", "winsButton", normaChoice.WinsButton);
+            SetRelative(serialized, "normaChoiceView", "winsLabel", normaChoice.WinsLabel);
 
             SetChoiceView(serialized, "rewardView", reward);
             SetEventView(serialized, eventView);
@@ -280,6 +291,16 @@ namespace ProjectArtOfAll.Editor
             for (int index = 0; index < nestedOverlays.Length; index++)
             {
                 RequireRelative(serialized, nestedOverlays[index], "overlay");
+            }
+
+            // Older scenes predate this overlay. BoardHudController.EnsureNormaChoiceView
+            // rebuilds it on demand, so validate it only when this scene has a baked copy.
+            SerializedProperty normaChoice = serialized
+                .FindProperty("normaChoiceView")
+                ?.FindPropertyRelative("overlay");
+            if (normaChoice != null && normaChoice.objectReferenceValue != null)
+            {
+                RequireRelative(serialized, "normaChoiceView", "overlay");
             }
 
             PauseOverlayView pause = serialized.FindProperty("pauseOverlay")

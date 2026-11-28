@@ -1809,6 +1809,125 @@ namespace ProjectArtOfAll.Board
         }
 
         /// <summary>
+        /// R-NORMA-003：升级后必须从两条路线中选下一条，选定前不能继续下一位玩家。
+        /// 浮层没有关闭按钮，遮罩吃射线，避免误触到棋盘。
+        /// </summary>
+        public static BoardNormaChoiceView CreateNormaChoiceView(
+            Transform parent,
+            Font font)
+        {
+            GameObject overlay = new GameObject(
+                "NormaChoiceOverlay",
+                typeof(RectTransform),
+                typeof(Image));
+            overlay.transform.SetParent(parent, false);
+            Stretch(overlay.GetComponent<RectTransform>());
+
+            Image overlayImage = overlay.GetComponent<Image>();
+            overlayImage.color = new Color(0.01f, 0.018f, 0.022f, 0.68f);
+            overlayImage.raycastTarget = true;
+
+            GameObject panelObject = new GameObject(
+                "NormaChoicePanel",
+                typeof(RectTransform),
+                typeof(Image),
+                typeof(Outline));
+            panelObject.transform.SetParent(overlay.transform, false);
+
+            RectTransform panel = panelObject.GetComponent<RectTransform>();
+            panel.anchorMin = new Vector2(0.5f, 0.5f);
+            panel.anchorMax = new Vector2(0.5f, 0.5f);
+            panel.pivot = new Vector2(0.5f, 0.5f);
+            panel.anchoredPosition = Vector2.zero;
+            panel.sizeDelta = new Vector2(760f, 370f);
+
+            Image panelImage = panelObject.GetComponent<Image>();
+            panelImage.color = new Color(0.055f, 0.082f, 0.09f, 0.99f);
+            panelImage.raycastTarget = true;
+
+            Outline panelOutline = panelObject.GetComponent<Outline>();
+            panelOutline.effectColor = new Color(0.86f, 0.68f, 0.35f, 0.76f);
+            panelOutline.effectDistance = new Vector2(2f, -2f);
+
+            CreateBar(
+                panel,
+                "BrassRule",
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0f, 5f),
+                new Vector2(0f, 0f),
+                new Color(0.92f, 0.69f, 0.27f, 1f));
+
+            Text title = CreateText(
+                panel,
+                "Title",
+                "升级成功 · 选择下一级条件",
+                font,
+                34,
+                FontStyle.Bold,
+                new Vector2(36f, -26f),
+                new Vector2(688f, 46f),
+                TextAnchor.UpperLeft);
+            title.color = new Color(0.96f, 0.88f, 0.69f, 1f);
+
+            Text body = CreateText(
+                panel,
+                "Body",
+                "下一级只能选择一条 Norma 路线，选定后到下次升级前不能更改。",
+                font,
+                20,
+                FontStyle.Normal,
+                new Vector2(36f, -82f),
+                new Vector2(688f, 118f),
+                TextAnchor.UpperLeft);
+            body.color = new Color(0.90f, 0.88f, 0.82f, 1f);
+            body.horizontalOverflow = HorizontalWrapMode.Wrap;
+            body.verticalOverflow = VerticalWrapMode.Overflow;
+            body.lineSpacing = 1.22f;
+
+            Button shardButton = CreateButton(
+                panel,
+                "ShardNormaButton",
+                "碎片 Norma\n目标：持有 14 碎片",
+                font,
+                new Vector2(36f, -232f),
+                new Vector2(326f, 92f),
+                out Text shardLabel);
+            Image shardImage = shardButton.GetComponent<Image>();
+            shardImage.color = new Color(0.16f, 0.29f, 0.34f, 1f);
+            Outline shardOutline = shardButton.GetComponent<Outline>();
+            shardOutline.effectColor = new Color(0.50f, 0.82f, 0.91f, 0.74f);
+            shardLabel.color = new Color(0.95f, 0.94f, 0.88f, 1f);
+            shardLabel.lineSpacing = 1.16f;
+
+            Button winsButton = CreateButton(
+                panel,
+                "WinsNormaButton",
+                "胜场 Norma\n目标：累计 4 胜场",
+                font,
+                new Vector2(398f, -232f),
+                new Vector2(326f, 92f),
+                out Text winsLabel);
+            Image winsImage = winsButton.GetComponent<Image>();
+            winsImage.color = new Color(0.34f, 0.25f, 0.10f, 1f);
+            Outline winsOutline = winsButton.GetComponent<Outline>();
+            winsOutline.effectColor = new Color(0.94f, 0.72f, 0.30f, 0.78f);
+            winsLabel.color = new Color(0.98f, 0.92f, 0.76f, 1f);
+            winsLabel.lineSpacing = 1.16f;
+
+            overlay.SetActive(false);
+            return new BoardNormaChoiceView(
+                overlay,
+                panel,
+                title,
+                body,
+                shardButton,
+                shardLabel,
+                winsButton,
+                winsLabel);
+        }
+
+        /// <summary>
         /// 「经过自己的家」二选一浮层：停在家做升级结算，或者放弃剩余点数继续走。
         /// 遮罩吃射线，所以弹出时下面的骰子/卡槽都点不到。
         /// </summary>
@@ -1926,6 +2045,49 @@ namespace ProjectArtOfAll.Board
                 continueButton,
                 continueLabel);
         }
+    }
+
+    /// <summary>升级后选择下一级 Norma 的浮层句柄。</summary>
+    [Serializable]
+    public sealed class BoardNormaChoiceView
+    {
+        [SerializeField] private GameObject overlay;
+        [SerializeField] private RectTransform panel;
+        [SerializeField] private Text title;
+        [SerializeField] private Text body;
+        [SerializeField] private Button shardButton;
+        [SerializeField] private Text shardLabel;
+        [SerializeField] private Button winsButton;
+        [SerializeField] private Text winsLabel;
+
+        public BoardNormaChoiceView(
+            GameObject overlay,
+            RectTransform panel,
+            Text title,
+            Text body,
+            Button shardButton,
+            Text shardLabel,
+            Button winsButton,
+            Text winsLabel)
+        {
+            this.overlay = overlay;
+            this.panel = panel;
+            this.title = title;
+            this.body = body;
+            this.shardButton = shardButton;
+            this.shardLabel = shardLabel;
+            this.winsButton = winsButton;
+            this.winsLabel = winsLabel;
+        }
+
+        public GameObject Overlay => overlay;
+        public RectTransform Panel => panel;
+        public Text Title => title;
+        public Text Body => body;
+        public Button ShardButton => shardButton;
+        public Text ShardLabel => shardLabel;
+        public Button WinsButton => winsButton;
+        public Text WinsLabel => winsLabel;
     }
 
     /// <summary>「经过自己的家」浮层持有的控件句柄。</summary>
