@@ -77,7 +77,16 @@ namespace ProjectArtOfAll.Core.Combat
                     card.BattleShieldBonus += RollFlat(effect);
                     return;
                 case EffectOp.HalveCurrentCooldownOnce:
-                    card.Cooldown.HalveRemaining();
+                    int previousCooldown = card.BattleCooldownTicks;
+                    card.HalveBattleCooldown();
+                    if (card.BattleCooldownTicks != previousCooldown)
+                    {
+                        simulation.Publish(new CooldownChangedEvent(
+                            owner.PlayerId,
+                            card.Instance.Uid,
+                            card.BattleCooldownTicks));
+                    }
+
                     return;
                 default:
                     break;

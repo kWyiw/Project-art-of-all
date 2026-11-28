@@ -58,8 +58,10 @@ namespace ProjectArtOfAll.Core.Combat
             Instance = instance;
             Column = column;
             // 战斗开始时冷却从零开始走（BT-2.5 ③）：主动牌要等满一整条冷却才会施放第一次。
-            Cooldown = new CooldownTimer(
-                instance.Definition.IsActive ? instance.Definition.CooldownTicks : 0);
+            BattleCooldownTicks = instance.Definition.IsActive
+                ? instance.Definition.CooldownTicks
+                : 0;
+            Cooldown = new CooldownTimer(BattleCooldownTicks);
         }
 
         private readonly HashSet<int> triggeredOncePassives = new HashSet<int>();
@@ -93,6 +95,13 @@ namespace ProjectArtOfAll.Core.Combat
 
         /// <summary>Position inside the battle bar; the bar keeps its slots when a card dies.</summary>
         public CooldownTimer Cooldown { get; }
+
+        /// <summary>
+        /// The cooldown length used for this battle. Normally this is the definition value;
+        /// Chainsaw changes it after its first cast so later cycles stay shortened.
+        /// </summary>
+        public int BattleCooldownTicks { get; private set; }
+
         public bool IsDestroyed { get; private set; }
 
         /// <summary>热熔切割器: dice gained inside this battle.</summary>
@@ -115,6 +124,12 @@ namespace ProjectArtOfAll.Core.Combat
         public void Destroy()
         {
             IsDestroyed = true;
+        }
+
+        public void HalveBattleCooldown()
+        {
+            BattleCooldownTicks = System.Math.Max(0, BattleCooldownTicks / 2);
+            Cooldown.HalveRemaining();
         }
     }
 }

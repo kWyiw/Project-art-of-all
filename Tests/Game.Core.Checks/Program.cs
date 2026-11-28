@@ -2446,6 +2446,94 @@ namespace ProjectArtOfAll.Core.Checks
                         gameEvent.CardUid == catalyst.Uid),
                 "催化剂 must charge itself when poison is applied.");
 
+            // 火炬：先结算本次灼烧，再用本次施法获得下一发的 +1 灼烧修正。
+            CardInstance torch = new CardInstance(9172, catalog.Get("torch"));
+            CombatSimulation torchSimulation = new CombatSimulation(
+                Duel(torch),
+                46UL);
+            for (int tick = 0; tick < 280 && !torchSimulation.IsFinished; tick++)
+            {
+                torchSimulation.TickOnce();
+            }
+
+            CombatCardRuntime torchRuntime = torchSimulation.Left.Cards
+                .First(card => card.Instance.Uid == torch.Uid);
+            Assert(
+                torchRuntime.BattleDiceModifier >= 1,
+                "火炬 must increase its burn modifier after its first cast.");
+
+            // 催化剂：灼烧事件也要触发本卡充能，而不只监听中毒。
+            CardInstance catalystBurn = new CardInstance(9173, catalog.Get("catalyst"));
+            CardInstance burnSource = new CardInstance(9174, catalog.Get("oil_barrel"));
+            CombatSimulation catalystBurnSimulation = new CombatSimulation(
+                Duel(catalystBurn, burnSource),
+                47UL);
+            for (int tick = 0; tick < 380 && !catalystBurnSimulation.IsFinished; tick++)
+            {
+                catalystBurnSimulation.TickOnce();
+            }
+
+            Assert(
+                catalystBurnSimulation.Events.History.OfType<ChargeAppliedEvent>()
+                    .Any(gameEvent =>
+                        gameEvent.PlayerId == 0 &&
+                        gameEvent.CardUid == catalystBurn.Uid &&
+                        gameEvent.Ticks == 60),
+                "催化剂 must charge itself when Burn is applied by an ally.");
+
+            // 锈刃：别的武器造成伤害也会触发它的中毒被动。
+            CardInstance rustedBladeAura = new CardInstance(9175, catalog.Get("rusted_blade"));
+            CardInstance rustedBladeWeapon = new CardInstance(9176, catalog.Get("crowbar"));
+            CombatSimulation rustedBladeAuraSimulation = new CombatSimulation(
+                Duel(rustedBladeAura, rustedBladeWeapon),
+                48UL);
+            for (int tick = 0; tick < 240 && !rustedBladeAuraSimulation.IsFinished; tick++)
+            {
+                rustedBladeAuraSimulation.TickOnce();
+            }
+
+            Assert(
+                rustedBladeAuraSimulation.Events.History.OfType<StatusAppliedEvent>()
+                    .Any(gameEvent =>
+                        gameEvent.PlayerId == 1 &&
+                        gameEvent.Status == StatusKind.Poison),
+                "锈刃 must poison after another allied weapon deals damage.");
+
+            // 占位符5：自己的主动施放不算“使用相邻卡牌”。
+            CardInstance shieldSelfOnly =
+                new CardInstance(9177, catalog.Get("placeholder_5"));
+            CombatSimulation shieldSelfOnlySimulation = new CombatSimulation(
+                Duel(shieldSelfOnly),
+                49UL);
+            for (int tick = 0; tick < 320 && !shieldSelfOnlySimulation.IsFinished; tick++)
+            {
+                shieldSelfOnlySimulation.TickOnce();
+            }
+
+            CombatCardRuntime shieldSelfOnlyRuntime = shieldSelfOnlySimulation.Left.Cards
+                .First(card => card.Instance.Uid == shieldSelfOnly.Uid);
+            Assert(
+                shieldSelfOnlyRuntime.BattleShieldBonus == 0,
+                "占位符5 must not gain shield modifier when it casts itself.");
+
+            // 食物中毒：只监听己方使用食物牌，不监听普通武器。
+            CombatSimulation nonFoodSimulation = new CombatSimulation(
+                Duel(
+                    new CardInstance(9178, catalog.Get("food_poisoning")),
+                    new CardInstance(9179, catalog.Get("crowbar"))),
+                50UL);
+            for (int tick = 0; tick < 240 && !nonFoodSimulation.IsFinished; tick++)
+            {
+                nonFoodSimulation.TickOnce();
+            }
+
+            Assert(
+                !nonFoodSimulation.Events.History.OfType<StatusAppliedEvent>()
+                    .Any(gameEvent =>
+                        gameEvent.PlayerId == 1 &&
+                        gameEvent.Status == StatusKind.Poison),
+                "食物中毒 must not poison when only a non-food card is cast.");
+
             // 占位符4：敌人施法时充能自己。
             CardInstance enemyCastCharge = new CardInstance(9180, catalog.Get("placeholder_4"));
             CombatSimulation enemyCastSimulation = new CombatSimulation(
@@ -2503,7 +2591,7 @@ namespace ProjectArtOfAll.Core.Checks
                 shieldRuntime.BattleShieldBonus == 2,
                 "占位符5 must gain +2 shield modifier after an adjacent cast.");
 
-            // 链锯：首次施法后当次 CD 90 tick，之后恢复 180 tick 的节奏。
+            // 链锯：首次施法前等待完整 360 tick，之后每 180 tick 施放一次。
             CardInstance chainsaw = new CardInstance(9210, catalog.Get("chainsaw"));
             CombatSimulation chainsawSimulation = new CombatSimulation(
                 Duel(chainsaw),
@@ -2517,13 +2605,24 @@ namespace ProjectArtOfAll.Core.Checks
                 .OfType<CardCastEvent>()
                 .Where(gameEvent => gameEvent.CardUid == chainsaw.Uid)
                 .ToList();
-            Assert(chainsawCasts.Count >= 3, "链锯 must cast at least three times.");
+            Assert(chainsawCasts.Count >= 4, "链锯 must cast at least four times.");
+            Assert(
+                chainsawCasts[0].Tick >= 359,
+                "链锯 must wait for its full 6s initial cooldown.");
+            Assert(
+                chainsawSimulation.Events.History.OfType<CooldownChangedEvent>()
+                    .Any(gameEvent =>
+                        gameEvent.PlayerId == 0 &&
+                        gameEvent.CardUid == chainsaw.Uid &&
+                        gameEvent.CooldownTicks == 180),
+                "链锯 must publish its persistent 3s cooldown change.");
             Assert(
                 chainsawCasts[1].Tick - chainsawCasts[0].Tick == 180,
-                "链锯 first cooldown after cast must be halved.");
+                "链锯 first cooldown after its initial cast must be halved.");
             Assert(
-                chainsawCasts[2].Tick - chainsawCasts[1].Tick == 360,
-                "链锯 cooldown must return to full after the first halved cycle.");
+                chainsawCasts[2].Tick - chainsawCasts[1].Tick == 180 &&
+                chainsawCasts[3].Tick - chainsawCasts[2].Tick == 180,
+                "链锯 must keep the halved 3s cooldown after the first cast.");
 
             // 泰坦：己方中毒事件同时触发充能与伤害修正。
             CardInstance titan = new CardInstance(9220, catalog.Get("titan"));
@@ -2546,6 +2645,33 @@ namespace ProjectArtOfAll.Core.Checks
                         gameEvent.PlayerId == 0 &&
                         gameEvent.CardUid == titan.Uid),
                 "泰坦 must charge itself when poison is applied.");
+
+            // 泰坦：毒、烧、加速、缓速四类事件都能独立触发两者。
+            CardInstance titanAll = new CardInstance(9250, catalog.Get("titan"));
+            CombatSimulation titanAllSimulation = new CombatSimulation(
+                Duel(
+                    titanAll,
+                    new CardInstance(9251, catalog.Get("torch")),
+                    new CardInstance(9252, catalog.Get("nail_gun")),
+                    new CardInstance(9253, catalog.Get("nuclear_water")),
+                    new CardInstance(9254, catalog.Get("catalyst"))),
+                51UL);
+            for (int tick = 0; tick < 320 && !titanAllSimulation.IsFinished; tick++)
+            {
+                titanAllSimulation.TickOnce();
+            }
+
+            CombatCardRuntime titanAllRuntime = titanAllSimulation.Left.Cards
+                .First(card => card.Instance.Uid == titanAll.Uid);
+            Assert(
+                titanAllRuntime.BattleDiceModifier >= 16,
+                "泰坦 must gain +4 for poison, burn, haste and slow events.");
+            Assert(
+                titanAllSimulation.Events.History.OfType<ChargeAppliedEvent>()
+                    .Count(gameEvent =>
+                        gameEvent.PlayerId == 0 &&
+                        gameEvent.CardUid == titanAll.Uid) >= 4,
+                "泰坦 must charge for each of the four status event types.");
 
             Assert(catalog.Get("rusted_blade+").Passives.Count == 1,
                 "锈刃+ must retain the damage-triggered poison passive.");

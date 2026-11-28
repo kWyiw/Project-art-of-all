@@ -42,6 +42,24 @@ namespace ProjectArtOfAll.Core.Events
         public int CardUid { get; }
     }
 
+    /// <summary>
+    /// A card's cooldown length changed for the rest of this battle (链锯).
+    /// The playback layer uses this instead of the immutable definition value.
+    /// </summary>
+    public sealed class CooldownChangedEvent : GameEvent
+    {
+        public CooldownChangedEvent(int playerId, int cardUid, int cooldownTicks)
+        {
+            PlayerId = playerId;
+            CardUid = cardUid;
+            CooldownTicks = cooldownTicks;
+        }
+
+        public int PlayerId { get; }
+        public int CardUid { get; }
+        public int CooldownTicks { get; }
+    }
+
     public sealed class DamageDealtEvent : GameEvent
     {
         public DamageDealtEvent(

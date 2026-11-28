@@ -289,7 +289,7 @@ namespace ProjectArtOfAll.Core.Combat
                     continue;
                 }
 
-                card.Cooldown.SetRemainingTicks(card.Definition.CooldownTicks);
+                card.Cooldown.SetRemainingTicks(card.BattleCooldownTicks);
                 int casts = 1 + Math.Max(
                     0,
                     auraResolver.GetBonusMultiCast(source, card));

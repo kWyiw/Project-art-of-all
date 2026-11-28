@@ -765,6 +765,35 @@ namespace ProjectArtOfAll.Board
                 return;
             }
 
+            if (gameEvent is CooldownChangedEvent cooldownChanged)
+            {
+                SideRuntime side = SideOf(cooldownChanged.PlayerId);
+                if (side == null)
+                {
+                    return;
+                }
+
+                foreach (Chip chip in side.Chips)
+                {
+                    if (chip.CardUid != cooldownChanged.CardUid)
+                    {
+                        continue;
+                    }
+
+                    chip.CooldownTicks = cooldownChanged.CooldownTicks;
+                    logLabel.text = string.Concat(
+                        SidePrefix(side),
+                        " 的 ",
+                        CardNameOf(side, cooldownChanged.CardUid),
+                        " 冷却变为 ",
+                        (cooldownChanged.CooldownTicks / (float)TicksPerSecond).ToString("0.0"),
+                        " 秒");
+                    break;
+                }
+
+                return;
+            }
+
             if (gameEvent is DamageDealtEvent damage)
             {
                 SideRuntime target = SideOf(damage.TargetPlayerId);
