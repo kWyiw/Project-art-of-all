@@ -2,7 +2,7 @@ using UnityEngine.SceneManagement;
 
 namespace ProjectArtOfAll.Flow
 {
-    /// <summary>开局模式：主页面选一次，随后跨场景读取。</summary>
+    /// <summary>开局模式：在准备房间门口选择，随后跨场景读取。</summary>
     public enum GameMode
     {
         /// <summary>正常模式：准备房间里凑齐四个座位（1 名真人 + 若干 CPU / 远程玩家）。</summary>
@@ -13,7 +13,7 @@ namespace ProjectArtOfAll.Flow
     }
 
     /// <summary>
-    /// 一局的会话上下文：主页面选了模式之后写在这里，准备房间、选地图页与对局场景依次读取。
+    /// 一局的会话上下文：在准备房间门口选择模式后写在这里，选地图页与对局场景依次读取。
     /// 只存"这一局怎么开"，不存任何对局状态（对局状态只在内核里）。
     /// </summary>
     public static class GameSession
@@ -32,6 +32,9 @@ namespace ProjectArtOfAll.Flow
 
         /// <summary>当前模式，默认正常模式。</summary>
         public static GameMode Mode { get; private set; } = GameMode.Normal;
+
+        /// <summary>是否已经在准备房间门口选择了开局模式。</summary>
+        public static bool ModeSelected { get; private set; }
 
         /// <summary>
         /// 真人席位。正常模式由准备房间决定（房主坐 0 号席）；
@@ -52,17 +55,33 @@ namespace ProjectArtOfAll.Flow
         public static string SelectedMapSceneName => MapCatalog.Selected.SceneName;
 
         /// <summary>
-        /// 主页面点模式卡：记住模式并进入准备房间场景。正常模式先把房间重置成
-        /// "房主自己 + 三个空席位"；无 CPU 测试模式不使用房间，直接显示选地图页。
+        /// 主页面「开始游戏」：先进入准备房间自由走动，模式留到门口再选。
         /// </summary>
-        public static void ChooseMode(GameMode mode)
+        public static void EnterLobby()
+        {
+            Mode = GameMode.Normal;
+            ModeSelected = false;
+            LobbyState.Reset();
+            SceneManager.LoadScene(LobbySceneName);
+        }
+
+        /// <summary>在准备房间门口选择模式，不切换场景。</summary>
+        public static void SelectMode(GameMode mode)
         {
             Mode = mode;
+            ModeSelected = true;
             if (mode == GameMode.Normal)
             {
                 LobbyState.Reset();
             }
+        }
 
+        /// <summary>
+        /// 兼容旧的“先选模式再进房间”入口。
+        /// </summary>
+        public static void ChooseMode(GameMode mode)
+        {
+            SelectMode(mode);
             SceneManager.LoadScene(LobbySceneName);
         }
 
@@ -76,6 +95,7 @@ namespace ProjectArtOfAll.Flow
         public static void BackToMenu()
         {
             Mode = GameMode.Normal;
+            ModeSelected = false;
             LobbyState.Reset();
             MapCatalog.Reset();
             SceneManager.LoadScene(MenuSceneName);
@@ -93,6 +113,7 @@ namespace ProjectArtOfAll.Flow
         public static void Reset()
         {
             Mode = GameMode.Normal;
+            ModeSelected = false;
             LobbyState.Reset();
             MapCatalog.Reset();
         }

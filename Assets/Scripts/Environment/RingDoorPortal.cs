@@ -1,5 +1,6 @@
 using ProjectArtOfAll.Player;
 using ProjectArtOfAll.Flow;
+using ProjectArtOfAll.UI;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -9,6 +10,8 @@ namespace ProjectArtOfAll.Environment
     [DisallowMultipleComponent]
     public sealed class RingDoorPortal : MonoBehaviour
     {
+        private const float ModeSelectionDepth = 1.6f;
+
         [Header("Ring Binding")]
         [SerializeField] private ScreenCenteredRing ring;
         [SerializeField, Range(0f, 359f)] private float angleDegrees;
@@ -22,8 +25,10 @@ namespace ProjectArtOfAll.Environment
         [SerializeField] private string targetScene = "MainGame";
 
         private ReadyRoomPlayerController player;
+        private LobbyScreen lobby;
         private float previousSide;
         private bool hasPreviousSide;
+        private bool insideModeSelectionZone;
         private bool isTransitioning;
 
         private void OnEnable()
@@ -62,6 +67,33 @@ namespace ProjectArtOfAll.Environment
                 localPosition.y >= 0f &&
                 localPosition.y <= frameHeight;
 
+            if (!GameSession.ModeSelected)
+            {
+                bool insideModeZone =
+                    insideOpening &&
+                    Mathf.Abs(localPosition.z) <= ModeSelectionDepth;
+                if (insideModeZone && !insideModeSelectionZone)
+                {
+                    insideModeSelectionZone = true;
+                    if (lobby == null)
+                    {
+                        lobby = FindObjectOfType<LobbyScreen>();
+                    }
+
+                    if (lobby != null && lobby.TryShowModeSelection())
+                    {
+                        hasPreviousSide = false;
+                    }
+                }
+                else if (!insideModeZone)
+                {
+                    insideModeSelectionZone = false;
+                }
+
+                return;
+            }
+
+            insideModeSelectionZone = false;
             if (!insideOpening || Mathf.Abs(localPosition.z) > crossingDepth)
             {
                 hasPreviousSide = false;

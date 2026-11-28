@@ -155,7 +155,7 @@ namespace ProjectArtOfAll.UI
         {
             return new[]
             {
-                new MenuEntry("开始游戏", ShowModePanel),
+                new MenuEntry("开始游戏", StartGame),
                 new MenuEntry("卡牌图鉴", OpenCodex),
                 new MenuEntry("设置", OpenSettings),
                 new MenuEntry("战斗模拟", OpenCombatLab),
@@ -689,21 +689,31 @@ namespace ProjectArtOfAll.UI
 
         private void BeginGameTransition(GameMode mode)
         {
+            BeginSceneTransition(() => GameSession.ChooseMode(mode));
+        }
+
+        private void BeginLobbyTransition()
+        {
+            BeginSceneTransition(GameSession.EnterLobby);
+        }
+
+        private void BeginSceneTransition(System.Action onCovered)
+        {
             if (transitionPlaying)
             {
                 return;
             }
 
             transitionPlaying = true;
-            StartCoroutine(PlayGameTransition(mode));
+            StartCoroutine(PlayGameTransition(onCovered));
         }
 
-        private IEnumerator PlayGameTransition(GameMode mode)
+        private IEnumerator PlayGameTransition(System.Action onCovered)
         {
             EnsureTransitionMask();
             if (transitionMask == null)
             {
-                GameSession.ChooseMode(mode);
+                onCovered?.Invoke();
                 yield break;
             }
 
@@ -725,7 +735,7 @@ namespace ProjectArtOfAll.UI
 
             transitionMask.anchoredPosition = Vector2.zero;
             yield return null;
-            GameSession.ChooseMode(mode);
+            onCovered?.Invoke();
         }
 
         public void HideModePanel()
@@ -739,7 +749,7 @@ namespace ProjectArtOfAll.UI
         /// <summary>兼容旧入口：等同于「开始游戏」。</summary>
         public void StartGame()
         {
-            ShowModePanel();
+            BeginLobbyTransition();
         }
 
         public void OpenSettings()

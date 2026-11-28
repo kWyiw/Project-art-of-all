@@ -13,18 +13,19 @@ using UnityEngine.UI;
 namespace ProjectArtOfAll.UI
 {
     /// <summary>
-    /// 准备房间 + 选地图页。场景里没有挂这个组件——它由 <see cref="Bootstrap"/> 在
-    /// "ready room" 场景加载后自动创建，所以不需要改动场景文件。
-    /// 正常模式：四个座位（房主自己 + CPU / 未来的远程玩家），坐满且真人准备后房主开始。
-    /// 无 CPU 测试模式：跳过座位，直接显示选地图页。
+    /// 准备房间 + 模式选择 + 选地图页。场景里没有挂这个组件——它由
+    /// <see cref="Bootstrap"/> 在 "ready room" 场景加载后自动创建。
+    /// 玩家先自由走到任意一扇环门附近选模式，再进入原来的大厅或选地图流程。
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class LobbyScreen : MonoBehaviour
     {
         private enum Page
         {
-            Lobby = 0,
-            MapSelect = 1
+            DoorPrompt = 0,
+            ModeSelect = 1,
+            Lobby = 2,
+            MapSelect = 3
         }
 
         private const float ReferenceWidth = 1920f;
@@ -52,6 +53,8 @@ namespace ProjectArtOfAll.UI
         private Font font;
         private RectTransform root;
         private RectTransform screenScrim;
+        private ReadyRoomPlayerController walker;
+        private RingDoorPortal[] portals;
         private Page page = Page.Lobby;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -90,11 +93,22 @@ namespace ProjectArtOfAll.UI
             EnsureEventSystem();
             BuildCanvas();
 
-            page = GameSession.Mode == GameMode.NoCpuTest ? Page.MapSelect : Page.Lobby;
+            if (!GameSession.ModeSelected)
+            {
+                page = Page.DoorPrompt;
+            }
+            else
+            {
+                page = GameSession.Mode == GameMode.NoCpuTest
+                    ? Page.MapSelect
+                    : Page.Lobby;
+            }
+
             LobbyState.Changed += OnLobbyChanged;
             Rebuild();
             Debug.Log(string.Concat(
                 "[Lobby] screen ready mode=", GameSession.Mode.ToString(),
+                " selected=", GameSession.ModeSelected,
                 " page=", page.ToString(),
                 " map=", MapCatalog.SelectedId));
         }
@@ -108,6 +122,12 @@ namespace ProjectArtOfAll.UI
         {
             if (!Input.GetKeyDown(KeyCode.Escape))
             {
+                return;
+            }
+
+            if (page == Page.ModeSelect)
+            {
+                CancelModeSelection();
                 return;
             }
 
@@ -129,26 +149,70 @@ namespace ProjectArtOfAll.UI
             }
         }
 
-        /// <summary>准备房间是 3D 房间场景：停掉第一人称控制、解锁鼠标、关掉门的传送触发。</summary>
+        /// <summary>
+        /// 未选模式时保留第一人称移动和门的检测；选定模式后再停掉移动并显示原有大厅页。
+        /// </summary>
         private void PrepareScene()
         {
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
+            walker = FindObjectOfType<ReadyRoomPlayerController>();
+            portals = FindObjectsOfType<RingDoorPortal>();
+            SetWalkingEnabled(!GameSession.ModeSelected);
+        }
 
-            ReadyRoomPlayerController walker = FindObjectOfType<ReadyRoomPlayerController>();
+        private void SetWalkingEnabled(bool enabled)
+        {
             if (walker != null)
             {
-                walker.enabled = false;
+                walker.enabled = enabled;
             }
 
-            RingDoorPortal[] portals = FindObjectsOfType<RingDoorPortal>();
+            if (portals == null)
+            {
+                portals = FindObjectsOfType<RingDoorPortal>();
+            }
+
             for (int index = 0; index < portals.Length; index++)
             {
                 if (portals[index] != null)
                 {
-                    portals[index].enabled = false;
+                    portals[index].enabled = enabled;
                 }
             }
+
+            Cursor.lockState = enabled
+                ? CursorLockMode.Locked
+                : CursorLockMode.None;
+            Cursor.visible = !enabled;
+        }
+
+        public bool TryShowModeSelection()
+        {
+            if (GameSession.ModeSelected || page == Page.ModeSelect)
+            {
+                return false;
+            }
+
+            SetWalkingEnabled(false);
+            page = Page.ModeSelect;
+            Rebuild();
+            return true;
+        }
+
+        private void CancelModeSelection()
+        {
+            page = Page.DoorPrompt;
+            Rebuild();
+            SetWalkingEnabled(true);
+        }
+
+        private void SelectMode(GameMode mode)
+        {
+            GameSession.SelectMode(mode);
+            SetWalkingEnabled(false);
+            page = mode == GameMode.NoCpuTest
+                ? Page.MapSelect
+                : Page.Lobby;
+            Rebuild();
         }
 
         private static void EnsureEventSystem()
@@ -215,8 +279,17 @@ namespace ProjectArtOfAll.UI
             }
 
             pageObjects.Clear();
+            screenScrim.gameObject.SetActive(page != Page.DoorPrompt);
 
-            if (page == Page.Lobby)
+            if (page == Page.DoorPrompt)
+            {
+                BuildDoorPromptPage();
+            }
+            else if (page == Page.ModeSelect)
+            {
+                BuildModeSelectPage();
+            }
+            else if (page == Page.Lobby)
             {
                 BuildLobbyPage();
             }
@@ -227,6 +300,84 @@ namespace ProjectArtOfAll.UI
         }
 
         // ------------------------------------------------------------------ lobby
+
+        private void BuildDoorPromptPage()
+        {
+            RectTransform holder = CreatePage("DoorPromptPage");
+
+            Bar(holder, "TitleBacking", 360f, 40f, 1200f, 104f,
+                new Color(0.02f, 0.035f, 0.04f, 0.72f));
+
+            Label(holder, "Title", "准备房间", 360f, 52f, 1200f, 50f,
+                38, FontStyle.Bold, TextAnchor.MiddleCenter, Brass);
+
+            Label(holder, "Subtitle", "走到任意一扇门前，选择这一局的开局模式",
+                360f, 104f, 1200f, 30f,
+                18, FontStyle.Normal, TextAnchor.MiddleCenter, TextColor);
+
+            Label(holder, "Controls", "WASD 移动 · 鼠标观察 · Esc 返回主页面",
+                360f, 1000f, 1200f, 30f,
+                17, FontStyle.Normal, TextAnchor.MiddleCenter, MutedText);
+        }
+
+        private void BuildModeSelectPage()
+        {
+            RectTransform holder = CreatePage("ModeSelectPage");
+
+            Label(holder, "Title", "选择开局模式", 0f, 120f, ReferenceWidth, 56f,
+                42, FontStyle.Bold, TextAnchor.MiddleCenter, Brass);
+
+            Label(holder, "Subtitle",
+                "模式选定后会进入原有的准备房间与选图流程",
+                0f, 188f, ReferenceWidth, 30f,
+                18, FontStyle.Normal, TextAnchor.MiddleCenter, MutedText);
+
+            MakeButton(
+                holder,
+                "Mode_正常模式",
+                "正常模式",
+                360f,
+                320f,
+                540f,
+                140f,
+                () => SelectMode(GameMode.Normal),
+                new Color(0.18f, 0.24f, 0.22f, 1f),
+                32);
+
+            Label(holder, "NormalDescription",
+                "1 名真人 + 3 名 CPU，进入原有准备房间配置席位",
+                360f, 476f, 540f, 58f,
+                17, FontStyle.Normal, TextAnchor.UpperCenter, TextColor);
+
+            MakeButton(
+                holder,
+                "Mode_无CPU测试模式",
+                "无CPU测试模式",
+                1020f,
+                320f,
+                540f,
+                140f,
+                () => SelectMode(GameMode.NoCpuTest),
+                new Color(0.15f, 0.20f, 0.28f, 1f),
+                30);
+
+            Label(holder, "TestDescription",
+                "四个座位都由你操作，直接进入地图选择",
+                1020f, 476f, 540f, 58f,
+                17, FontStyle.Normal, TextAnchor.UpperCenter, TextColor);
+
+            MakeButton(
+                holder,
+                "Button_返回房间",
+                "返回房间",
+                (ReferenceWidth - 280f) * 0.5f,
+                720f,
+                280f,
+                58f,
+                CancelModeSelection,
+                ButtonColor,
+                20);
+        }
 
         private void BuildLobbyPage()
         {
